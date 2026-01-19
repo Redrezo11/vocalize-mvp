@@ -1,0 +1,5 @@
+{
+  "name": "Vocalize MVP",
+  "description": "A modern, dual-engine Text-to-Speech application featuring instant browser-native synthesis and high-fidelity AI voice generation powered by Gemini.",
+  "requestFramePermissions": []
+}

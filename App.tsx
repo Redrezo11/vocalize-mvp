@@ -1,0 +1,433 @@
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useBrowserTTS } from './hooks/useBrowserTTS';
+import { useGeminiTTS } from './hooks/useGeminiTTS';
+import { useElevenLabsTTS } from './hooks/useElevenLabsTTS';
+import { useSupabaseStorage } from './hooks/useSupabaseStorage';
+import { parseDialogue, guessGender } from './utils/parser';
+import { BrowserVoiceConfig, EngineType, GEMINI_VOICES, SpeakerVoiceMapping, AppView, SavedAudio } from './types';
+import { PlayIcon, StopIcon, Volume2Icon, FolderIcon, PlusIcon, SaveIcon, ArrowLeftIcon } from './components/Icons';
+import Visualizer from './components/Visualizer';
+import { AudioLibrary } from './components/AudioLibrary';
+import { AudioDetail } from './components/AudioDetail';
+import { SaveDialog } from './components/SaveDialog';
+
+const App: React.FC = () => {
+  // Navigation state
+  const [currentView, setCurrentView] = useState<AppView>('editor');
+  const [selectedAudio, setSelectedAudio] = useState<SavedAudio | null>(null);
+  const [editingAudioId, setEditingAudioId] = useState<string | null>(null);
+
+  // Editor state
+  const [title, setTitle] = useState("Untitled Audio");
+  const [text, setText] = useState("Narrator: Welcome to Vocalize.\n\nJane: This tool can automatically detect different speakers in your text.\n\nJohn: That is correct. Just type a name followed by a colon, and assign us a voice!");
+  const [engine, setEngine] = useState<EngineType>(EngineType.BROWSER);
+  const [elevenLabsKey, setElevenLabsKey] = useState("");
+  const [lastGeneratedBlob, setLastGeneratedBlob] = useState<Blob | null>(null);
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+
+  // Analysis State
+  const analysis = useMemo(() => parseDialogue(text), [text]);
+  const [speakerMapping, setSpeakerMapping] = useState<SpeakerVoiceMapping>({});
+
+  // Config States
+  const [browserConfig, setBrowserConfig] = useState<BrowserVoiceConfig>({ voice: null, rate: 1, pitch: 1, volume: 1 });
+  const [geminiVoice, setGeminiVoice] = useState(GEMINI_VOICES[0].name);
+  const [elevenVoiceId, setElevenVoiceId] = useState("");
+
+  // Hooks
+  const browserTTS = useBrowserTTS();
+  const geminiTTS = useGeminiTTS();
+  const elevenTTS = useElevenLabsTTS();
+  const audioStorage = useSupabaseStorage();
+
+  useEffect(() => {
+    if (browserTTS.voices.length > 0 && !browserConfig.voice) {
+      const defaultVoice = browserTTS.voices.find(v => v.default && v.lang.startsWith('en')) || browserTTS.voices[0];
+      setBrowserConfig(prev => ({ ...prev, voice: defaultVoice }));
+    }
+  }, [browserTTS.voices, browserConfig.voice]);
+
+  const performSmartCast = useCallback((currentSpeakers: string[], currentMap: SpeakerVoiceMapping, forceReset = false) => {
+    const newMap = forceReset ? {} : { ...currentMap };
+    currentSpeakers.forEach((speaker, index) => {
+      if (newMap[speaker] && !forceReset) return;
+      const gender = guessGender(speaker);
+
+      if (engine === EngineType.GEMINI) {
+        let candidates = GEMINI_VOICES;
+        if (gender !== 'Neutral') candidates = GEMINI_VOICES.filter(v => v.gender === gender);
+        newMap[speaker] = (candidates[index % candidates.length] || GEMINI_VOICES[0]).name;
+      } else if (engine === EngineType.ELEVEN_LABS && elevenTTS.voices.length > 0) {
+        newMap[speaker] = elevenTTS.voices[index % elevenTTS.voices.length].voice_id;
+      } else if (engine === EngineType.BROWSER && browserTTS.voices.length > 0) {
+        const langPrefix = browserConfig.voice?.lang.split('-')[0] || 'en';
+        const relevantVoices = browserTTS.voices.filter(v => v.lang.startsWith(langPrefix));
+        newMap[speaker] = (relevantVoices[index % relevantVoices.length] || browserTTS.voices[0]).name;
+      }
+    });
+    return newMap;
+  }, [engine, browserConfig.voice, browserTTS.voices, elevenTTS.voices]);
+
+  // Reset speaker mapping when engine changes
+  useEffect(() => {
+    setSpeakerMapping({});
+  }, [engine]);
+
+  // Auto-cast speakers when speakers change or voices become available
+  useEffect(() => {
+    const hasVoices =
+      (engine === EngineType.BROWSER && browserTTS.voices.length > 0) ||
+      (engine === EngineType.GEMINI) ||
+      (engine === EngineType.ELEVEN_LABS && elevenTTS.voices.length > 0);
+
+    if (hasVoices && analysis.speakers.length > 0) {
+      setSpeakerMapping(prev => {
+        // Only auto-cast if mapping is empty or has stale entries
+        const hasValidMapping = analysis.speakers.every(s => prev[s]);
+        if (hasValidMapping) return prev;
+        return performSmartCast(analysis.speakers, {}, true);
+      });
+    }
+  }, [analysis.speakers, engine, browserTTS.voices, elevenTTS.voices, performSmartCast]);
+
+  const handlePlay = async () => {
+    if (!text) return;
+    if (engine === EngineType.BROWSER) {
+      if (browserTTS.isPaused) browserTTS.resume();
+      else browserTTS.speak(text, browserConfig, analysis.isDialogue ? analysis.segments : undefined, analysis.isDialogue ? speakerMapping : undefined);
+    } else if (engine === EngineType.GEMINI) {
+      geminiTTS.speak(text, { voiceName: geminiVoice }, analysis.isDialogue ? speakerMapping : undefined);
+    } else if (engine === EngineType.ELEVEN_LABS) {
+      const blob = await elevenTTS.speak(
+        text,
+        elevenLabsKey,
+        analysis.isDialogue ? analysis.segments : undefined,
+        analysis.isDialogue ? speakerMapping : undefined,
+        elevenVoiceId || undefined
+      );
+      if (blob) {
+        setLastGeneratedBlob(blob);
+      }
+    }
+  };
+
+  const handleStop = () => {
+    browserTTS.cancel();
+    geminiTTS.stop();
+    elevenTTS.stop();
+  };
+
+  const isPlaying = browserTTS.isPlaying || geminiTTS.isPlaying || elevenTTS.isPlaying;
+  const isLoading = geminiTTS.isLoading || elevenTTS.isLoading;
+
+  // CRUD Operations
+  const handleSaveClick = () => {
+    if (!text.trim()) {
+      alert('Please enter some text before saving.');
+      return;
+    }
+    setShowSaveDialog(true);
+  };
+
+  const handleSaveWithTitle = async (finalTitle: string) => {
+    setShowSaveDialog(false);
+    setTitle(finalTitle);
+
+    const audioData = {
+      title: finalTitle,
+      transcript: text,
+      engine,
+      speakerMapping,
+      speakers: analysis.speakers,
+    };
+
+    // Use the last generated blob if available (for ElevenLabs)
+    const blobToSave = engine === EngineType.ELEVEN_LABS ? lastGeneratedBlob : undefined;
+
+    try {
+      if (editingAudioId) {
+        // Update existing
+        const result = await audioStorage.update(editingAudioId, audioData, blobToSave || undefined);
+        if (result) {
+          setLastGeneratedBlob(null);
+          alert('Audio updated successfully!');
+        } else {
+          throw new Error('Update failed');
+        }
+      } else {
+        // Create new
+        const result = await audioStorage.create(audioData, blobToSave || undefined);
+        if (result) {
+          setLastGeneratedBlob(null);
+          alert('Audio saved to library!');
+        } else {
+          throw new Error('Create failed');
+        }
+      }
+    } catch (error) {
+      console.error('Failed to save audio', error);
+      alert('Failed to save audio. Please try again.');
+    }
+  };
+
+  const handleCreateNew = () => {
+    setEditingAudioId(null);
+    setTitle('Untitled Audio');
+    setText("Narrator: Welcome to Vocalize.\n\nJane: This tool can automatically detect different speakers in your text.\n\nJohn: That is correct. Just type a name followed by a colon, and assign us a voice!");
+    setEngine(EngineType.BROWSER);
+    setSpeakerMapping({});
+    setLastGeneratedBlob(null);
+    setCurrentView('editor');
+  };
+
+  const handleEdit = (audio: SavedAudio) => {
+    setEditingAudioId(audio.id);
+    setTitle(audio.title);
+    setText(audio.transcript);
+    setEngine(audio.engine);
+    setSpeakerMapping(audio.speakerMapping);
+    setLastGeneratedBlob(null);
+    setCurrentView('editor');
+  };
+
+  const handleDelete = async (audio: SavedAudio) => {
+    const success = await audioStorage.remove(audio.id);
+    if (success) {
+      if (currentView === 'detail') {
+        setCurrentView('library');
+        setSelectedAudio(null);
+      }
+    } else {
+      alert('Failed to delete audio.');
+    }
+  };
+
+  const handleViewDetail = (audio: SavedAudio) => {
+    setSelectedAudio(audio);
+    setCurrentView('detail');
+  };
+
+  const handlePlayFromLibrary = (audio: SavedAudio) => {
+    // For now, just open detail view to play
+    // Later we can implement direct playback
+    handleViewDetail(audio);
+  };
+
+  // Navigation header
+  const renderNav = () => (
+    <nav className="sticky top-0 z-30 bg-[#FAFAFA]/80 backdrop-blur-md border-b border-slate-200/60 px-6 py-4">
+      <div className="max-w-7xl mx-auto flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="h-8 w-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white shadow-md shadow-indigo-200">
+            <Volume2Icon className="w-5 h-5" />
+          </div>
+          <span className="font-bold text-xl tracking-tight text-slate-900">Vocalize</span>
+        </div>
+        <div className="flex items-center gap-3">
+          {currentView === 'editor' && analysis.isDialogue && (
+            <span className="px-3 py-1 bg-indigo-50 text-indigo-700 text-xs font-bold rounded-full border border-indigo-100 uppercase">
+              {analysis.speakers.length} Speakers Detected
+            </span>
+          )}
+          {currentView === 'editor' ? (
+            <button
+              onClick={() => setCurrentView('library')}
+              className="flex items-center gap-2 px-4 py-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors"
+            >
+              <FolderIcon className="w-4 h-4" />
+              <span className="text-sm font-medium">My Library</span>
+            </button>
+          ) : (
+            <button
+              onClick={handleCreateNew}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 transition-colors"
+            >
+              <PlusIcon className="w-4 h-4" />
+              <span className="text-sm">New Audio</span>
+            </button>
+          )}
+        </div>
+      </div>
+    </nav>
+  );
+
+  // Editor view
+  const renderEditor = () => (
+    <main className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
+      <div className="lg:col-span-7 flex flex-col order-2 lg:order-1">
+        <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200/60 p-6 flex flex-col">
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Enter title..."
+            className="text-xl font-bold text-slate-900 bg-transparent border-0 border-b border-slate-200 pb-3 mb-4 focus:outline-none focus:border-indigo-500 transition-colors"
+            autoComplete="off"
+          />
+          <textarea
+            className="w-full min-h-[450px] resize-none text-lg leading-8 text-slate-700 bg-transparent border-0 focus:ring-0 p-0 font-medium"
+            placeholder="Type or paste your script..."
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+          />
+        </div>
+      </div>
+
+      <div className="lg:col-span-5 order-1 lg:order-2 space-y-6">
+        <div className="sticky top-28 space-y-6">
+          <div className="bg-slate-900 rounded-2xl p-6 shadow-xl relative group">
+            <div className="h-24 flex items-center justify-center">
+              {isLoading ? <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div> : <Visualizer isPlaying={isPlaying} />}
+            </div>
+            <div className="mt-4 flex items-center gap-3">
+              <button onClick={handlePlay} disabled={isLoading || !text} className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 transition-all disabled:opacity-50">
+                <PlayIcon className="w-5 h-5 mx-auto" />
+              </button>
+              <button onClick={handleStop} className="p-3 bg-slate-800 text-slate-300 rounded-xl hover:bg-slate-700">
+                <StopIcon className="w-5 h-5" />
+              </button>
+            </div>
+            <button
+              onClick={handleSaveClick}
+              disabled={!text.trim() || (engine === EngineType.ELEVEN_LABS && !lastGeneratedBlob)}
+              className="w-full mt-3 py-3 bg-slate-800 text-slate-300 rounded-xl font-medium hover:bg-slate-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+              title={engine === EngineType.ELEVEN_LABS && !lastGeneratedBlob ? 'Generate audio first by clicking Play' : ''}
+            >
+              <SaveIcon className="w-4 h-4" />
+              <span>{editingAudioId ? 'Update' : 'Save to Library'}</span>
+              {lastGeneratedBlob && (
+                <span className="ml-1 w-2 h-2 bg-green-500 rounded-full animate-pulse" title="Audio ready to save" />
+              )}
+            </button>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-6 space-y-6">
+            <div>
+              <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 block">Engine</label>
+              <div className="bg-slate-100 p-1 rounded-xl flex gap-1">
+                {[EngineType.BROWSER, EngineType.GEMINI, EngineType.ELEVEN_LABS].map(type => (
+                  <button
+                    key={type}
+                    onClick={() => { handleStop(); setEngine(type); }}
+                    className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${engine === type ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                  >
+                    {type.replace('_', ' ')}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {engine === EngineType.ELEVEN_LABS && (
+              <div className="space-y-4 animate-in fade-in duration-300">
+                <input
+                  type="password"
+                  placeholder="ElevenLabs API Key"
+                  className="w-full bg-slate-50 border border-slate-200 text-sm rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  value={elevenLabsKey}
+                  onChange={(e) => setElevenLabsKey(e.target.value)}
+                  onBlur={() => elevenTTS.fetchVoices(elevenLabsKey)}
+                  autoComplete="off"
+                  data-form-type="other"
+                />
+                {elevenTTS.voices.length > 0 && (
+                  <p className="text-xs text-green-600 font-medium">{elevenTTS.voices.length} voices loaded</p>
+                )}
+              </div>
+            )}
+
+            {analysis.isDialogue && (
+              <div className="pt-4 border-t border-slate-100">
+                <div className="flex items-center justify-between mb-4">
+                  <label className="text-xs font-bold text-slate-400 uppercase">Cast Characters</label>
+                  <button onClick={() => setSpeakerMapping(performSmartCast(analysis.speakers, {}, true))} className="text-xs font-bold text-indigo-600 hover:text-indigo-700">Magic Cast</button>
+                </div>
+                <div className="space-y-3">
+                  {analysis.speakers.map((speaker) => (
+                    <div key={speaker} className="flex items-center gap-3 p-2 bg-slate-50 rounded-lg border border-slate-100">
+                      <span className="text-xs font-bold text-slate-700 w-16 truncate">{speaker}</span>
+                      <select
+                        className="flex-1 text-xs p-1.5 bg-white border border-slate-200 rounded-md"
+                        value={speakerMapping[speaker] || ''}
+                        onChange={(e) => setSpeakerMapping(prev => ({ ...prev, [speaker]: e.target.value }))}
+                      >
+                        {engine === EngineType.BROWSER && browserTTS.voices.map(v => <option key={v.name} value={v.name}>{v.name}</option>)}
+                        {engine === EngineType.GEMINI && GEMINI_VOICES.map(v => <option key={v.name} value={v.name}>{v.name}</option>)}
+                        {engine === EngineType.ELEVEN_LABS && elevenTTS.voices.map(v => <option key={v.voice_id} value={v.voice_id}>{v.name}</option>)}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {editingAudioId && (
+            <button
+              onClick={handleCreateNew}
+              className="w-full py-2 text-sm text-slate-500 hover:text-slate-700 transition-colors flex items-center justify-center gap-2"
+            >
+              <ArrowLeftIcon className="w-4 h-4" />
+              Cancel editing and create new
+            </button>
+          )}
+        </div>
+      </div>
+    </main>
+  );
+
+  // Library view
+  const renderLibrary = () => (
+    <main className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+      <AudioLibrary
+        savedAudios={audioStorage.savedAudios}
+        isLoading={audioStorage.isLoading}
+        onPlay={handlePlayFromLibrary}
+        onEdit={handleEdit}
+        onDelete={handleDelete}
+        onCreateNew={handleCreateNew}
+        onViewDetail={handleViewDetail}
+      />
+    </main>
+  );
+
+  // Detail view
+  const renderDetail = () => {
+    if (!selectedAudio) {
+      setCurrentView('library');
+      return null;
+    }
+
+    return (
+      <main className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+        <AudioDetail
+          audio={selectedAudio}
+          onBack={() => {
+            setSelectedAudio(null);
+            setCurrentView('library');
+          }}
+          onEdit={handleEdit}
+          onDelete={handleDelete}
+        />
+      </main>
+    );
+  };
+
+  return (
+    <div className="min-h-screen text-slate-900 selection:bg-indigo-500/20">
+      {renderNav()}
+      {currentView === 'editor' && renderEditor()}
+      {currentView === 'library' && renderLibrary()}
+      {currentView === 'detail' && renderDetail()}
+
+      <SaveDialog
+        isOpen={showSaveDialog}
+        transcript={text}
+        initialTitle={title}
+        onSave={handleSaveWithTitle}
+        onCancel={() => setShowSaveDialog(false)}
+      />
+    </div>
+  );
+};
+
+export default App;

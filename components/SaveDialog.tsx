@@ -1,0 +1,268 @@
+import React, { useState, useEffect } from 'react';
+import { GoogleGenAI } from '@google/genai';
+
+interface SaveDialogProps {
+  isOpen: boolean;
+  transcript: string;
+  initialTitle: string;
+  onSave: (title: string) => void;
+  onCancel: () => void;
+}
+
+// Simple function to generate a title from transcript (fallback)
+const generateAutoTitle = (transcript: string): string => {
+  if (!transcript.trim()) return 'Untitled Audio';
+
+  // Remove speaker labels (e.g., "John:", "Narrator:")
+  const withoutSpeakers = transcript.replace(/^[A-Za-z]+:\s*/gm, '');
+
+  // Get first meaningful sentence or phrase
+  const cleaned = withoutSpeakers
+    .replace(/\n+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // Take first ~50 chars, try to end at a word boundary
+  if (cleaned.length <= 50) return cleaned;
+
+  const truncated = cleaned.slice(0, 50);
+  const lastSpace = truncated.lastIndexOf(' ');
+  const title = lastSpace > 20 ? truncated.slice(0, lastSpace) : truncated;
+
+  return title + '...';
+};
+
+// Generate title using Gemini AI
+const generateAITitle = async (transcript: string): Promise<string> => {
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error('Gemini API key not configured');
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
+
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.0-flash',
+    contents: `Generate a short, descriptive title (max 8 words) for this audio transcript. Return ONLY the title, no quotes or explanation:\n\n${transcript.slice(0, 1000)}`
+  });
+
+  const title = response.text?.trim() || generateAutoTitle(transcript);
+  // Remove any quotes that might be included
+  return title.replace(/^["']|["']$/g, '');
+};
+
+export const SaveDialog: React.FC<SaveDialogProps> = ({
+  isOpen,
+  transcript,
+  initialTitle,
+  onSave,
+  onCancel,
+}) => {
+  const [titleMode, setTitleMode] = useState<'ai' | 'auto' | 'manual'>('ai');
+  const [manualTitle, setManualTitle] = useState(initialTitle);
+  const [autoTitle, setAutoTitle] = useState('');
+  const [aiTitle, setAiTitle] = useState('');
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  const geminiKey = import.meta.env.VITE_GEMINI_API_KEY;
+  const hasAIKey = !!geminiKey && geminiKey !== 'PLACEHOLDER_API_KEY';
+
+  useEffect(() => {
+    if (isOpen) {
+      setAutoTitle(generateAutoTitle(transcript));
+      setManualTitle(initialTitle === 'Untitled Audio' ? '' : initialTitle);
+      setAiTitle('');
+      setAiError(null);
+      // Auto-generate AI title when dialog opens
+      if (hasAIKey) {
+        handleGenerateAITitle();
+      } else {
+        setTitleMode('auto');
+      }
+    }
+  }, [isOpen, transcript, initialTitle]);
+
+  const handleGenerateAITitle = async () => {
+    setIsGeneratingAI(true);
+    setAiError(null);
+    try {
+      console.log('Generating AI title for transcript:', transcript.slice(0, 100) + '...');
+      const title = await generateAITitle(transcript);
+      console.log('AI generated title:', title);
+      setAiTitle(title);
+    } catch (error: any) {
+      console.error('Failed to generate AI title:', error);
+      const errorMsg = error?.message || 'Unknown error';
+      setAiError(`Failed: ${errorMsg}`);
+      setAiTitle(generateAutoTitle(transcript));
+    } finally {
+      setIsGeneratingAI(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  const handleSave = () => {
+    let finalTitle: string;
+    if (titleMode === 'ai') {
+      finalTitle = aiTitle || autoTitle;
+    } else if (titleMode === 'auto') {
+      finalTitle = autoTitle;
+    } else {
+      finalTitle = manualTitle.trim() || 'Untitled Audio';
+    }
+    onSave(finalTitle);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      {/* Backdrop */}
+      <div
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        onClick={onCancel}
+      />
+
+      {/* Dialog */}
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+        <div className="p-6">
+          <h2 className="text-xl font-bold text-slate-900 mb-1">Save to Library</h2>
+          <p className="text-sm text-slate-500 mb-6">Choose how to title your audio</p>
+
+          {/* Title Mode Selection */}
+          <div className="space-y-3 mb-6">
+            {/* AI Title Option */}
+            {hasAIKey && (
+              <label
+                className={`flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                  titleMode === 'ai'
+                    ? 'border-indigo-500 bg-indigo-50'
+                    : 'border-slate-200 hover:border-slate-300'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="titleMode"
+                  checked={titleMode === 'ai'}
+                  onChange={() => setTitleMode('ai')}
+                  className="mt-1 text-indigo-600 focus:ring-indigo-500"
+                />
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-slate-900">AI-generated title</span>
+                    <span className="px-1.5 py-0.5 text-[10px] font-bold bg-gradient-to-r from-purple-500 to-indigo-500 text-white rounded">AI</span>
+                  </div>
+                  <p className="text-sm text-slate-500 mt-1">Smart title based on content analysis</p>
+                  {titleMode === 'ai' && (
+                    <div className="mt-3 p-3 bg-white rounded-lg border border-slate-200">
+                      {isGeneratingAI ? (
+                        <div className="flex items-center gap-2">
+                          <div className="w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+                          <span className="text-sm text-slate-500">Generating title...</span>
+                        </div>
+                      ) : aiError ? (
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm text-slate-700">{aiTitle}</p>
+                          <button
+                            onClick={(e) => { e.preventDefault(); handleGenerateAITitle(); }}
+                            className="text-xs text-indigo-600 hover:text-indigo-700 font-medium"
+                          >
+                            Retry
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm font-medium text-slate-700">{aiTitle}</p>
+                          <button
+                            onClick={(e) => { e.preventDefault(); handleGenerateAITitle(); }}
+                            className="text-xs text-indigo-600 hover:text-indigo-700 font-medium"
+                          >
+                            Regenerate
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </label>
+            )}
+
+            {/* Auto Title Option */}
+            <label
+              className={`flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                titleMode === 'auto'
+                  ? 'border-indigo-500 bg-indigo-50'
+                  : 'border-slate-200 hover:border-slate-300'
+              }`}
+            >
+              <input
+                type="radio"
+                name="titleMode"
+                checked={titleMode === 'auto'}
+                onChange={() => setTitleMode('auto')}
+                className="mt-1 text-indigo-600 focus:ring-indigo-500"
+              />
+              <div className="flex-1">
+                <span className="font-medium text-slate-900">Use first line</span>
+                <p className="text-sm text-slate-500 mt-1">First words of your transcript</p>
+                {titleMode === 'auto' && (
+                  <div className="mt-3 p-3 bg-white rounded-lg border border-slate-200">
+                    <p className="text-sm font-medium text-slate-700">{autoTitle}</p>
+                  </div>
+                )}
+              </div>
+            </label>
+
+            {/* Manual Title Option */}
+            <label
+              className={`flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                titleMode === 'manual'
+                  ? 'border-indigo-500 bg-indigo-50'
+                  : 'border-slate-200 hover:border-slate-300'
+              }`}
+            >
+              <input
+                type="radio"
+                name="titleMode"
+                checked={titleMode === 'manual'}
+                onChange={() => setTitleMode('manual')}
+                className="mt-1 text-indigo-600 focus:ring-indigo-500"
+              />
+              <div className="flex-1">
+                <span className="font-medium text-slate-900">Enter title manually</span>
+                <p className="text-sm text-slate-500 mt-1">Type your own custom title</p>
+                {titleMode === 'manual' && (
+                  <input
+                    type="text"
+                    value={manualTitle}
+                    onChange={(e) => setManualTitle(e.target.value)}
+                    placeholder="Enter title..."
+                    className="mt-3 w-full p-3 bg-white rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                    autoFocus
+                    autoComplete="off"
+                  />
+                )}
+              </div>
+            </label>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex gap-3 p-4 bg-slate-50 border-t border-slate-100">
+          <button
+            onClick={onCancel}
+            className="flex-1 py-3 px-4 text-slate-700 font-medium rounded-xl hover:bg-slate-200 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            className="flex-1 py-3 px-4 bg-indigo-600 text-white font-medium rounded-xl hover:bg-indigo-700 transition-colors"
+          >
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
