@@ -7,7 +7,10 @@
       "Bash(npm install:*)",
       "Bash(npm run server:*)",
       "Bash(npm run dev:*)",
-      "Bash(powershell -Command:*)"
+      "Bash(powershell -Command:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
     ]
   }
 }
