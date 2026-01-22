@@ -147,6 +147,12 @@ export const TestBuilder: React.FC<TestBuilderProps> = ({ audio, existingTest, o
   const [questionCount, setQuestionCount] = useState<number>(5);
   const [explanationLanguage, setExplanationLanguage] = useState<'english' | 'arabic'>('english');
 
+  // Update explanations modal state
+  const [showUpdateExplanationsModal, setShowUpdateExplanationsModal] = useState(false);
+  const [updateExplanationPrompt, setUpdateExplanationPrompt] = useState('');
+  const [updateExplanationLanguage, setUpdateExplanationLanguage] = useState<'english' | 'arabic'>('english');
+  const [updateExplanationMode, setUpdateExplanationMode] = useState<'replace' | 'supplement'>('supplement');
+
   const isEditMode = !!existingTest;
 
   const analysis = useMemo(() => parseDialogue(audio.transcript), [audio.transcript]);
@@ -174,6 +180,74 @@ export const TestBuilder: React.FC<TestBuilderProps> = ({ audio, existingTest, o
     const template = getLLMTemplate(testType, audio.transcript, customPrompt, includeExplanations, explanationStyle, questionCount, explanationLanguage);
     copyToClipboard(template, 'Template copied!');
     setShowTemplateModal(false);
+  };
+
+  // Copy current questions as JSON
+  const handleCopyQuestionsJson = () => {
+    const questionsJson = JSON.stringify(questions.map(q => ({
+      questionText: q.questionText,
+      options: q.options,
+      correctAnswer: q.correctAnswer,
+      explanation: q.explanation || null
+    })), null, 2);
+    copyToClipboard(questionsJson, 'Questions JSON copied!');
+  };
+
+  // Generate update explanations template
+  const getUpdateExplanationsTemplate = (): string => {
+    const questionsJson = JSON.stringify(questions.map(q => ({
+      questionText: q.questionText,
+      options: q.options,
+      correctAnswer: q.correctAnswer,
+      explanation: q.explanation || null
+    })), null, 2);
+
+    const hasExistingExplanations = questions.some(q => q.explanation);
+    const targetLang = updateExplanationLanguage === 'arabic' ? 'Arabic (العربية)' : 'English';
+
+    let modeInstruction = '';
+    if (updateExplanationMode === 'replace') {
+      modeInstruction = `REPLACE all existing explanations with new ones in ${targetLang}.`;
+    } else {
+      if (hasExistingExplanations) {
+        modeInstruction = `SUPPLEMENT existing explanations. Keep the original explanation and add additional clarification in ${targetLang}. If the original is in a different language, translate it to ${targetLang} first, then add your supplementary explanation.`;
+      } else {
+        modeInstruction = `ADD new explanations in ${targetLang} for each question.`;
+      }
+    }
+
+    const customInstructions = updateExplanationPrompt
+      ? `\nCUSTOM INSTRUCTIONS:\n${updateExplanationPrompt}\n`
+      : hasExistingExplanations
+        ? '\nNo specific instructions provided. Clarify and improve the existing explanations, or extend them with additional helpful context.'
+        : '\nNo specific instructions provided. Generate clear, educational explanations for why each answer is correct.';
+
+    return `Update the explanations for the following test questions.
+
+${modeInstruction}
+${customInstructions}
+
+CURRENT QUESTIONS:
+${questionsJson}
+
+IMPORTANT: Return ONLY a valid JSON array with the SAME questions but updated explanations. Do not change questionText, options, or correctAnswer - only update the "explanation" field.
+
+JSON FORMAT (return exactly this structure):
+[
+  {
+    "questionText": "Same as input",
+    "options": ["Same", "as", "input", "options"],
+    "correctAnswer": "Same as input",
+    "explanation": "Your updated/new explanation in ${targetLang}"
+  }
+]`;
+  };
+
+  // Copy update explanations template
+  const handleCopyUpdateTemplate = () => {
+    const template = getUpdateExplanationsTemplate();
+    copyToClipboard(template, 'Update template copied!');
+    setShowUpdateExplanationsModal(false);
   };
 
   // Parse pasted JSON from LLM
@@ -471,6 +545,16 @@ export const TestBuilder: React.FC<TestBuilderProps> = ({ audio, existingTest, o
               <DownloadIcon className="w-4 h-4" />
               Paste from LLM
             </button>
+            {questions.length > 0 && (
+              <button
+                onClick={() => setShowUpdateExplanationsModal(true)}
+                className="flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-100 text-blue-800 rounded-lg hover:bg-blue-200 transition-colors"
+                title="Update or add explanations to existing questions"
+              >
+                <SparklesIcon className="w-4 h-4" />
+                Update Explanations
+              </button>
+            )}
             <button
               onClick={generateQuestions}
               disabled={isGenerating}
@@ -770,6 +854,156 @@ export const TestBuilder: React.FC<TestBuilderProps> = ({ audio, existingTest, o
               >
                 <DownloadIcon className="w-4 h-4" />
                 Import Questions
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Update Explanations Modal */}
+      {showUpdateExplanationsModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-slate-200">
+              <h2 className="text-xl font-bold text-slate-900">Update Explanations</h2>
+              <p className="text-sm text-slate-500 mt-1">
+                Generate or update explanations for your existing questions using any LLM.
+              </p>
+            </div>
+
+            <div className="p-6 space-y-4 overflow-y-auto flex-1">
+              {/* Current Questions Summary */}
+              <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-slate-700">
+                      {questions.length} questions
+                      {questions.filter(q => q.explanation).length > 0 && (
+                        <span className="text-slate-500">
+                          {' '}({questions.filter(q => q.explanation).length} with explanations)
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleCopyQuestionsJson}
+                    className="flex items-center gap-1 px-2 py-1 text-xs bg-slate-200 text-slate-700 rounded hover:bg-slate-300 transition-colors"
+                  >
+                    <CopyIcon className="w-3 h-3" />
+                    Copy JSON
+                  </button>
+                </div>
+              </div>
+
+              {/* Mode Selector */}
+              <div>
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">
+                  Update Mode
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setUpdateExplanationMode('supplement')}
+                    className={`flex-1 py-3 px-4 rounded-lg text-sm transition-all text-left ${
+                      updateExplanationMode === 'supplement'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    <p className="font-medium">Supplement</p>
+                    <p className={`text-xs mt-0.5 ${updateExplanationMode === 'supplement' ? 'text-blue-100' : 'text-slate-500'}`}>
+                      Keep existing + add/translate
+                    </p>
+                  </button>
+                  <button
+                    onClick={() => setUpdateExplanationMode('replace')}
+                    className={`flex-1 py-3 px-4 rounded-lg text-sm transition-all text-left ${
+                      updateExplanationMode === 'replace'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    <p className="font-medium">Replace</p>
+                    <p className={`text-xs mt-0.5 ${updateExplanationMode === 'replace' ? 'text-blue-100' : 'text-slate-500'}`}>
+                      Overwrite all explanations
+                    </p>
+                  </button>
+                </div>
+              </div>
+
+              {/* Language Selector */}
+              <div>
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">
+                  Output Language
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setUpdateExplanationLanguage('english')}
+                    className={`flex-1 py-2 px-4 rounded-lg font-medium text-sm transition-all ${
+                      updateExplanationLanguage === 'english'
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    English
+                  </button>
+                  <button
+                    onClick={() => setUpdateExplanationLanguage('arabic')}
+                    className={`flex-1 py-2 px-4 rounded-lg font-medium text-sm transition-all ${
+                      updateExplanationLanguage === 'arabic'
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    العربية (Arabic)
+                  </button>
+                </div>
+                {updateExplanationMode === 'supplement' && questions.some(q => q.explanation) && (
+                  <p className="text-xs text-slate-500 mt-2">
+                    Existing explanations will be translated to {updateExplanationLanguage === 'arabic' ? 'Arabic' : 'English'} if in a different language.
+                  </p>
+                )}
+              </div>
+
+              {/* Custom Instructions */}
+              <div>
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">
+                  Custom Instructions (optional)
+                </label>
+                <textarea
+                  value={updateExplanationPrompt}
+                  onChange={(e) => setUpdateExplanationPrompt(e.target.value)}
+                  placeholder="Leave empty to let the LLM improve/clarify existing explanations, or provide specific instructions...&#10;&#10;Examples:&#10;- Focus on grammar rules&#10;- Keep explanations under 2 sentences&#10;- Reference specific parts of the dialogue&#10;- Explain vocabulary in context"
+                  className="w-full h-24 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                />
+              </div>
+
+              {/* Preview */}
+              <div>
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">
+                  Generated Template Preview
+                </label>
+                <pre className="bg-slate-100 p-4 rounded-xl text-xs whitespace-pre-wrap font-mono text-slate-700 max-h-48 overflow-y-auto">
+                  {getUpdateExplanationsTemplate()}
+                </pre>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-slate-200 flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowUpdateExplanationsModal(false);
+                  setUpdateExplanationPrompt('');
+                }}
+                className="px-4 py-2 text-slate-600 hover:text-slate-900 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCopyUpdateTemplate}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <CopyIcon className="w-4 h-4" />
+                Copy Template
               </button>
             </div>
           </div>
