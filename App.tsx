@@ -70,6 +70,7 @@ const App: React.FC = () => {
   const [engine, setEngine] = useState<EngineType>(EngineType.BROWSER);
   const [elevenLabsKey, setElevenLabsKey] = useState("");
   const [lastGeneratedBlob, setLastGeneratedBlob] = useState<Blob | null>(null);
+  const [geminiPlaybackSuccess, setGeminiPlaybackSuccess] = useState(false);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
 
   // Analysis State
@@ -141,10 +142,26 @@ const App: React.FC = () => {
     return newMap;
   }, [engine, browserConfig.voice, browserTTS.voices, elevenTTS.voices]);
 
-  // Reset speaker mapping when engine changes
+  // Reset speaker mapping and Gemini playback state when engine changes
   useEffect(() => {
     setSpeakerMapping({});
+    setGeminiPlaybackSuccess(false);
   }, [engine]);
+
+  // Reset Gemini playback state when text changes
+  useEffect(() => {
+    setGeminiPlaybackSuccess(false);
+  }, [text]);
+
+  // Track Gemini playback completion - set success when playback ends (not loading, not playing)
+  const prevGeminiPlayingRef = React.useRef(false);
+  useEffect(() => {
+    // Detect transition from playing to not playing (successful completion)
+    if (prevGeminiPlayingRef.current && !geminiTTS.isPlaying && !geminiTTS.isLoading) {
+      setGeminiPlaybackSuccess(true);
+    }
+    prevGeminiPlayingRef.current = geminiTTS.isPlaying;
+  }, [geminiTTS.isPlaying, geminiTTS.isLoading]);
 
   // Auto-cast speakers when speakers change or voices become available
   useEffect(() => {
@@ -254,6 +271,7 @@ const App: React.FC = () => {
         const result = await audioStorage.update(editingAudioId, audioData, blobToSave);
         if (result) {
           setLastGeneratedBlob(null);
+          setGeminiPlaybackSuccess(false);
           alert('Audio updated successfully!');
         } else {
           throw new Error('Update failed');
@@ -263,6 +281,7 @@ const App: React.FC = () => {
         const result = await audioStorage.create(audioData, blobToSave);
         if (result) {
           setLastGeneratedBlob(null);
+          setGeminiPlaybackSuccess(false);
           alert('Audio saved to library!');
         } else {
           throw new Error('Create failed');
@@ -281,6 +300,7 @@ const App: React.FC = () => {
     setEngine(EngineType.BROWSER);
     setSpeakerMapping({});
     setLastGeneratedBlob(null);
+    setGeminiPlaybackSuccess(false);
     setCurrentView('editor');
   };
 
@@ -291,6 +311,7 @@ const App: React.FC = () => {
     setEngine(audio.engine);
     setSpeakerMapping(audio.speakerMapping);
     setLastGeneratedBlob(null);
+    setGeminiPlaybackSuccess(false);
     setCurrentView('editor');
   };
 
@@ -572,8 +593,11 @@ const App: React.FC = () => {
             >
               <SaveIcon className="w-4 h-4" />
               <span>{editingAudioId ? 'Update' : 'Save to Library'}</span>
-              {lastGeneratedBlob && (
+              {engine === EngineType.ELEVEN_LABS && lastGeneratedBlob && (
                 <span className="ml-1 w-2 h-2 bg-green-500 rounded-full animate-pulse" title="Audio ready to save" />
+              )}
+              {engine === EngineType.GEMINI && geminiPlaybackSuccess && (
+                <span className="ml-1 w-2 h-2 bg-blue-500 rounded-full animate-pulse" title="Audio verified - ready to save" />
               )}
             </button>
           </div>
