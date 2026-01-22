@@ -30,19 +30,29 @@ const getLLMTemplate = (
   includeExplanations: boolean,
   explanationStyle: string,
   questionCount: number,
-  explanationLanguage: 'english' | 'arabic'
+  explanationLanguage: 'english' | 'arabic' | 'both'
 ): string => {
-  // Generate both language explanation fields when explanations are enabled
-  const explanationFields = includeExplanations
-    ? `,
-    "explanation": "English explanation here",
-    "explanationArabic": "الشرح بالعربية هنا"`
-    : '';
+  // Generate explanation fields based on language selection
+  let explanationFields = '';
+  let explanationRule = '';
 
-  const explanationRule = includeExplanations
-    ? `\n- explanation: ${explanationStyle || 'Provide a brief explanation in English for each answer'}.
-- explanationArabic: Provide the same explanation in Arabic (العربية).`
-    : '';
+  if (includeExplanations) {
+    if (explanationLanguage === 'both') {
+      explanationFields = `,
+    "explanation": "English explanation here",
+    "explanationArabic": "الشرح بالعربية هنا"`;
+      explanationRule = `\n- explanation: ${explanationStyle || 'Provide a brief explanation in English for each answer'}.
+- explanationArabic: Provide the same explanation in Arabic (العربية).`;
+    } else if (explanationLanguage === 'arabic') {
+      explanationFields = `,
+    "explanationArabic": "الشرح بالعربية هنا"`;
+      explanationRule = `\n- explanationArabic: ${explanationStyle || 'Provide a brief explanation in Arabic (العربية) for each answer'}.`;
+    } else {
+      explanationFields = `,
+    "explanation": "English explanation here"`;
+      explanationRule = `\n- explanation: ${explanationStyle || 'Provide a brief explanation in English for each answer'}.`;
+    }
+  }
 
   const baseInstructions = `Based on the following transcript, generate questions for a listening comprehension test.
 
@@ -145,7 +155,7 @@ export const TestBuilder: React.FC<TestBuilderProps> = ({ audio, existingTest, o
   const [includeExplanations, setIncludeExplanations] = useState(false);
   const [explanationStyle, setExplanationStyle] = useState('');
   const [questionCount, setQuestionCount] = useState<number>(5);
-  const [explanationLanguage, setExplanationLanguage] = useState<'english' | 'arabic'>('english');
+  const [explanationLanguage, setExplanationLanguage] = useState<'english' | 'arabic' | 'both'>('both');
 
   // Update explanations modal state
   const [showUpdateExplanationsModal, setShowUpdateExplanationsModal] = useState(false);
@@ -828,6 +838,16 @@ JSON FORMAT (return exactly this structure):
                         <label className="text-xs text-slate-500 mb-1 block">Explanation language:</label>
                         <div className="flex gap-2">
                           <button
+                            onClick={() => setExplanationLanguage('both')}
+                            className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all ${
+                              explanationLanguage === 'both'
+                                ? 'bg-indigo-600 text-white'
+                                : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            Both
+                          </button>
+                          <button
                             onClick={() => setExplanationLanguage('english')}
                             className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all ${
                               explanationLanguage === 'english'
@@ -845,7 +865,7 @@ JSON FORMAT (return exactly this structure):
                                 : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
                             }`}
                           >
-                            العربية (Arabic)
+                            العربية
                           </button>
                         </div>
                       </div>
