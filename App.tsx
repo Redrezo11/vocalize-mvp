@@ -96,6 +96,10 @@ const App: React.FC = () => {
 
   const performSmartCast = useCallback((currentSpeakers: string[], currentMap: SpeakerVoiceMapping, forceReset = false) => {
     const newMap = forceReset ? {} : { ...currentMap };
+
+    // Track which voices have been used to avoid duplicates when possible
+    const usedVoiceIds = new Set<string>();
+
     currentSpeakers.forEach((speaker, index) => {
       if (newMap[speaker] && !forceReset) return;
       const gender = guessGender(speaker);
@@ -105,7 +109,29 @@ const App: React.FC = () => {
         if (gender !== 'Neutral') candidates = GEMINI_VOICES.filter(v => v.gender === gender);
         newMap[speaker] = (candidates[index % candidates.length] || GEMINI_VOICES[0]).name;
       } else if (engine === EngineType.ELEVEN_LABS && elevenTTS.voices.length > 0) {
-        newMap[speaker] = elevenTTS.voices[index % elevenTTS.voices.length].voice_id;
+        // Filter voices by gender using ElevenLabs labels
+        let candidates = elevenTTS.voices;
+
+        if (gender !== 'Neutral') {
+          const genderLower = gender.toLowerCase();
+          const genderFiltered = elevenTTS.voices.filter(v =>
+            v.labels?.gender?.toLowerCase() === genderLower
+          );
+          // Only use filtered list if we found matches
+          if (genderFiltered.length > 0) {
+            candidates = genderFiltered;
+          }
+        }
+
+        // Try to pick an unused voice first
+        let selectedVoice = candidates.find(v => !usedVoiceIds.has(v.voice_id));
+        if (!selectedVoice) {
+          // All matching voices used, cycle through
+          selectedVoice = candidates[index % candidates.length];
+        }
+
+        newMap[speaker] = selectedVoice.voice_id;
+        usedVoiceIds.add(selectedVoice.voice_id);
       } else if (engine === EngineType.BROWSER && browserTTS.voices.length > 0) {
         const langPrefix = browserConfig.voice?.lang.split('-')[0] || 'en';
         const relevantVoices = browserTTS.voices.filter(v => v.lang.startsWith(langPrefix));

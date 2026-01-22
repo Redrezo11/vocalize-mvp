@@ -27,6 +27,13 @@ export interface ElevenLabsVoice {
   name: string;
   category?: string;
   preview_url?: string;
+  labels?: {
+    gender?: string;
+    age?: string;
+    accent?: string;
+    description?: string;
+    use_case?: string;
+  };
 }
 
 export interface SpeakerSegment {
