@@ -78,4 +78,33 @@ export interface AudioEntryRow {
   updated_at: string;
 }
 
-export type AppView = 'editor' | 'library' | 'detail';
+export type AppView = 'editor' | 'library' | 'detail' | 'test-builder' | 'test-take' | 'classroom' | 'student-test';
+
+// Test/Exercise Types
+export type TestType = 'listening-comprehension' | 'fill-in-blank' | 'dictation';
+
+export interface TestQuestion {
+  id: string;
+  questionText: string;
+  options?: string[];        // For multiple choice
+  correctAnswer: string;
+  explanation?: string;      // Optional explanation shown when answer is wrong
+  blankIndex?: number;       // For fill-in-blank (which word is blanked)
+}
+
+export interface ListeningTest {
+  id: string;
+  audioId: string;
+  title: string;
+  type: TestType;
+  questions: TestQuestion[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TestAttempt {
+  testId: string;
+  answers: { [questionId: string]: string };
+  score?: number;
+  completedAt?: string;
+}

@@ -1,12 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { SavedAudio, EngineType } from '../types';
-import { ArrowLeftIcon, PlayIcon, PauseIcon, EditIcon, TrashIcon } from './Icons';
+import { SavedAudio, EngineType, ListeningTest } from '../types';
+import { ArrowLeftIcon, PlayIcon, PauseIcon, EditIcon, TrashIcon, ClipboardIcon, CheckCircleIcon, PlusIcon } from './Icons';
 
 interface AudioDetailProps {
   audio: SavedAudio;
+  tests?: ListeningTest[];
   onBack: () => void;
   onEdit: (audio: SavedAudio) => void;
   onDelete: (audio: SavedAudio) => void;
+  onCreateTest: (audio: SavedAudio) => void;
+  onEditTest: (test: ListeningTest) => void;
+  onDeleteTest: (test: ListeningTest) => void;
+  onTakeTest: (test: ListeningTest) => void;
 }
 
 const formatDate = (dateStr: string): string => {
@@ -31,11 +36,29 @@ const getEngineLabel = (engine: EngineType): string => {
   }
 };
 
+const getTestTypeBadge = (type: string): { label: string; color: string } => {
+  switch (type) {
+    case 'listening-comprehension':
+      return { label: 'Comprehension', color: 'bg-blue-100 text-blue-700' };
+    case 'fill-in-blank':
+      return { label: 'Fill in Blank', color: 'bg-amber-100 text-amber-700' };
+    case 'dictation':
+      return { label: 'Dictation', color: 'bg-purple-100 text-purple-700' };
+    default:
+      return { label: type, color: 'bg-slate-100 text-slate-700' };
+  }
+};
+
 export const AudioDetail: React.FC<AudioDetailProps> = ({
   audio,
+  tests = [],
   onBack,
   onEdit,
   onDelete,
+  onCreateTest,
+  onEditTest,
+  onDeleteTest,
+  onTakeTest,
 }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -211,6 +234,81 @@ export const AudioDetail: React.FC<AudioDetailProps> = ({
             </div>
           </div>
         )}
+
+        {/* Tests Section */}
+        <div className="p-6 pt-0">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+              Listening Tests ({tests.length})
+            </h2>
+            <button
+              onClick={() => onCreateTest(audio)}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+            >
+              <ClipboardIcon className="w-4 h-4" />
+              Create Test
+            </button>
+          </div>
+
+          {tests.length === 0 ? (
+            <div className="bg-slate-50 rounded-xl p-6 text-center">
+              <ClipboardIcon className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+              <p className="text-slate-500 text-sm">No tests created yet</p>
+              <p className="text-slate-400 text-xs mt-1">Create a listening test to practice with this audio</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {tests.map((test) => {
+                const badge = getTestTypeBadge(test.type);
+                return (
+                  <div
+                    key={test.id}
+                    className="flex items-center justify-between p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors"
+                  >
+                    <div className="flex items-start gap-3">
+                      <span className={`px-2 py-1 text-xs font-medium rounded-md ${badge.color}`}>
+                        {badge.label}
+                      </span>
+                      <div>
+                        <p className="font-medium text-slate-900">{test.title}</p>
+                        <p className="text-sm text-slate-500">
+                          {test.questions.length} question{test.questions.length !== 1 ? 's' : ''}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => onEditTest(test)}
+                        className="p-2 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                        title="Edit test"
+                      >
+                        <EditIcon className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (confirm('Are you sure you want to delete this test?')) {
+                            onDeleteTest(test);
+                          }
+                        }}
+                        className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Delete test"
+                      >
+                        <TrashIcon className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => onTakeTest(test)}
+                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                      >
+                        <CheckCircleIcon className="w-4 h-4" />
+                        Take Test
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

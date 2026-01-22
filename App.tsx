@@ -2,20 +2,35 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useBrowserTTS } from './hooks/useBrowserTTS';
 import { useGeminiTTS } from './hooks/useGeminiTTS';
 import { useElevenLabsTTS } from './hooks/useElevenLabsTTS';
-import { useSupabaseStorage } from './hooks/useSupabaseStorage';
+import { useMongoStorage } from './hooks/useMongoStorage';
 import { parseDialogue, guessGender } from './utils/parser';
-import { BrowserVoiceConfig, EngineType, GEMINI_VOICES, SpeakerVoiceMapping, AppView, SavedAudio } from './types';
-import { PlayIcon, StopIcon, Volume2Icon, FolderIcon, PlusIcon, SaveIcon, ArrowLeftIcon } from './components/Icons';
+import { BrowserVoiceConfig, EngineType, GEMINI_VOICES, SpeakerVoiceMapping, AppView, SavedAudio, ListeningTest, TestAttempt } from './types';
+import { PlayIcon, StopIcon, Volume2Icon, FolderIcon, PlusIcon, SaveIcon, ArrowLeftIcon, PresentationIcon } from './components/Icons';
 import Visualizer from './components/Visualizer';
 import { AudioLibrary } from './components/AudioLibrary';
 import { AudioDetail } from './components/AudioDetail';
 import { SaveDialog } from './components/SaveDialog';
+import { TestBuilder } from './components/TestBuilder';
+import { TestTaker } from './components/TestTaker';
+import { ClassroomMode } from './components/ClassroomMode';
+import { StudentTest } from './components/StudentTest';
+
+const API_BASE = 'http://localhost:3001/api';
 
 const App: React.FC = () => {
   // Navigation state
   const [currentView, setCurrentView] = useState<AppView>('editor');
   const [selectedAudio, setSelectedAudio] = useState<SavedAudio | null>(null);
   const [editingAudioId, setEditingAudioId] = useState<string | null>(null);
+
+  // Test state
+  const [audioTests, setAudioTests] = useState<ListeningTest[]>([]);
+  const [allTests, setAllTests] = useState<ListeningTest[]>([]);
+  const [selectedTest, setSelectedTest] = useState<ListeningTest | null>(null);
+  const [editingTest, setEditingTest] = useState<ListeningTest | null>(null);
+  const [studentTestId, setStudentTestId] = useState<string | null>(null);
+  const [studentTest, setStudentTest] = useState<ListeningTest | null>(null);
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
 
   // Editor state
   const [title, setTitle] = useState("Untitled Audio");
@@ -38,7 +53,7 @@ const App: React.FC = () => {
   const browserTTS = useBrowserTTS();
   const geminiTTS = useGeminiTTS();
   const elevenTTS = useElevenLabsTTS();
-  const audioStorage = useSupabaseStorage();
+  const audioStorage = useMongoStorage();
 
   useEffect(() => {
     if (browserTTS.voices.length > 0 && !browserConfig.voice) {
@@ -202,8 +217,23 @@ const App: React.FC = () => {
     }
   };
 
-  const handleViewDetail = (audio: SavedAudio) => {
+  const handleViewDetail = async (audio: SavedAudio) => {
     setSelectedAudio(audio);
+    // Load tests for this audio
+    try {
+      const response = await fetch(`${API_BASE}/audio-entries/${audio.id}/tests`);
+      if (response.ok) {
+        const tests = await response.json();
+        setAudioTests(tests.map((t: { _id: string; audioId: string; title: string; type: string; questions: Array<{ _id?: string; questionText: string; options?: string[]; correctAnswer: string }>; created_at: string; updated_at: string }) => ({
+          ...t,
+          id: t._id,
+          questions: t.questions.map((q: { _id?: string; questionText: string; options?: string[]; correctAnswer: string }) => ({ ...q, id: q._id || Math.random().toString(36).substring(2, 11) }))
+        })));
+      }
+    } catch (error) {
+      console.error('Failed to load tests:', error);
+      setAudioTests([]);
+    }
     setCurrentView('detail');
   };
 
@@ -211,6 +241,146 @@ const App: React.FC = () => {
     // For now, just open detail view to play
     // Later we can implement direct playback
     handleViewDetail(audio);
+  };
+
+  // Test handlers
+  const handleCreateTest = (audio: SavedAudio) => {
+    setSelectedAudio(audio);
+    setEditingTest(null);
+    setCurrentView('test-builder');
+  };
+
+  const handleEditTest = (test: ListeningTest) => {
+    setEditingTest(test);
+    setCurrentView('test-builder');
+  };
+
+  const handleDeleteTest = async (test: ListeningTest) => {
+    try {
+      const response = await fetch(`${API_BASE}/tests/${test.id}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) throw new Error('Failed to delete test');
+
+      // Refresh tests list
+      setAudioTests(prev => prev.filter(t => t.id !== test.id));
+    } catch (error) {
+      console.error('Failed to delete test:', error);
+      alert('Failed to delete test. Please try again.');
+    }
+  };
+
+  const handleSaveTest = async (testData: Omit<ListeningTest, 'id' | 'createdAt' | 'updatedAt'>) => {
+    try {
+      let response;
+      if (editingTest) {
+        // Update existing test
+        response = await fetch(`${API_BASE}/tests/${editingTest.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(testData),
+        });
+      } else {
+        // Create new test
+        response = await fetch(`${API_BASE}/tests`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(testData),
+        });
+      }
+
+      if (!response.ok) throw new Error('Failed to save test');
+
+      alert(editingTest ? 'Test updated successfully!' : 'Test created successfully!');
+      setEditingTest(null);
+
+      // Go back to detail view and refresh tests
+      if (selectedAudio) {
+        handleViewDetail(selectedAudio);
+      }
+    } catch (error) {
+      console.error('Failed to save test:', error);
+      alert('Failed to save test. Please try again.');
+    }
+  };
+
+  const handleTakeTest = (test: ListeningTest) => {
+    setSelectedTest(test);
+    setCurrentView('test-take');
+  };
+
+  const handleTestComplete = (attempt: TestAttempt) => {
+    console.log('Test completed:', attempt);
+    // Could save attempt to database for tracking progress
+  };
+
+  // Load all tests for classroom mode
+  const loadAllTests = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/tests`);
+      if (response.ok) {
+        const tests = await response.json();
+        setAllTests(tests.map((t: { _id: string; audioId: string; title: string; type: string; questions: Array<{ _id?: string; questionText: string; options?: string[]; correctAnswer: string; explanation?: string }>; created_at: string; updated_at: string }) => ({
+          ...t,
+          id: t._id,
+          questions: t.questions.map((q: { _id?: string; questionText: string; options?: string[]; correctAnswer: string; explanation?: string }) => ({ ...q, id: q._id || Math.random().toString(36).substring(2, 11) }))
+        })));
+      }
+    } catch (error) {
+      console.error('Failed to load all tests:', error);
+    }
+  };
+
+  // Enter classroom mode
+  const handleEnterClassroom = async () => {
+    await loadAllTests();
+    setCurrentView('classroom');
+  };
+
+  // Load test for student view
+  const loadStudentTest = async (testId: string) => {
+    try {
+      const response = await fetch(`${API_BASE}/tests/${testId}`);
+      if (response.ok) {
+        const t = await response.json();
+        const test: ListeningTest = {
+          ...t,
+          id: t._id,
+          questions: t.questions.map((q: { _id?: string; questionText: string; options?: string[]; correctAnswer: string; explanation?: string }) => ({
+            ...q,
+            id: q._id || Math.random().toString(36).substring(2, 11)
+          }))
+        };
+        setStudentTest(test);
+        setCurrentView('student-test');
+      }
+    } catch (error) {
+      console.error('Failed to load student test:', error);
+    }
+  };
+
+  // Check URL for student test parameter on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const testId = params.get('student-test');
+    if (testId) {
+      setStudentTestId(testId);
+      loadStudentTest(testId);
+    }
+  }, []);
+
+  // Preview student view
+  const handlePreviewStudentView = (test: ListeningTest) => {
+    setStudentTest(test);
+    setIsPreviewMode(true);
+    setCurrentView('student-test');
+  };
+
+  // Exit preview
+  const handleExitPreview = () => {
+    setIsPreviewMode(false);
+    setCurrentView('classroom');
   };
 
   // Navigation header
@@ -229,6 +399,14 @@ const App: React.FC = () => {
               {analysis.speakers.length} Speakers Detected
             </span>
           )}
+          <button
+            onClick={handleEnterClassroom}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-800 text-white rounded-xl font-medium hover:bg-slate-700 transition-colors"
+            title="Enter Classroom Mode"
+          >
+            <PresentationIcon className="w-4 h-4" />
+            <span className="text-sm">Classroom</span>
+          </button>
           {currentView === 'editor' ? (
             <button
               onClick={() => setCurrentView('library')}
@@ -401,16 +579,89 @@ const App: React.FC = () => {
       <main className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
         <AudioDetail
           audio={selectedAudio}
+          tests={audioTests}
           onBack={() => {
             setSelectedAudio(null);
+            setAudioTests([]);
             setCurrentView('library');
           }}
           onEdit={handleEdit}
           onDelete={handleDelete}
+          onCreateTest={handleCreateTest}
+          onEditTest={handleEditTest}
+          onDeleteTest={handleDeleteTest}
+          onTakeTest={handleTakeTest}
         />
       </main>
     );
   };
+
+  // Test builder view
+  const renderTestBuilder = () => {
+    if (!selectedAudio) {
+      setCurrentView('library');
+      return null;
+    }
+
+    return (
+      <main className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+        <TestBuilder
+          audio={selectedAudio}
+          existingTest={editingTest || undefined}
+          onSave={handleSaveTest}
+          onCancel={() => {
+            setEditingTest(null);
+            handleViewDetail(selectedAudio);
+          }}
+        />
+      </main>
+    );
+  };
+
+  // Test taker view
+  const renderTestTaker = () => {
+    if (!selectedTest || !selectedAudio) {
+      setCurrentView('library');
+      return null;
+    }
+
+    return (
+      <main className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+        <TestTaker
+          test={selectedTest}
+          audio={selectedAudio}
+          onComplete={handleTestComplete}
+          onBack={() => {
+            setSelectedTest(null);
+            handleViewDetail(selectedAudio);
+          }}
+        />
+      </main>
+    );
+  };
+
+  // Student test view (accessed via URL or preview)
+  if (currentView === 'student-test' && studentTest) {
+    return (
+      <StudentTest
+        test={studentTest}
+        isPreview={isPreviewMode}
+        onExitPreview={handleExitPreview}
+      />
+    );
+  }
+
+  // Classroom mode (full screen, no nav)
+  if (currentView === 'classroom') {
+    return (
+      <ClassroomMode
+        tests={allTests}
+        audioEntries={audioStorage.savedAudios}
+        onExit={() => setCurrentView('library')}
+        onPreviewStudent={handlePreviewStudentView}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen text-slate-900 selection:bg-indigo-500/20">
@@ -418,6 +669,8 @@ const App: React.FC = () => {
       {currentView === 'editor' && renderEditor()}
       {currentView === 'library' && renderLibrary()}
       {currentView === 'detail' && renderDetail()}
+      {currentView === 'test-builder' && renderTestBuilder()}
+      {currentView === 'test-take' && renderTestTaker()}
 
       <SaveDialog
         isOpen={showSaveDialog}
