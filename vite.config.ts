@@ -28,16 +28,32 @@ export default defineConfig(({ mode }) => {
       build: {
         rollupOptions: {
           output: {
-            manualChunks: {
-              // Separate vendor chunks
-              'vendor-react': ['react', 'react-dom'],
-              'vendor-google': ['@google/genai'],
-              'vendor-mongo': ['mongoose'],
+            manualChunks: (id) => {
+              // Core React - loaded first
+              if (id.includes('node_modules/react') || id.includes('node_modules/react-dom')) {
+                return 'vendor-react';
+              }
+              // Google/Gemini SDK - large, split out
+              if (id.includes('@google/genai')) {
+                return 'vendor-google';
+              }
+              // Anthropic SDK
+              if (id.includes('@anthropic-ai')) {
+                return 'vendor-anthropic';
+              }
+              // Supabase (if still used)
+              if (id.includes('@supabase')) {
+                return 'vendor-supabase';
+              }
             }
           }
         },
         // Increase chunk size warning limit
-        chunkSizeWarningLimit: 300,
+        chunkSizeWarningLimit: 500,
+        // Target modern browsers for smaller bundles
+        target: 'es2020',
+        // Minify for production
+        minify: 'esbuild',
       }
     };
 });

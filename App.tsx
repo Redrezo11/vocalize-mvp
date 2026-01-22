@@ -6,21 +6,43 @@ import { useMongoStorage } from './hooks/useMongoStorage';
 import { parseDialogue, guessGender } from './utils/parser';
 import { BrowserVoiceConfig, EngineType, GEMINI_VOICES, SpeakerVoiceMapping, AppView, SavedAudio, ListeningTest, TestAttempt } from './types';
 import { PlayIcon, StopIcon, Volume2Icon, FolderIcon, PlusIcon, SaveIcon, ArrowLeftIcon, PresentationIcon } from './components/Icons';
-import Visualizer from './components/Visualizer';
-import { AudioLibrary } from './components/AudioLibrary';
-import { AudioDetail } from './components/AudioDetail';
 import { SaveDialog } from './components/SaveDialog';
 
-// Lazy load heavy components
+// Lazy load components for better initial load
+const Visualizer = lazy(() => import('./components/Visualizer'));
+const AudioLibrary = lazy(() => import('./components/AudioLibrary').then(m => ({ default: m.AudioLibrary })));
+const AudioDetail = lazy(() => import('./components/AudioDetail').then(m => ({ default: m.AudioDetail })));
 const TestBuilder = lazy(() => import('./components/TestBuilder').then(m => ({ default: m.TestBuilder })));
 const TestTaker = lazy(() => import('./components/TestTaker').then(m => ({ default: m.TestTaker })));
 const ClassroomMode = lazy(() => import('./components/ClassroomMode').then(m => ({ default: m.ClassroomMode })));
 const StudentTest = lazy(() => import('./components/StudentTest').then(m => ({ default: m.StudentTest })));
 
+// Preload functions for components
+const preloadClassroom = () => import('./components/ClassroomMode');
+const preloadLibrary = () => import('./components/AudioLibrary');
+
 // Loading spinner component
 const LoadingSpinner = () => (
   <div className="min-h-screen flex items-center justify-center bg-slate-50">
     <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+  </div>
+);
+
+// Inline spinner for smaller sections
+const InlineSpinner = () => (
+  <div className="flex items-center justify-center p-8">
+    <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+  </div>
+);
+
+// Simple visualizer placeholder for SSR/loading
+const VisualizerFallback = () => (
+  <div className="h-24 flex items-center justify-center">
+    <div className="flex gap-1">
+      {[...Array(5)].map((_, i) => (
+        <div key={i} className="w-1 h-8 bg-slate-600 rounded-full" />
+      ))}
+    </div>
   </div>
 );
 
@@ -412,6 +434,8 @@ const App: React.FC = () => {
           )}
           <button
             onClick={handleEnterClassroom}
+            onMouseEnter={preloadClassroom}
+            onTouchStart={preloadClassroom}
             className="flex items-center gap-2 px-4 py-2 bg-slate-800 text-white rounded-xl font-medium hover:bg-slate-700 transition-colors"
             title="Enter Classroom Mode"
           >
@@ -421,6 +445,8 @@ const App: React.FC = () => {
           {currentView === 'editor' ? (
             <button
               onClick={() => setCurrentView('library')}
+              onMouseEnter={preloadLibrary}
+              onTouchStart={preloadLibrary}
               className="flex items-center gap-2 px-4 py-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors"
             >
               <FolderIcon className="w-4 h-4" />
@@ -466,7 +492,13 @@ const App: React.FC = () => {
         <div className="sticky top-28 space-y-6">
           <div className="bg-slate-900 rounded-2xl p-6 shadow-xl relative group">
             <div className="h-24 flex items-center justify-center">
-              {isLoading ? <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div> : <Visualizer isPlaying={isPlaying} />}
+              {isLoading ? (
+                <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+              ) : (
+                <Suspense fallback={<VisualizerFallback />}>
+                  <Visualizer isPlaying={isPlaying} />
+                </Suspense>
+              )}
             </div>
             <div className="mt-4 flex items-center gap-3">
               <button onClick={handlePlay} disabled={isLoading || !text} className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 transition-all disabled:opacity-50">
@@ -572,15 +604,17 @@ const App: React.FC = () => {
   // Library view
   const renderLibrary = () => (
     <main className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
-      <AudioLibrary
-        savedAudios={audioStorage.savedAudios}
-        isLoading={audioStorage.isLoading}
-        onPlay={handlePlayFromLibrary}
-        onEdit={handleEdit}
-        onDelete={handleDelete}
-        onCreateNew={handleCreateNew}
-        onViewDetail={handleViewDetail}
-      />
+      <Suspense fallback={<InlineSpinner />}>
+        <AudioLibrary
+          savedAudios={audioStorage.savedAudios}
+          isLoading={audioStorage.isLoading}
+          onPlay={handlePlayFromLibrary}
+          onEdit={handleEdit}
+          onDelete={handleDelete}
+          onCreateNew={handleCreateNew}
+          onViewDetail={handleViewDetail}
+        />
+      </Suspense>
     </main>
   );
 
@@ -593,21 +627,23 @@ const App: React.FC = () => {
 
     return (
       <main className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
-        <AudioDetail
-          audio={selectedAudio}
-          tests={audioTests}
-          onBack={() => {
-            setSelectedAudio(null);
-            setAudioTests([]);
-            setCurrentView('library');
-          }}
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-          onCreateTest={handleCreateTest}
-          onEditTest={handleEditTest}
-          onDeleteTest={handleDeleteTest}
-          onTakeTest={handleTakeTest}
-        />
+        <Suspense fallback={<InlineSpinner />}>
+          <AudioDetail
+            audio={selectedAudio}
+            tests={audioTests}
+            onBack={() => {
+              setSelectedAudio(null);
+              setAudioTests([]);
+              setCurrentView('library');
+            }}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+            onCreateTest={handleCreateTest}
+            onEditTest={handleEditTest}
+            onDeleteTest={handleDeleteTest}
+            onTakeTest={handleTakeTest}
+          />
+        </Suspense>
       </main>
     );
   };
