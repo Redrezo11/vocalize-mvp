@@ -38,6 +38,28 @@ const titleCache = new Map<string, string>();
 let lastApiCallTime = 0;
 const MIN_API_INTERVAL = 3000; // 3 seconds between API calls
 
+// Track quota status - persists across component renders
+let quotaExhausted = false;
+let quotaExhaustedTime = 0;
+const QUOTA_RESET_CHECK_INTERVAL = 60 * 60 * 1000; // Check again after 1 hour
+
+// Check if quota might be available again
+const isQuotaAvailable = (): boolean => {
+  if (!quotaExhausted) return true;
+  // If enough time has passed, allow trying again
+  if (Date.now() - quotaExhaustedTime > QUOTA_RESET_CHECK_INTERVAL) {
+    quotaExhausted = false;
+    return true;
+  }
+  return false;
+};
+
+// Mark quota as exhausted
+const markQuotaExhausted = () => {
+  quotaExhausted = true;
+  quotaExhaustedTime = Date.now();
+};
+
 // Generate title using Gemini AI with rate limiting
 const generateAITitle = async (transcript: string): Promise<string> => {
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
@@ -101,6 +123,7 @@ export const SaveDialog: React.FC<SaveDialogProps> = ({
 
   const geminiKey = import.meta.env.VITE_GEMINI_API_KEY;
   const hasAIKey = !!geminiKey && geminiKey !== 'PLACEHOLDER_API_KEY';
+  const canUseAI = hasAIKey && isQuotaAvailable();
 
   const handleGenerateAITitle = useCallback(async (forceRegenerate = false) => {
     // Skip if already generating
@@ -121,10 +144,11 @@ export const SaveDialog: React.FC<SaveDialogProps> = ({
       setAiTitle(title);
     } catch (error: any) {
       console.error('Failed to generate AI title:', error);
-      const errorMsg = error?.message || 'Unknown error';
-      // Check for rate limit error
-      if (errorMsg.includes('rate') || errorMsg.includes('quota') || errorMsg.includes('429')) {
-        setAiError('Rate limit reached. Using auto-title.');
+      const errorMsg = error?.message || String(error) || 'Unknown error';
+      // Check for rate limit/quota error
+      if (errorMsg.includes('rate') || errorMsg.includes('quota') || errorMsg.includes('429') || errorMsg.includes('RESOURCE_EXHAUSTED')) {
+        markQuotaExhausted();
+        setAiError('Daily quota reached. Try again tomorrow.');
       } else {
         setAiError(`Failed: ${errorMsg}`);
       }
@@ -180,8 +204,15 @@ export const SaveDialog: React.FC<SaveDialogProps> = ({
 
           {/* Title Mode Selection */}
           <div className="space-y-3 mb-6">
-            {/* AI Title Option */}
-            {hasAIKey && (
+            {/* Quota exhausted notice */}
+            {hasAIKey && !canUseAI && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-700">
+                AI title generation unavailable (daily quota reached). Try again later.
+              </div>
+            )}
+
+            {/* AI Title Option - only show if quota available */}
+            {canUseAI && (
               <label
                 className={`flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${
                   titleMode === 'ai'
