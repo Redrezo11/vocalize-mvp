@@ -2,26 +2,27 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { GoogleGenAI, Modality } from "@google/genai";
 import { GeminiVoiceConfig, SpeakerVoiceMapping } from '../types';
 
-// Quota tracking - persists across hook instances
-let quotaExhausted = false;
-let quotaExhaustedTime = 0;
-const QUOTA_RESET_CHECK_INTERVAL = 60 * 60 * 1000; // Check again after 1 hour
+// TTS-specific quota tracking - separate from other Gemini API calls (like title generation)
+// This only gets marked when TTS calls fail, not when other Gemini features hit quota
+let ttsQuotaExhausted = false;
+let ttsQuotaExhaustedTime = 0;
+const TTS_QUOTA_RESET_INTERVAL = 60 * 60 * 1000; // Check again after 1 hour
 
-const isQuotaAvailable = (): boolean => {
-  if (!quotaExhausted) return true;
-  if (Date.now() - quotaExhaustedTime > QUOTA_RESET_CHECK_INTERVAL) {
-    quotaExhausted = false;
+const isTTSQuotaAvailable = (): boolean => {
+  if (!ttsQuotaExhausted) return true;
+  if (Date.now() - ttsQuotaExhaustedTime > TTS_QUOTA_RESET_INTERVAL) {
+    ttsQuotaExhausted = false;
     return true;
   }
   return false;
 };
 
-const markQuotaExhausted = () => {
-  quotaExhausted = true;
-  quotaExhaustedTime = Date.now();
+const markTTSQuotaExhausted = () => {
+  ttsQuotaExhausted = true;
+  ttsQuotaExhaustedTime = Date.now();
 };
 
-const isQuotaError = (error: any): boolean => {
+const isTTSQuotaError = (error: any): boolean => {
   const errorMsg = error?.message || String(error) || '';
   return errorMsg.includes('429') ||
          errorMsg.includes('quota') ||
@@ -89,14 +90,14 @@ function pcmToWavBlob(base64Audio: string): Blob {
 export const useGeminiTTS = () => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [quotaExceeded, setQuotaExceeded] = useState(!isQuotaAvailable());
+  const [quotaExceeded, setQuotaExceeded] = useState(!isTTSQuotaAvailable());
   const audioContextRef = useRef<AudioContext | null>(null);
   const sourceNodeRef = useRef<AudioBufferSourceNode | null>(null);
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
 
   // Check quota status on mount and periodically
   useEffect(() => {
-    const checkQuota = () => setQuotaExceeded(!isQuotaAvailable());
+    const checkQuota = () => setQuotaExceeded(!isTTSQuotaAvailable());
     checkQuota();
     const interval = setInterval(checkQuota, 60000); // Check every minute
     return () => clearInterval(interval);
@@ -236,8 +237,8 @@ export const useGeminiTTS = () => {
 
     } catch (error: any) {
       console.error("Gemini TTS Error:", error);
-      if (isQuotaError(error)) {
-        markQuotaExhausted();
+      if (isTTSQuotaError(error)) {
+        markTTSQuotaExhausted();
         setQuotaExceeded(true);
         alert("Gemini TTS quota exceeded. Please try again later or use a different engine.");
       } else {
@@ -293,8 +294,8 @@ export const useGeminiTTS = () => {
 
     } catch (error: any) {
       console.error("Gemini TTS generateAudio Error:", error);
-      if (isQuotaError(error)) {
-        markQuotaExhausted();
+      if (isTTSQuotaError(error)) {
+        markTTSQuotaExhausted();
         setQuotaExceeded(true);
         console.error("Gemini TTS quota exceeded");
       }
