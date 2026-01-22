@@ -24,6 +24,20 @@ export default defineConfig(({ mode }) => {
         alias: {
           '@': path.resolve(__dirname, '.'),
         }
+      },
+      build: {
+        rollupOptions: {
+          output: {
+            manualChunks: {
+              // Separate vendor chunks
+              'vendor-react': ['react', 'react-dom'],
+              'vendor-google': ['@google/genai'],
+              'vendor-mongo': ['mongoose'],
+            }
+          }
+        },
+        // Increase chunk size warning limit
+        chunkSizeWarningLimit: 300,
       }
     };
 });

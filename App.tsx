@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
 import { useBrowserTTS } from './hooks/useBrowserTTS';
 import { useGeminiTTS } from './hooks/useGeminiTTS';
 import { useElevenLabsTTS } from './hooks/useElevenLabsTTS';
@@ -10,10 +10,19 @@ import Visualizer from './components/Visualizer';
 import { AudioLibrary } from './components/AudioLibrary';
 import { AudioDetail } from './components/AudioDetail';
 import { SaveDialog } from './components/SaveDialog';
-import { TestBuilder } from './components/TestBuilder';
-import { TestTaker } from './components/TestTaker';
-import { ClassroomMode } from './components/ClassroomMode';
-import { StudentTest } from './components/StudentTest';
+
+// Lazy load heavy components
+const TestBuilder = lazy(() => import('./components/TestBuilder').then(m => ({ default: m.TestBuilder })));
+const TestTaker = lazy(() => import('./components/TestTaker').then(m => ({ default: m.TestTaker })));
+const ClassroomMode = lazy(() => import('./components/ClassroomMode').then(m => ({ default: m.ClassroomMode })));
+const StudentTest = lazy(() => import('./components/StudentTest').then(m => ({ default: m.StudentTest })));
+
+// Loading spinner component
+const LoadingSpinner = () => (
+  <div className="min-h-screen flex items-center justify-center bg-slate-50">
+    <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+  </div>
+);
 
 // Use relative path - works for both dev (with proxy) and production
 const API_BASE = '/api';
@@ -611,17 +620,19 @@ const App: React.FC = () => {
     }
 
     return (
-      <main className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
-        <TestBuilder
-          audio={selectedAudio}
-          existingTest={editingTest || undefined}
-          onSave={handleSaveTest}
-          onCancel={() => {
-            setEditingTest(null);
-            handleViewDetail(selectedAudio);
-          }}
-        />
-      </main>
+      <Suspense fallback={<LoadingSpinner />}>
+        <main className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+          <TestBuilder
+            audio={selectedAudio}
+            existingTest={editingTest || undefined}
+            onSave={handleSaveTest}
+            onCancel={() => {
+              setEditingTest(null);
+              handleViewDetail(selectedAudio);
+            }}
+          />
+        </main>
+      </Suspense>
     );
   };
 
@@ -633,40 +644,46 @@ const App: React.FC = () => {
     }
 
     return (
-      <main className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
-        <TestTaker
-          test={selectedTest}
-          audio={selectedAudio}
-          onComplete={handleTestComplete}
-          onBack={() => {
-            setSelectedTest(null);
-            handleViewDetail(selectedAudio);
-          }}
-        />
-      </main>
+      <Suspense fallback={<LoadingSpinner />}>
+        <main className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+          <TestTaker
+            test={selectedTest}
+            audio={selectedAudio}
+            onComplete={handleTestComplete}
+            onBack={() => {
+              setSelectedTest(null);
+              handleViewDetail(selectedAudio);
+            }}
+          />
+        </main>
+      </Suspense>
     );
   };
 
   // Student test view (accessed via URL or preview)
   if (currentView === 'student-test' && studentTest) {
     return (
-      <StudentTest
-        test={studentTest}
-        isPreview={isPreviewMode}
-        onExitPreview={handleExitPreview}
-      />
+      <Suspense fallback={<LoadingSpinner />}>
+        <StudentTest
+          test={studentTest}
+          isPreview={isPreviewMode}
+          onExitPreview={handleExitPreview}
+        />
+      </Suspense>
     );
   }
 
   // Classroom mode (full screen, no nav)
   if (currentView === 'classroom') {
     return (
-      <ClassroomMode
-        tests={allTests}
-        audioEntries={audioStorage.savedAudios}
-        onExit={() => setCurrentView('library')}
-        onPreviewStudent={handlePreviewStudentView}
-      />
+      <Suspense fallback={<LoadingSpinner />}>
+        <ClassroomMode
+          tests={allTests}
+          audioEntries={audioStorage.savedAudios}
+          onExit={() => setCurrentView('library')}
+          onPreviewStudent={handlePreviewStudentView}
+        />
+      </Suspense>
     );
   }
 
