@@ -28,14 +28,20 @@ const getLLMTemplate = (
   transcript: string,
   customPrompt: string,
   includeExplanations: boolean,
-  explanationStyle: string
+  explanationStyle: string,
+  questionCount: number,
+  explanationLanguage: 'english' | 'arabic'
 ): string => {
+  const langInstruction = explanationLanguage === 'arabic'
+    ? 'Write the explanation in Arabic (العربية)'
+    : 'Write the explanation in English';
+
   const explanationField = includeExplanations
     ? `\n    "explanation": "${explanationStyle || 'Brief explanation of why this is correct'}"`
     : '';
 
   const explanationRule = includeExplanations
-    ? `\n- explanation: ${explanationStyle || 'Provide a brief explanation for each answer'}`
+    ? `\n- explanation: ${explanationStyle || 'Provide a brief explanation for each answer'}. ${langInstruction}.`
     : '';
 
   const baseInstructions = `Based on the following transcript, generate questions for a listening comprehension test.
@@ -50,7 +56,7 @@ ${customPrompt ? `ADDITIONAL INSTRUCTIONS:\n${customPrompt}\n\n` : ''}IMPORTANT:
   if (testType === 'listening-comprehension') {
     return `${baseInstructions}
 
-Generate 5 multiple choice questions. Each question should test understanding of the content.
+Generate ${questionCount} multiple choice questions. Each question should test understanding of the content.
 
 JSON FORMAT (return exactly this structure):
 [
@@ -68,7 +74,7 @@ RULES:
   } else if (testType === 'fill-in-blank') {
     return `${baseInstructions}
 
-Generate 5 fill-in-the-blank questions using key vocabulary or phrases from the transcript.
+Generate ${questionCount} fill-in-the-blank questions using key vocabulary or phrases from the transcript.
 
 JSON FORMAT (return exactly this structure):
 [
@@ -82,9 +88,10 @@ RULES:
 - questionText: A sentence with _____ marking the blank
 - correctAnswer: The word(s) that fill the blank${explanationRule}`;
   } else {
+    const dictationCount = Math.min(questionCount, 5); // Cap dictation at 5
     return `${baseInstructions}
 
-Generate 3 dictation exercises. Each should be a meaningful segment from the transcript.
+Generate ${dictationCount} dictation exercises. Each should be a meaningful segment from the transcript.
 
 JSON FORMAT (return exactly this structure):
 [
@@ -137,6 +144,8 @@ export const TestBuilder: React.FC<TestBuilderProps> = ({ audio, existingTest, o
   const [customPrompt, setCustomPrompt] = useState('');
   const [includeExplanations, setIncludeExplanations] = useState(false);
   const [explanationStyle, setExplanationStyle] = useState('');
+  const [questionCount, setQuestionCount] = useState<number>(5);
+  const [explanationLanguage, setExplanationLanguage] = useState<'english' | 'arabic'>('english');
 
   const isEditMode = !!existingTest;
 
@@ -162,7 +171,7 @@ export const TestBuilder: React.FC<TestBuilderProps> = ({ audio, existingTest, o
 
   // Copy LLM template
   const handleCopyTemplate = () => {
-    const template = getLLMTemplate(testType, audio.transcript, customPrompt, includeExplanations, explanationStyle);
+    const template = getLLMTemplate(testType, audio.transcript, customPrompt, includeExplanations, explanationStyle, questionCount, explanationLanguage);
     copyToClipboard(template, 'Template copied!');
     setShowTemplateModal(false);
   };
@@ -258,7 +267,7 @@ export const TestBuilder: React.FC<TestBuilderProps> = ({ audio, existingTest, o
       const { GoogleGenAI } = await import('@google/genai');
       const ai = new GoogleGenAI({ apiKey });
 
-      const prompt = getLLMTemplate(testType, audio.transcript.slice(0, 2000), customPrompt, includeExplanations, explanationStyle);
+      const prompt = getLLMTemplate(testType, audio.transcript.slice(0, 2000), customPrompt, includeExplanations, explanationStyle, questionCount, explanationLanguage);
 
       const response = await ai.models.generateContent({
         model: 'gemini-2.0-flash',
@@ -593,6 +602,28 @@ export const TestBuilder: React.FC<TestBuilderProps> = ({ audio, existingTest, o
             </div>
 
             <div className="p-6 space-y-4 overflow-y-auto flex-1">
+              {/* Question Count Selector */}
+              <div>
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">
+                  Number of Questions
+                </label>
+                <div className="flex gap-2">
+                  {[5, 10].map((count) => (
+                    <button
+                      key={count}
+                      onClick={() => setQuestionCount(count)}
+                      className={`flex-1 py-2 px-4 rounded-lg font-medium text-sm transition-all ${
+                        questionCount === count
+                          ? 'bg-indigo-600 text-white'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                      }`}
+                    >
+                      {count} Questions
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* Custom Instructions */}
               <div>
                 <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">
@@ -623,17 +654,47 @@ export const TestBuilder: React.FC<TestBuilderProps> = ({ audio, existingTest, o
                     When enabled, the LLM will generate an explanation for each question that shows when users answer incorrectly.
                   </p>
 
-                  {/* Explanation Style (only shown when explanations are enabled) */}
+                  {/* Explanation Options (only shown when explanations are enabled) */}
                   {includeExplanations && (
-                    <div className="mt-3">
-                      <label className="text-xs text-slate-500 mb-1 block">Explanation style:</label>
-                      <input
-                        type="text"
-                        value={explanationStyle}
-                        onChange={(e) => setExplanationStyle(e.target.value)}
-                        placeholder="e.g., Explain the grammar rule, Reference the transcript, Keep it brief..."
-                        className="w-full p-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                      />
+                    <div className="mt-3 space-y-3">
+                      {/* Language Selector */}
+                      <div>
+                        <label className="text-xs text-slate-500 mb-1 block">Explanation language:</label>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setExplanationLanguage('english')}
+                            className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all ${
+                              explanationLanguage === 'english'
+                                ? 'bg-indigo-600 text-white'
+                                : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            English
+                          </button>
+                          <button
+                            onClick={() => setExplanationLanguage('arabic')}
+                            className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all ${
+                              explanationLanguage === 'arabic'
+                                ? 'bg-indigo-600 text-white'
+                                : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            العربية (Arabic)
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Explanation Style */}
+                      <div>
+                        <label className="text-xs text-slate-500 mb-1 block">Explanation style:</label>
+                        <input
+                          type="text"
+                          value={explanationStyle}
+                          onChange={(e) => setExplanationStyle(e.target.value)}
+                          placeholder="e.g., Explain the grammar rule, Reference the transcript, Keep it brief..."
+                          className="w-full p-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                        />
+                      </div>
                     </div>
                   )}
                 </div>
@@ -645,7 +706,7 @@ export const TestBuilder: React.FC<TestBuilderProps> = ({ audio, existingTest, o
                   Generated Template Preview
                 </label>
                 <pre className="bg-slate-100 p-4 rounded-xl text-xs whitespace-pre-wrap font-mono text-slate-700 max-h-48 overflow-y-auto">
-                  {getLLMTemplate(testType, audio.transcript, customPrompt, includeExplanations, explanationStyle)}
+                  {getLLMTemplate(testType, audio.transcript, customPrompt, includeExplanations, explanationStyle, questionCount, explanationLanguage)}
                 </pre>
               </div>
             </div>
