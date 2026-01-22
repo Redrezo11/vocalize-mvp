@@ -88,7 +88,7 @@ export const SaveDialog: React.FC<SaveDialogProps> = ({
   onSave,
   onCancel,
 }) => {
-  const [titleMode, setTitleMode] = useState<'ai' | 'auto' | 'manual'>('ai');
+  const [titleMode, setTitleMode] = useState<'ai' | 'auto' | 'manual'>('auto');
   const [manualTitle, setManualTitle] = useState(initialTitle);
   const [autoTitle, setAutoTitle] = useState('');
   const [aiTitle, setAiTitle] = useState('');
@@ -138,22 +138,17 @@ export const SaveDialog: React.FC<SaveDialogProps> = ({
     if (isOpen) {
       setAutoTitle(generateAutoTitle(transcript));
       setManualTitle(initialTitle === 'Untitled Audio' ? '' : initialTitle);
+      // Always default to auto title - user must click AI option to generate
+      setTitleMode('auto');
 
-      // Only reset and regenerate if transcript changed
+      // Only reset AI state if transcript changed
       if (lastTranscriptRef.current !== transcript) {
         setAiTitle('');
         setAiError(null);
         hasGeneratedRef.current = false;
       }
-
-      // Auto-generate AI title when dialog opens (only if not already generated)
-      if (hasAIKey && !hasGeneratedRef.current) {
-        handleGenerateAITitle();
-      } else if (!hasAIKey) {
-        setTitleMode('auto');
-      }
     }
-  }, [isOpen, transcript, initialTitle, hasAIKey, handleGenerateAITitle]);
+  }, [isOpen, transcript, initialTitle]);
 
   if (!isOpen) return null;
 
@@ -198,7 +193,13 @@ export const SaveDialog: React.FC<SaveDialogProps> = ({
                   type="radio"
                   name="titleMode"
                   checked={titleMode === 'ai'}
-                  onChange={() => setTitleMode('ai')}
+                  onChange={() => {
+                    setTitleMode('ai');
+                    // Only generate if we haven't generated yet for this transcript
+                    if (!hasGeneratedRef.current || lastTranscriptRef.current !== transcript) {
+                      handleGenerateAITitle();
+                    }
+                  }}
                   className="mt-1 text-indigo-600 focus:ring-indigo-500"
                 />
                 <div className="flex-1">
