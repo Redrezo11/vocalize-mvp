@@ -3,8 +3,14 @@ import mongoose from 'mongoose';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { v2 as cloudinary } from 'cloudinary';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
+// Load env from .env.local in development, Heroku provides env vars in production
 dotenv.config({ path: '.env.local' });
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -20,8 +26,8 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-// MongoDB Connection
-const MONGODB_URI = process.env.VITE_MONGODB_URI;
+// MongoDB Connection - use MONGODB_URI in production, fall back to VITE_MONGODB_URI for local dev
+const MONGODB_URI = process.env.MONGODB_URI || process.env.VITE_MONGODB_URI;
 
 mongoose.connect(MONGODB_URI)
   .then(() => console.log('Connected to MongoDB'))
@@ -332,6 +338,16 @@ app.get('/api/health', (req, res) => {
     cloudinary: !!process.env.CLOUDINARY_CLOUD_NAME
   });
 });
+
+// Serve static files from the React app in production
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(path.join(__dirname, '../dist')));
+
+  // Handle React routing, return all requests to React app
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, '../dist', 'index.html'));
+  });
+}
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

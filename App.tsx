@@ -15,7 +15,8 @@ import { TestTaker } from './components/TestTaker';
 import { ClassroomMode } from './components/ClassroomMode';
 import { StudentTest } from './components/StudentTest';
 
-const API_BASE = 'http://localhost:3001/api';
+// Use relative path - works for both dev (with proxy) and production
+const API_BASE = '/api';
 
 const App: React.FC = () => {
   // Navigation state

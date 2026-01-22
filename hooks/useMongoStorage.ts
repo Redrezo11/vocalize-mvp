@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { SavedAudio, EngineType, SpeakerVoiceMapping } from '../types';
 
-const API_BASE = 'http://localhost:3001/api';
+// Use relative path - works for both dev (with proxy) and production
+const API_BASE = '/api';
 
 // Convert MongoDB document to app model
 interface MongoAudioEntry {
