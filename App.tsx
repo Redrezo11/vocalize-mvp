@@ -577,8 +577,19 @@ const App: React.FC = () => {
                 </Suspense>
               )}
             </div>
+            {/* Quota exceeded warning */}
+            {engine === EngineType.GEMINI && geminiTTS.quotaExceeded && (
+              <div className="mb-3 p-2 bg-amber-500/20 border border-amber-500/30 rounded-lg">
+                <p className="text-xs text-amber-200 text-center">Gemini quota exceeded. Try again later or use a different engine.</p>
+              </div>
+            )}
             <div className="mt-4 flex items-center gap-3">
-              <button onClick={handlePlay} disabled={isLoading || !text} className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 transition-all disabled:opacity-50">
+              <button
+                onClick={handlePlay}
+                disabled={isLoading || !text || (engine === EngineType.GEMINI && geminiTTS.quotaExceeded)}
+                className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 transition-all disabled:opacity-50"
+                title={engine === EngineType.GEMINI && geminiTTS.quotaExceeded ? 'Gemini quota exceeded' : ''}
+              >
                 <PlayIcon className="w-5 h-5 mx-auto" />
               </button>
               <button onClick={handleStop} className="p-3 bg-slate-800 text-slate-300 rounded-xl hover:bg-slate-700">
@@ -587,9 +598,9 @@ const App: React.FC = () => {
             </div>
             <button
               onClick={handleSaveClick}
-              disabled={!text.trim() || (engine === EngineType.ELEVEN_LABS && !lastGeneratedBlob) || isLoading}
+              disabled={!text.trim() || (engine === EngineType.ELEVEN_LABS && !lastGeneratedBlob) || (engine === EngineType.GEMINI && geminiTTS.quotaExceeded) || isLoading}
               className="w-full mt-3 py-3 bg-slate-800 text-slate-300 rounded-xl font-medium hover:bg-slate-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-              title={engine === EngineType.ELEVEN_LABS && !lastGeneratedBlob ? 'Generate audio first by clicking Play' : ''}
+              title={engine === EngineType.ELEVEN_LABS && !lastGeneratedBlob ? 'Generate audio first by clicking Play' : (engine === EngineType.GEMINI && geminiTTS.quotaExceeded ? 'Gemini quota exceeded' : '')}
             >
               <SaveIcon className="w-4 h-4" />
               <span>{editingAudioId ? 'Update' : 'Save to Library'}</span>

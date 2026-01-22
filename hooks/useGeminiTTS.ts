@@ -1,6 +1,33 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { GoogleGenAI, Modality } from "@google/genai";
 import { GeminiVoiceConfig, SpeakerVoiceMapping } from '../types';
+
+// Quota tracking - persists across hook instances
+let quotaExhausted = false;
+let quotaExhaustedTime = 0;
+const QUOTA_RESET_CHECK_INTERVAL = 60 * 60 * 1000; // Check again after 1 hour
+
+const isQuotaAvailable = (): boolean => {
+  if (!quotaExhausted) return true;
+  if (Date.now() - quotaExhaustedTime > QUOTA_RESET_CHECK_INTERVAL) {
+    quotaExhausted = false;
+    return true;
+  }
+  return false;
+};
+
+const markQuotaExhausted = () => {
+  quotaExhausted = true;
+  quotaExhaustedTime = Date.now();
+};
+
+const isQuotaError = (error: any): boolean => {
+  const errorMsg = error?.message || String(error) || '';
+  return errorMsg.includes('429') ||
+         errorMsg.includes('quota') ||
+         errorMsg.includes('RESOURCE_EXHAUSTED') ||
+         errorMsg.includes('rate');
+};
 
 // Helper to create WAV header
 function createWavHeader(dataLength: number, numberOfChannels: number, sampleRate: number): ArrayBuffer {
@@ -62,9 +89,18 @@ function pcmToWavBlob(base64Audio: string): Blob {
 export const useGeminiTTS = () => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [quotaExceeded, setQuotaExceeded] = useState(!isQuotaAvailable());
   const audioContextRef = useRef<AudioContext | null>(null);
   const sourceNodeRef = useRef<AudioBufferSourceNode | null>(null);
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+
+  // Check quota status on mount and periodically
+  useEffect(() => {
+    const checkQuota = () => setQuotaExceeded(!isQuotaAvailable());
+    checkQuota();
+    const interval = setInterval(checkQuota, 60000); // Check every minute
+    return () => clearInterval(interval);
+  }, []);
 
   const stop = useCallback(() => {
     if (sourceNodeRef.current) {
@@ -198,9 +234,15 @@ export const useGeminiTTS = () => {
       source.start();
       setIsPlaying(true);
 
-    } catch (error) {
+    } catch (error: any) {
       console.error("Gemini TTS Error:", error);
-      alert("Failed to generate AI speech. Check console for details.");
+      if (isQuotaError(error)) {
+        markQuotaExhausted();
+        setQuotaExceeded(true);
+        alert("Gemini TTS quota exceeded. Please try again later or use a different engine.");
+      } else {
+        alert("Failed to generate AI speech. Check console for details.");
+      }
       setIsPlaying(false);
     } finally {
       setIsLoading(false);
@@ -251,9 +293,9 @@ export const useGeminiTTS = () => {
 
     } catch (error: any) {
       console.error("Gemini TTS generateAudio Error:", error);
-      // Check for quota/rate limit errors
-      const errorMsg = error?.message || String(error) || '';
-      if (errorMsg.includes('429') || errorMsg.includes('quota') || errorMsg.includes('RESOURCE_EXHAUSTED')) {
+      if (isQuotaError(error)) {
+        markQuotaExhausted();
+        setQuotaExceeded(true);
         console.error("Gemini TTS quota exceeded");
       }
       return null;
@@ -268,6 +310,7 @@ export const useGeminiTTS = () => {
     isPlaying,
     isLoading,
     hasKey: !!apiKey,
+    quotaExceeded,
     generateAudio
   };
 };
