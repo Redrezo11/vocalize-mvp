@@ -234,11 +234,9 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, isPreview = fals
                   </div>
                 )}
 
-                {/* Explanation - Compact */}
-                {isSubmitted && question.explanation && (
-                  <div className={`mx-3 mb-2 px-2 py-1.5 rounded text-xs ${
-                    status === 'correct' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'
-                  }`}>
+                {/* Explanation - Only show for incorrect answers */}
+                {isSubmitted && status === 'incorrect' && question.explanation && (
+                  <div className="mx-3 mb-2 px-2 py-1.5 rounded text-xs bg-amber-100 text-amber-800">
                     {question.explanation}
                   </div>
                 )}
