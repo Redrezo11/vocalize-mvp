@@ -192,7 +192,7 @@ const App: React.FC = () => {
   };
 
   const isPlaying = browserTTS.isPlaying || geminiTTS.isPlaying || elevenTTS.isPlaying;
-  const isLoading = geminiTTS.isLoading || elevenTTS.isLoading;
+  const isLoading = browserTTS.isLoading || geminiTTS.isLoading || elevenTTS.isLoading;
 
   // CRUD Operations
   const handleSaveClick = () => {
@@ -215,13 +215,35 @@ const App: React.FC = () => {
       speakers: analysis.speakers,
     };
 
-    // Use the last generated blob if available (for ElevenLabs)
-    const blobToSave = engine === EngineType.ELEVEN_LABS ? lastGeneratedBlob : undefined;
+    // Determine the blob to save based on engine
+    let blobToSave: Blob | undefined = undefined;
+
+    if (engine === EngineType.ELEVEN_LABS) {
+      // Use the last generated blob for ElevenLabs
+      blobToSave = lastGeneratedBlob || undefined;
+    } else if (engine === EngineType.BROWSER) {
+      // Generate audio blob for browser TTS
+      try {
+        const browserBlob = await browserTTS.generateAudio(
+          text,
+          browserConfig,
+          analysis.isDialogue ? analysis.segments : undefined,
+          analysis.isDialogue ? speakerMapping : undefined
+        );
+        if (browserBlob) {
+          blobToSave = browserBlob;
+        }
+      } catch (error) {
+        console.error('Failed to generate browser TTS audio:', error);
+        // Continue saving without audio - user can still save transcript
+      }
+    }
+    // Note: Gemini TTS doesn't support audio blob generation yet
 
     try {
       if (editingAudioId) {
         // Update existing
-        const result = await audioStorage.update(editingAudioId, audioData, blobToSave || undefined);
+        const result = await audioStorage.update(editingAudioId, audioData, blobToSave);
         if (result) {
           setLastGeneratedBlob(null);
           alert('Audio updated successfully!');
@@ -230,7 +252,7 @@ const App: React.FC = () => {
         }
       } else {
         // Create new
-        const result = await audioStorage.create(audioData, blobToSave || undefined);
+        const result = await audioStorage.create(audioData, blobToSave);
         if (result) {
           setLastGeneratedBlob(null);
           alert('Audio saved to library!');
@@ -536,7 +558,7 @@ const App: React.FC = () => {
             </div>
             <button
               onClick={handleSaveClick}
-              disabled={!text.trim() || (engine === EngineType.ELEVEN_LABS && !lastGeneratedBlob)}
+              disabled={!text.trim() || (engine === EngineType.ELEVEN_LABS && !lastGeneratedBlob) || isLoading}
               className="w-full mt-3 py-3 bg-slate-800 text-slate-300 rounded-xl font-medium hover:bg-slate-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
               title={engine === EngineType.ELEVEN_LABS && !lastGeneratedBlob ? 'Generate audio first by clicking Play' : ''}
             >
