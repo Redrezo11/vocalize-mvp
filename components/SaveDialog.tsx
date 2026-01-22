@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import { GoogleGenAI } from '@google/genai';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 
 interface SaveDialogProps {
   isOpen: boolean;
@@ -32,13 +31,39 @@ const generateAutoTitle = (transcript: string): string => {
   return title + '...';
 };
 
-// Generate title using Gemini AI
+// Simple cache for AI-generated titles to avoid repeated API calls
+const titleCache = new Map<string, string>();
+
+// Rate limiting - track last API call time
+let lastApiCallTime = 0;
+const MIN_API_INTERVAL = 3000; // 3 seconds between API calls
+
+// Generate title using Gemini AI with rate limiting
 const generateAITitle = async (transcript: string): Promise<string> => {
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
   if (!apiKey) {
     throw new Error('Gemini API key not configured');
   }
 
+  // Create a cache key from first 200 chars of transcript
+  const cacheKey = transcript.slice(0, 200);
+
+  // Check cache first
+  if (titleCache.has(cacheKey)) {
+    return titleCache.get(cacheKey)!;
+  }
+
+  // Rate limiting check
+  const now = Date.now();
+  const timeSinceLastCall = now - lastApiCallTime;
+  if (timeSinceLastCall < MIN_API_INTERVAL) {
+    const waitTime = MIN_API_INTERVAL - timeSinceLastCall;
+    await new Promise(resolve => setTimeout(resolve, waitTime));
+  }
+  lastApiCallTime = Date.now();
+
+  // Lazy load GoogleGenAI to reduce initial bundle
+  const { GoogleGenAI } = await import('@google/genai');
   const ai = new GoogleGenAI({ apiKey });
 
   const response = await ai.models.generateContent({
@@ -48,7 +73,12 @@ const generateAITitle = async (transcript: string): Promise<string> => {
 
   const title = response.text?.trim() || generateAutoTitle(transcript);
   // Remove any quotes that might be included
-  return title.replace(/^["']|["']$/g, '');
+  const cleanTitle = title.replace(/^["']|["']$/g, '');
+
+  // Cache the result
+  titleCache.set(cacheKey, cleanTitle);
+
+  return cleanTitle;
 };
 
 export const SaveDialog: React.FC<SaveDialogProps> = ({
@@ -65,41 +95,65 @@ export const SaveDialog: React.FC<SaveDialogProps> = ({
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
 
+  // Track if we've already generated a title for this transcript
+  const lastTranscriptRef = useRef<string>('');
+  const hasGeneratedRef = useRef(false);
+
   const geminiKey = import.meta.env.VITE_GEMINI_API_KEY;
   const hasAIKey = !!geminiKey && geminiKey !== 'PLACEHOLDER_API_KEY';
+
+  const handleGenerateAITitle = useCallback(async (forceRegenerate = false) => {
+    // Skip if already generating
+    if (isGeneratingAI) return;
+
+    // Skip if we've already generated for this transcript (unless forced)
+    if (!forceRegenerate && hasGeneratedRef.current && lastTranscriptRef.current === transcript) {
+      return;
+    }
+
+    setIsGeneratingAI(true);
+    setAiError(null);
+    lastTranscriptRef.current = transcript;
+    hasGeneratedRef.current = true;
+
+    try {
+      const title = await generateAITitle(transcript);
+      setAiTitle(title);
+    } catch (error: any) {
+      console.error('Failed to generate AI title:', error);
+      const errorMsg = error?.message || 'Unknown error';
+      // Check for rate limit error
+      if (errorMsg.includes('rate') || errorMsg.includes('quota') || errorMsg.includes('429')) {
+        setAiError('Rate limit reached. Using auto-title.');
+      } else {
+        setAiError(`Failed: ${errorMsg}`);
+      }
+      setAiTitle(generateAutoTitle(transcript));
+    } finally {
+      setIsGeneratingAI(false);
+    }
+  }, [transcript, isGeneratingAI]);
 
   useEffect(() => {
     if (isOpen) {
       setAutoTitle(generateAutoTitle(transcript));
       setManualTitle(initialTitle === 'Untitled Audio' ? '' : initialTitle);
-      setAiTitle('');
-      setAiError(null);
-      // Auto-generate AI title when dialog opens
-      if (hasAIKey) {
+
+      // Only reset and regenerate if transcript changed
+      if (lastTranscriptRef.current !== transcript) {
+        setAiTitle('');
+        setAiError(null);
+        hasGeneratedRef.current = false;
+      }
+
+      // Auto-generate AI title when dialog opens (only if not already generated)
+      if (hasAIKey && !hasGeneratedRef.current) {
         handleGenerateAITitle();
-      } else {
+      } else if (!hasAIKey) {
         setTitleMode('auto');
       }
     }
-  }, [isOpen, transcript, initialTitle]);
-
-  const handleGenerateAITitle = async () => {
-    setIsGeneratingAI(true);
-    setAiError(null);
-    try {
-      console.log('Generating AI title for transcript:', transcript.slice(0, 100) + '...');
-      const title = await generateAITitle(transcript);
-      console.log('AI generated title:', title);
-      setAiTitle(title);
-    } catch (error: any) {
-      console.error('Failed to generate AI title:', error);
-      const errorMsg = error?.message || 'Unknown error';
-      setAiError(`Failed: ${errorMsg}`);
-      setAiTitle(generateAutoTitle(transcript));
-    } finally {
-      setIsGeneratingAI(false);
-    }
-  };
+  }, [isOpen, transcript, initialTitle, hasAIKey, handleGenerateAITitle]);
 
   if (!isOpen) return null;
 
@@ -164,8 +218,9 @@ export const SaveDialog: React.FC<SaveDialogProps> = ({
                         <div className="flex items-center justify-between">
                           <p className="text-sm text-slate-700">{aiTitle}</p>
                           <button
-                            onClick={(e) => { e.preventDefault(); handleGenerateAITitle(); }}
+                            onClick={(e) => { e.preventDefault(); handleGenerateAITitle(true); }}
                             className="text-xs text-indigo-600 hover:text-indigo-700 font-medium"
+                            disabled={isGeneratingAI}
                           >
                             Retry
                           </button>
@@ -174,8 +229,9 @@ export const SaveDialog: React.FC<SaveDialogProps> = ({
                         <div className="flex items-center justify-between">
                           <p className="text-sm font-medium text-slate-700">{aiTitle}</p>
                           <button
-                            onClick={(e) => { e.preventDefault(); handleGenerateAITitle(); }}
+                            onClick={(e) => { e.preventDefault(); handleGenerateAITitle(true); }}
                             className="text-xs text-indigo-600 hover:text-indigo-700 font-medium"
+                            disabled={isGeneratingAI}
                           >
                             Regenerate
                           </button>
