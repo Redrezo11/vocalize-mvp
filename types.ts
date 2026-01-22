@@ -95,7 +95,8 @@ export interface TestQuestion {
   questionText: string;
   options?: string[];        // For multiple choice
   correctAnswer: string;
-  explanation?: string;      // Optional explanation shown when answer is wrong
+  explanation?: string;      // Optional explanation in English
+  explanationArabic?: string; // Optional explanation in Arabic
   blankIndex?: number;       // For fill-in-blank (which word is blanked)
 }
 

@@ -235,9 +235,18 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, isPreview = fals
                 )}
 
                 {/* Explanation - Only show for incorrect answers */}
-                {isSubmitted && status === 'incorrect' && question.explanation && (
+                {isSubmitted && status === 'incorrect' && (question.explanation || question.explanationArabic) && (
                   <div className="mx-3 mb-2 px-2 py-1.5 rounded text-xs bg-amber-100 text-amber-800">
-                    {question.explanation}
+                    {question.explanation && question.explanationArabic ? (
+                      <div className="space-y-1">
+                        <p>{question.explanation}</p>
+                        <p className="text-right" dir="rtl">{question.explanationArabic}</p>
+                      </div>
+                    ) : (
+                      <p className={question.explanationArabic ? 'text-right' : ''} dir={question.explanationArabic ? 'rtl' : 'ltr'}>
+                        {question.explanation || question.explanationArabic}
+                      </p>
+                    )}
                   </div>
                 )}
               </div>

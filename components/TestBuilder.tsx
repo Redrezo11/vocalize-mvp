@@ -32,16 +32,16 @@ const getLLMTemplate = (
   questionCount: number,
   explanationLanguage: 'english' | 'arabic'
 ): string => {
-  const langInstruction = explanationLanguage === 'arabic'
-    ? 'Write the explanation in Arabic (العربية)'
-    : 'Write the explanation in English';
-
-  const explanationField = includeExplanations
-    ? `\n    "explanation": "${explanationStyle || 'Brief explanation of why this is correct'}"`
+  // Generate both language explanation fields when explanations are enabled
+  const explanationFields = includeExplanations
+    ? `,
+    "explanation": "English explanation here",
+    "explanationArabic": "الشرح بالعربية هنا"`
     : '';
 
   const explanationRule = includeExplanations
-    ? `\n- explanation: ${explanationStyle || 'Provide a brief explanation for each answer'}. ${langInstruction}.`
+    ? `\n- explanation: ${explanationStyle || 'Provide a brief explanation in English for each answer'}.
+- explanationArabic: Provide the same explanation in Arabic (العربية).`
     : '';
 
   const baseInstructions = `Based on the following transcript, generate questions for a listening comprehension test.
@@ -63,7 +63,7 @@ JSON FORMAT (return exactly this structure):
   {
     "questionText": "Your question here?",
     "options": ["Option A", "Option B", "Option C", "Option D"],
-    "correctAnswer": "Option A"${explanationField}
+    "correctAnswer": "Option A"${explanationFields}
   }
 ]
 
@@ -80,7 +80,7 @@ JSON FORMAT (return exactly this structure):
 [
   {
     "questionText": "Complete the sentence: The speaker said _____ about the topic.",
-    "correctAnswer": "missing word or phrase"${explanationField}
+    "correctAnswer": "missing word or phrase"${explanationFields}
   }
 ]
 
@@ -97,7 +97,7 @@ JSON FORMAT (return exactly this structure):
 [
   {
     "questionText": "Listen and write what you hear (Segment 1)",
-    "correctAnswer": "The exact text the learner should write"${explanationField}
+    "correctAnswer": "The exact text the learner should write"${explanationFields}
   }
 ]
 
@@ -190,7 +190,8 @@ export const TestBuilder: React.FC<TestBuilderProps> = ({ audio, existingTest, o
       questionText: q.questionText,
       options: q.options,
       correctAnswer: q.correctAnswer,
-      explanation: q.explanation || null
+      explanation: q.explanation || null,
+      explanationArabic: q.explanationArabic || null
     })), null, 2);
     copyToClipboard(questionsJson, 'Questions JSON copied!');
   };
@@ -201,20 +202,20 @@ export const TestBuilder: React.FC<TestBuilderProps> = ({ audio, existingTest, o
       questionText: q.questionText,
       options: q.options,
       correctAnswer: q.correctAnswer,
-      explanation: q.explanation || null
+      explanation: q.explanation || null,
+      explanationArabic: q.explanationArabic || null
     })), null, 2);
 
-    const hasExistingExplanations = questions.some(q => q.explanation);
-    const targetLang = updateExplanationLanguage === 'arabic' ? 'Arabic (العربية)' : 'English';
+    const hasExistingExplanations = questions.some(q => q.explanation || q.explanationArabic);
 
     let modeInstruction = '';
     if (updateExplanationMode === 'replace') {
-      modeInstruction = `REPLACE all existing explanations with new ones in ${targetLang}.`;
+      modeInstruction = `REPLACE all existing explanations with new ones. Generate BOTH English and Arabic explanations for each question.`;
     } else {
       if (hasExistingExplanations) {
-        modeInstruction = `SUPPLEMENT existing explanations. Keep the original explanation and add additional clarification in ${targetLang}. If the original is in a different language, translate it to ${targetLang} first, then add your supplementary explanation.`;
+        modeInstruction = `SUPPLEMENT existing explanations. If an explanation exists in one language, translate it to the other language. If both exist, improve and clarify them. Always provide BOTH "explanation" (English) and "explanationArabic" (Arabic) fields.`;
       } else {
-        modeInstruction = `ADD new explanations in ${targetLang} for each question.`;
+        modeInstruction = `ADD new explanations in BOTH English and Arabic for each question.`;
       }
     }
 
@@ -232,7 +233,11 @@ ${customInstructions}
 CURRENT QUESTIONS:
 ${questionsJson}
 
-IMPORTANT: Return ONLY a valid JSON array with the SAME questions but updated explanations. Do not change questionText, options, or correctAnswer - only update the "explanation" field.
+IMPORTANT: Return ONLY a valid JSON array with the SAME questions but updated explanations. Do not change questionText, options, or correctAnswer.
+
+You MUST provide BOTH explanation fields:
+- "explanation": English explanation
+- "explanationArabic": Arabic explanation (العربية)
 
 JSON FORMAT (return exactly this structure):
 [
@@ -240,7 +245,8 @@ JSON FORMAT (return exactly this structure):
     "questionText": "Same as input",
     "options": ["Same", "as", "input", "options"],
     "correctAnswer": "Same as input",
-    "explanation": "Your updated/new explanation in ${targetLang}"
+    "explanation": "English explanation here",
+    "explanationArabic": "الشرح بالعربية هنا"
   }
 ]`;
   };
@@ -281,10 +287,11 @@ JSON FORMAT (return exactly this structure):
           matchedQ = parsed[index];
         }
 
-        if (matchedQ && matchedQ.explanation) {
+        if (matchedQ && (matchedQ.explanation || matchedQ.explanationArabic)) {
           return {
             ...existingQ,
-            explanation: matchedQ.explanation
+            explanation: matchedQ.explanation || existingQ.explanation,
+            explanationArabic: matchedQ.explanationArabic || existingQ.explanationArabic
           };
         }
 
@@ -297,8 +304,11 @@ JSON FORMAT (return exactly this structure):
       setShowImportSection(false);
       setUpdateExplanationPrompt('');
 
-      // Show feedback
-      const updatedCount = updatedQuestions.filter((q, i) => q.explanation !== questions[i].explanation).length;
+      // Show feedback - count how many had any explanation updated
+      const updatedCount = updatedQuestions.filter((q, i) =>
+        q.explanation !== questions[i].explanation ||
+        q.explanationArabic !== questions[i].explanationArabic
+      ).length;
       setCopyFeedback(`Updated ${updatedCount} explanations!`);
       setTimeout(() => setCopyFeedback(null), 2000);
     } catch (error) {
@@ -330,6 +340,7 @@ JSON FORMAT (return exactly this structure):
         options: testType === 'listening-comprehension' ? (q.options || ['', '', '', '']) : undefined,
         correctAnswer: q.correctAnswer || '',
         explanation: q.explanation || undefined,
+        explanationArabic: q.explanationArabic || undefined,
       }));
 
       setQuestions(newQuestions);
@@ -415,6 +426,7 @@ JSON FORMAT (return exactly this structure):
           options: testType === 'listening-comprehension' ? q.options : undefined,
           correctAnswer: q.correctAnswer || '',
           explanation: q.explanation || undefined,
+          explanationArabic: q.explanationArabic || undefined,
         }));
         setQuestions(newQuestions);
       } else {
@@ -697,16 +709,29 @@ JSON FORMAT (return exactly this structure):
                   </div>
                 )}
 
-                {/* Explanation Field (Optional) */}
-                <div className="ml-12 mt-3">
-                  <label className="text-xs text-slate-500 mb-1 block">Explanation (optional):</label>
-                  <input
-                    type="text"
-                    value={question.explanation || ''}
-                    onChange={(e) => updateQuestion(question.id, { explanation: e.target.value || undefined })}
-                    placeholder="Why is this the correct answer? (shown when user gets it wrong)"
-                    className="w-full p-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                  />
+                {/* Explanation Fields (Optional) */}
+                <div className="ml-12 mt-3 space-y-2">
+                  <div>
+                    <label className="text-xs text-slate-500 mb-1 block">English Explanation (optional):</label>
+                    <input
+                      type="text"
+                      value={question.explanation || ''}
+                      onChange={(e) => updateQuestion(question.id, { explanation: e.target.value || undefined })}
+                      placeholder="Why is this the correct answer? (shown when user gets it wrong)"
+                      className="w-full p-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-500 mb-1 block">Arabic Explanation (optional):</label>
+                    <input
+                      type="text"
+                      dir="rtl"
+                      value={question.explanationArabic || ''}
+                      onChange={(e) => updateQuestion(question.id, { explanationArabic: e.target.value || undefined })}
+                      placeholder="الشرح بالعربية (يظهر عند الإجابة الخاطئة)"
+                      className="w-full p-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 text-right"
+                    />
+                  </div>
                 </div>
               </div>
             ))}
