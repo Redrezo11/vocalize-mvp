@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { ElevenLabsVoice, SpeakerVoiceMapping } from '../types';
 
 // Concatenate multiple audio blobs into one
@@ -94,22 +94,40 @@ const audioBufferToWav = (buffer: AudioBuffer): Blob => {
   return new Blob([arrayBuffer], { type: 'audio/wav' });
 };
 
+// Get API key from environment variable
+const getEnvApiKey = (): string => {
+  return import.meta.env.VITE_ELEVENLABS_API_KEY || '';
+};
+
 export const useElevenLabsTTS = () => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [voices, setVoices] = useState<ElevenLabsVoice[]>([]);
+  const [apiKey, setApiKey] = useState<string>(getEnvApiKey());
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  const fetchVoices = useCallback(async (apiKey: string) => {
-    if (!apiKey) return;
+  const fetchVoices = useCallback(async (key?: string) => {
+    const keyToUse = key || apiKey;
+    if (!keyToUse) return;
+    if (key && key !== apiKey) {
+      setApiKey(key);
+    }
     try {
       const response = await fetch('https://api.elevenlabs.io/v1/voices', {
-        headers: { 'xi-api-key': apiKey }
+        headers: { 'xi-api-key': keyToUse }
       });
       const data = await response.json();
       setVoices(data.voices || []);
     } catch (error) {
       console.error('Failed to fetch ElevenLabs voices', error);
+    }
+  }, [apiKey]);
+
+  // Auto-fetch voices if API key is available from env
+  useEffect(() => {
+    const envKey = getEnvApiKey();
+    if (envKey && voices.length === 0) {
+      fetchVoices(envKey);
     }
   }, []);
 
@@ -169,12 +187,13 @@ export const useElevenLabsTTS = () => {
   // Generate audio without playing - returns the combined blob
   const generateAudio = useCallback(async (
     text: string,
-    apiKey: string,
+    providedApiKey: string,
     segments?: { speaker: string; text: string }[],
     speakerMapping?: SpeakerVoiceMapping,
     defaultVoiceId?: string
   ): Promise<Blob | null> => {
-    if (!apiKey || !text) return null;
+    const keyToUse = providedApiKey || apiKey;
+    if (!keyToUse || !text) return null;
 
     try {
       setIsLoading(true);
@@ -187,11 +206,11 @@ export const useElevenLabsTTS = () => {
             console.warn(`No voice assigned for speaker: ${segment.speaker}`);
             continue;
           }
-          const blob = await generateSegmentBlob(segment.text, voiceId, apiKey);
+          const blob = await generateSegmentBlob(segment.text, voiceId, keyToUse);
           blobs.push(blob);
         }
       } else if (defaultVoiceId) {
-        const blob = await generateSegmentBlob(text, defaultVoiceId, apiKey);
+        const blob = await generateSegmentBlob(text, defaultVoiceId, keyToUse);
         blobs.push(blob);
       } else {
         alert('Please assign voices to speakers before generating.');
@@ -236,6 +255,8 @@ export const useElevenLabsTTS = () => {
     isLoading,
     voices,
     fetchVoices,
-    generateAudio,  // New: generate without playing
+    generateAudio,
+    apiKey,
+    hasEnvKey: !!getEnvApiKey(),
   };
 };

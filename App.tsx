@@ -114,9 +114,10 @@ const App: React.FC = () => {
     } else if (engine === EngineType.GEMINI) {
       geminiTTS.speak(text, { voiceName: geminiVoice }, analysis.isDialogue ? speakerMapping : undefined);
     } else if (engine === EngineType.ELEVEN_LABS) {
+      const keyToUse = elevenTTS.apiKey || elevenLabsKey;
       const blob = await elevenTTS.speak(
         text,
-        elevenLabsKey,
+        keyToUse,
         analysis.isDialogue ? analysis.segments : undefined,
         analysis.isDialogue ? speakerMapping : undefined,
         elevenVoiceId || undefined
@@ -498,18 +499,23 @@ const App: React.FC = () => {
 
             {engine === EngineType.ELEVEN_LABS && (
               <div className="space-y-4 animate-in fade-in duration-300">
-                <input
-                  type="password"
-                  placeholder="ElevenLabs API Key"
-                  className="w-full bg-slate-50 border border-slate-200 text-sm rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500/20"
-                  value={elevenLabsKey}
-                  onChange={(e) => setElevenLabsKey(e.target.value)}
-                  onBlur={() => elevenTTS.fetchVoices(elevenLabsKey)}
-                  autoComplete="off"
-                  data-form-type="other"
-                />
+                {!elevenTTS.hasEnvKey && (
+                  <input
+                    type="password"
+                    placeholder="ElevenLabs API Key"
+                    className="w-full bg-slate-50 border border-slate-200 text-sm rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500/20"
+                    value={elevenLabsKey}
+                    onChange={(e) => setElevenLabsKey(e.target.value)}
+                    onBlur={() => elevenTTS.fetchVoices(elevenLabsKey)}
+                    autoComplete="off"
+                    data-form-type="other"
+                  />
+                )}
                 {elevenTTS.voices.length > 0 && (
                   <p className="text-xs text-green-600 font-medium">{elevenTTS.voices.length} voices loaded</p>
+                )}
+                {elevenTTS.hasEnvKey && elevenTTS.voices.length === 0 && (
+                  <p className="text-xs text-slate-500">Loading voices...</p>
                 )}
               </div>
             )}
