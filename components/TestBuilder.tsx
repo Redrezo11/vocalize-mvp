@@ -152,6 +152,8 @@ export const TestBuilder: React.FC<TestBuilderProps> = ({ audio, existingTest, o
   const [updateExplanationPrompt, setUpdateExplanationPrompt] = useState('');
   const [updateExplanationLanguage, setUpdateExplanationLanguage] = useState<'english' | 'arabic'>('english');
   const [updateExplanationMode, setUpdateExplanationMode] = useState<'replace' | 'supplement'>('supplement');
+  const [updateExplanationPaste, setUpdateExplanationPaste] = useState('');
+  const [showImportSection, setShowImportSection] = useState(false);
 
   const isEditMode = !!existingTest;
 
@@ -247,7 +249,62 @@ JSON FORMAT (return exactly this structure):
   const handleCopyUpdateTemplate = () => {
     const template = getUpdateExplanationsTemplate();
     copyToClipboard(template, 'Update template copied!');
-    setShowUpdateExplanationsModal(false);
+    setShowImportSection(true); // Show import section after copying
+  };
+
+  // Import explanations from LLM response (merges with existing questions)
+  const handleImportExplanations = () => {
+    try {
+      // Try to extract JSON array from the pasted content
+      const jsonMatch = updateExplanationPaste.match(/\[[\s\S]*\]/);
+      if (!jsonMatch) {
+        alert('Could not find a valid JSON array in the pasted content. Make sure the LLM output contains a JSON array.');
+        return;
+      }
+
+      const parsed = JSON.parse(jsonMatch[0]) as Partial<TestQuestion>[];
+
+      if (!Array.isArray(parsed) || parsed.length === 0) {
+        alert('The JSON array is empty or invalid.');
+        return;
+      }
+
+      // Merge explanations with existing questions
+      const updatedQuestions = questions.map((existingQ, index) => {
+        // Try to match by questionText first, then fall back to index
+        let matchedQ = parsed.find(p =>
+          p.questionText?.toLowerCase().trim() === existingQ.questionText.toLowerCase().trim()
+        );
+
+        // If no match by text, use index
+        if (!matchedQ && index < parsed.length) {
+          matchedQ = parsed[index];
+        }
+
+        if (matchedQ && matchedQ.explanation) {
+          return {
+            ...existingQ,
+            explanation: matchedQ.explanation
+          };
+        }
+
+        return existingQ;
+      });
+
+      setQuestions(updatedQuestions);
+      setShowUpdateExplanationsModal(false);
+      setUpdateExplanationPaste('');
+      setShowImportSection(false);
+      setUpdateExplanationPrompt('');
+
+      // Show feedback
+      const updatedCount = updatedQuestions.filter((q, i) => q.explanation !== questions[i].explanation).length;
+      setCopyFeedback(`Updated ${updatedCount} explanations!`);
+      setTimeout(() => setCopyFeedback(null), 2000);
+    } catch (error) {
+      console.error('Failed to parse JSON:', error);
+      alert('Failed to parse JSON. Please check the format and try again.');
+    }
   };
 
   // Parse pasted JSON from LLM
@@ -977,34 +1034,92 @@ JSON FORMAT (return exactly this structure):
                 />
               </div>
 
-              {/* Preview */}
-              <div>
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">
-                  Generated Template Preview
-                </label>
-                <pre className="bg-slate-100 p-4 rounded-xl text-xs whitespace-pre-wrap font-mono text-slate-700 max-h-48 overflow-y-auto">
-                  {getUpdateExplanationsTemplate()}
-                </pre>
-              </div>
+              {/* Preview - Only show when not in import mode */}
+              {!showImportSection && (
+                <div>
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">
+                    Generated Template Preview
+                  </label>
+                  <pre className="bg-slate-100 p-4 rounded-xl text-xs whitespace-pre-wrap font-mono text-slate-700 max-h-48 overflow-y-auto">
+                    {getUpdateExplanationsTemplate()}
+                  </pre>
+                </div>
+              )}
+
+              {/* Import Section - Show after copying template */}
+              {showImportSection && (
+                <div className="p-4 bg-green-50 rounded-xl border-2 border-green-200">
+                  <div className="flex items-center justify-between mb-3">
+                    <label className="text-xs font-bold text-green-700 uppercase tracking-wider">
+                      Step 2: Import LLM Response
+                    </label>
+                    <button
+                      onClick={() => setShowImportSection(false)}
+                      className="text-xs text-slate-500 hover:text-slate-700"
+                    >
+                      Back to template
+                    </button>
+                  </div>
+                  <p className="text-sm text-green-700 mb-3">
+                    Paste the LLM response below. Only explanations will be updated - questions remain unchanged.
+                  </p>
+                  <textarea
+                    value={updateExplanationPaste}
+                    onChange={(e) => setUpdateExplanationPaste(e.target.value)}
+                    placeholder='Paste the LLM response here... It should contain a JSON array with updated explanations:
+[
+  {
+    "questionText": "Same question text",
+    "explanation": "Updated explanation here"
+  }
+]'
+                    className="w-full h-48 p-4 bg-white border border-green-300 rounded-xl font-mono text-sm focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500"
+                  />
+                </div>
+              )}
             </div>
 
-            <div className="p-6 border-t border-slate-200 flex justify-end gap-3">
+            <div className="p-6 border-t border-slate-200 flex justify-between">
               <button
                 onClick={() => {
                   setShowUpdateExplanationsModal(false);
                   setUpdateExplanationPrompt('');
+                  setUpdateExplanationPaste('');
+                  setShowImportSection(false);
                 }}
                 className="px-4 py-2 text-slate-600 hover:text-slate-900 transition-colors"
               >
                 Cancel
               </button>
-              <button
-                onClick={handleCopyUpdateTemplate}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                <CopyIcon className="w-4 h-4" />
-                Copy Template
-              </button>
+              <div className="flex gap-3">
+                {!showImportSection ? (
+                  <>
+                    <button
+                      onClick={() => setShowImportSection(true)}
+                      className="flex items-center gap-2 px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors"
+                    >
+                      <DownloadIcon className="w-4 h-4" />
+                      Import Response
+                    </button>
+                    <button
+                      onClick={handleCopyUpdateTemplate}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      <CopyIcon className="w-4 h-4" />
+                      Copy Template
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={handleImportExplanations}
+                    disabled={!updateExplanationPaste.trim()}
+                    className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                  >
+                    <DownloadIcon className="w-4 h-4" />
+                    Update Explanations
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
