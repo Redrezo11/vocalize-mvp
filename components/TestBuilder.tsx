@@ -22,6 +22,24 @@ const extractWords = (transcript: string): string[] => {
     .map(word => word.replace(/[.,!?;:'"]/g, '').toLowerCase());
 };
 
+// CEFR difficulty levels
+type CEFRLevel = 'beginner' | 'A1' | 'A2' | 'B1' | 'B2';
+
+const getCEFRDescription = (level: CEFRLevel): string => {
+  switch (level) {
+    case 'beginner':
+      return 'Pre-A1/Beginner: Use very simple vocabulary and short sentences. Focus on basic comprehension of familiar words and phrases.';
+    case 'A1':
+      return 'A1 (Elementary): Use simple, everyday vocabulary. Questions should focus on basic facts, familiar topics, and simple sentence structures.';
+    case 'A2':
+      return 'A2 (Pre-Intermediate): Use common vocabulary and straightforward questions. Focus on routine matters and direct exchange of information.';
+    case 'B1':
+      return 'B1 (Intermediate): Use moderately complex language. Questions can involve main points, opinions, and some inference from context.';
+    case 'B2':
+      return 'B2 (Upper-Intermediate): Use more sophisticated vocabulary and complex structures. Questions can involve nuance, implied meaning, and detailed comprehension.';
+  }
+};
+
 // LLM Template for question generation
 const getLLMTemplate = (
   testType: TestType,
@@ -30,7 +48,8 @@ const getLLMTemplate = (
   includeExplanations: boolean,
   explanationStyle: string,
   questionCount: number,
-  explanationLanguage: 'english' | 'arabic' | 'both'
+  explanationLanguage: 'english' | 'arabic' | 'both',
+  difficultyLevel: CEFRLevel
 ): string => {
   // Generate explanation fields based on language selection
   let explanationFields = '';
@@ -54,7 +73,12 @@ const getLLMTemplate = (
     }
   }
 
+  const levelDescription = getCEFRDescription(difficultyLevel);
+
   const baseInstructions = `Based on the following transcript, generate questions for a listening comprehension test.
+
+TARGET LEARNER LEVEL: ${difficultyLevel.toUpperCase()}
+${levelDescription}
 
 TRANSCRIPT:
 ---
@@ -156,6 +180,7 @@ export const TestBuilder: React.FC<TestBuilderProps> = ({ audio, existingTest, o
   const [explanationStyle, setExplanationStyle] = useState('');
   const [questionCount, setQuestionCount] = useState<number>(5);
   const [explanationLanguage, setExplanationLanguage] = useState<'english' | 'arabic' | 'both'>('both');
+  const [difficultyLevel, setDifficultyLevel] = useState<CEFRLevel>('A2');
 
   // Update explanations modal state
   const [showUpdateExplanationsModal, setShowUpdateExplanationsModal] = useState(false);
@@ -189,7 +214,7 @@ export const TestBuilder: React.FC<TestBuilderProps> = ({ audio, existingTest, o
 
   // Copy LLM template
   const handleCopyTemplate = () => {
-    const template = getLLMTemplate(testType, audio.transcript, customPrompt, includeExplanations, explanationStyle, questionCount, explanationLanguage);
+    const template = getLLMTemplate(testType, audio.transcript, customPrompt, includeExplanations, explanationStyle, questionCount, explanationLanguage, difficultyLevel);
     copyToClipboard(template, 'Template copied!');
     setShowTemplateModal(false);
   };
@@ -419,7 +444,7 @@ JSON FORMAT (return exactly this structure):
       const { GoogleGenAI } = await import('@google/genai');
       const ai = new GoogleGenAI({ apiKey });
 
-      const prompt = getLLMTemplate(testType, audio.transcript.slice(0, 2000), customPrompt, includeExplanations, explanationStyle, questionCount, explanationLanguage);
+      const prompt = getLLMTemplate(testType, audio.transcript.slice(0, 2000), customPrompt, includeExplanations, explanationStyle, questionCount, explanationLanguage, difficultyLevel);
 
       const response = await ai.models.generateContent({
         model: 'gemini-2.0-flash',
@@ -800,6 +825,31 @@ JSON FORMAT (return exactly this structure):
                 </div>
               </div>
 
+              {/* Difficulty Level Selector */}
+              <div>
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">
+                  Learner Level (CEFR)
+                </label>
+                <div className="flex gap-2 flex-wrap">
+                  {(['beginner', 'A1', 'A2', 'B1', 'B2'] as CEFRLevel[]).map((level) => (
+                    <button
+                      key={level}
+                      onClick={() => setDifficultyLevel(level)}
+                      className={`py-2 px-4 rounded-lg font-medium text-sm transition-all ${
+                        difficultyLevel === level
+                          ? 'bg-indigo-600 text-white'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                      }`}
+                    >
+                      {level === 'beginner' ? 'Beginner' : level}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-slate-500 mt-2">
+                  {getCEFRDescription(difficultyLevel)}
+                </p>
+              </div>
+
               {/* Custom Instructions */}
               <div>
                 <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">
@@ -808,7 +858,7 @@ JSON FORMAT (return exactly this structure):
                 <textarea
                   value={customPrompt}
                   onChange={(e) => setCustomPrompt(e.target.value)}
-                  placeholder="Add any specific instructions for question generation...&#10;&#10;Examples:&#10;- Focus on vocabulary related to business&#10;- Make questions suitable for intermediate learners&#10;- Include questions about speaker intent and tone&#10;- Test grammar structures used in the dialogue"
+                  placeholder="Add any specific instructions for question generation...&#10;&#10;Examples:&#10;- Focus on vocabulary related to business&#10;- Include questions about speaker intent and tone&#10;- Test grammar structures used in the dialogue"
                   className="w-full h-24 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                 />
               </div>
@@ -892,7 +942,7 @@ JSON FORMAT (return exactly this structure):
                   Generated Template Preview
                 </label>
                 <pre className="bg-slate-100 p-4 rounded-xl text-xs whitespace-pre-wrap font-mono text-slate-700 max-h-48 overflow-y-auto">
-                  {getLLMTemplate(testType, audio.transcript, customPrompt, includeExplanations, explanationStyle, questionCount, explanationLanguage)}
+                  {getLLMTemplate(testType, audio.transcript, customPrompt, includeExplanations, explanationStyle, questionCount, explanationLanguage, difficultyLevel)}
                 </pre>
               </div>
             </div>
