@@ -192,7 +192,7 @@ const App: React.FC = () => {
   };
 
   const isPlaying = browserTTS.isPlaying || geminiTTS.isPlaying || elevenTTS.isPlaying;
-  const isLoading = browserTTS.isLoading || geminiTTS.isLoading || elevenTTS.isLoading;
+  const isLoading = geminiTTS.isLoading || elevenTTS.isLoading;
 
   // CRUD Operations
   const handleSaveClick = () => {
@@ -221,24 +221,23 @@ const App: React.FC = () => {
     if (engine === EngineType.ELEVEN_LABS) {
       // Use the last generated blob for ElevenLabs
       blobToSave = lastGeneratedBlob || undefined;
-    } else if (engine === EngineType.BROWSER) {
-      // Generate audio blob for browser TTS
+    } else if (engine === EngineType.GEMINI) {
+      // Generate audio blob for Gemini TTS
       try {
-        const browserBlob = await browserTTS.generateAudio(
+        const geminiBlob = await geminiTTS.generateAudio(
           text,
-          browserConfig,
-          analysis.isDialogue ? analysis.segments : undefined,
+          { voiceName: geminiVoice },
           analysis.isDialogue ? speakerMapping : undefined
         );
-        if (browserBlob) {
-          blobToSave = browserBlob;
+        if (geminiBlob) {
+          blobToSave = geminiBlob;
         }
       } catch (error) {
-        console.error('Failed to generate browser TTS audio:', error);
+        console.error('Failed to generate Gemini TTS audio:', error);
         // Continue saving without audio - user can still save transcript
       }
     }
-    // Note: Gemini TTS doesn't support audio blob generation yet
+    // Note: Browser TTS (Web Speech API) cannot capture audio - saves transcript only
 
     try {
       if (editingAudioId) {
