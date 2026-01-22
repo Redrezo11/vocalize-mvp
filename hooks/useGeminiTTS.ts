@@ -249,8 +249,13 @@ export const useGeminiTTS = () => {
       const wavBlob = pcmToWavBlob(base64Audio);
       return wavBlob;
 
-    } catch (error) {
+    } catch (error: any) {
       console.error("Gemini TTS generateAudio Error:", error);
+      // Check for quota/rate limit errors
+      const errorMsg = error?.message || String(error) || '';
+      if (errorMsg.includes('429') || errorMsg.includes('quota') || errorMsg.includes('RESOURCE_EXHAUSTED')) {
+        console.error("Gemini TTS quota exceeded");
+      }
       return null;
     } finally {
       setIsLoading(false);

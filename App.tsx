@@ -221,16 +221,20 @@ const App: React.FC = () => {
     if (engine === EngineType.ELEVEN_LABS) {
       // Use the last generated blob for ElevenLabs
       blobToSave = lastGeneratedBlob || undefined;
-    } else if (engine === EngineType.GEMINI) {
+    } else if (engine === EngineType.GEMINI && geminiTTS.hasKey) {
       // Generate audio blob for Gemini TTS
       try {
+        console.log('Generating Gemini audio for save...');
         const geminiBlob = await geminiTTS.generateAudio(
           text,
           { voiceName: geminiVoice },
           analysis.isDialogue ? speakerMapping : undefined
         );
         if (geminiBlob) {
+          console.log('Gemini audio generated successfully, size:', geminiBlob.size);
           blobToSave = geminiBlob;
+        } else {
+          console.warn('Gemini generateAudio returned null');
         }
       } catch (error) {
         console.error('Failed to generate Gemini TTS audio:', error);
