@@ -103,7 +103,7 @@ const generateAITitle = async (transcript: string): Promise<string> => {
   return cleanTitle;
 };
 
-// Generate title using OpenAI GPT-4o-mini as fallback
+// Generate title using OpenAI GPT-5-Nano as fallback (low-cost fast model)
 const generateGPTTitle = async (transcript: string): Promise<string> => {
   const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
   if (!apiKey) {
@@ -127,22 +127,16 @@ const generateGPTTitle = async (transcript: string): Promise<string> => {
   }
   lastApiCallTime = Date.now();
 
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+  const response = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${apiKey}`
     },
     body: JSON.stringify({
-      model: 'gpt-4o-mini',
-      messages: [
-        {
-          role: 'user',
-          content: `Generate a short, descriptive title (max 8 words) for this audio transcript. Return ONLY the title, no quotes or explanation:\n\n${transcript.slice(0, 1000)}`
-        }
-      ],
-      max_tokens: 50,
-      temperature: 0.7
+      model: 'gpt-5-nano',
+      input: `Generate a short, descriptive title (max 8 words) for this audio transcript. Return ONLY the title, no quotes or explanation:\n\n${transcript.slice(0, 1000)}`,
+      max_output_tokens: 50
     })
   });
 
@@ -152,7 +146,7 @@ const generateGPTTitle = async (transcript: string): Promise<string> => {
   }
 
   const data = await response.json();
-  const title = data.choices?.[0]?.message?.content?.trim() || generateAutoTitle(transcript);
+  const title = data.output_text?.trim() || generateAutoTitle(transcript);
   // Remove any quotes that might be included
   const cleanTitle = title.replace(/^["']|["']$/g, '');
 
@@ -313,7 +307,7 @@ export const SaveDialog: React.FC<SaveDialogProps> = ({
                       </>
                     ) : (
                       <>
-                        <span>Use GPT-4o-mini instead</span>
+                        <span>Use GPT-5-Nano instead</span>
                         <span className="px-1.5 py-0.5 text-[10px] font-bold bg-white/20 rounded">OpenAI</span>
                       </>
                     )}
@@ -344,7 +338,7 @@ export const SaveDialog: React.FC<SaveDialogProps> = ({
                     <span className="font-medium text-slate-900">GPT-generated title</span>
                     <span className="px-1.5 py-0.5 text-[10px] font-bold bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded">GPT</span>
                   </div>
-                  <p className="text-sm text-slate-500 mt-1">Generated using GPT-4o-mini</p>
+                  <p className="text-sm text-slate-500 mt-1">Generated using GPT-5-Nano</p>
                   <div className="mt-3 p-3 bg-white rounded-lg border border-slate-200">
                     {isGeneratingAI ? (
                       <div className="flex items-center gap-2">
