@@ -103,6 +103,65 @@ const generateAITitle = async (transcript: string): Promise<string> => {
   return cleanTitle;
 };
 
+// Generate title using OpenAI GPT-4o-mini as fallback
+const generateGPTTitle = async (transcript: string): Promise<string> => {
+  const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error('OpenAI API key not configured');
+  }
+
+  // Create a cache key from first 200 chars of transcript (with gpt prefix)
+  const cacheKey = 'gpt:' + transcript.slice(0, 200);
+
+  // Check cache first
+  if (titleCache.has(cacheKey)) {
+    return titleCache.get(cacheKey)!;
+  }
+
+  // Rate limiting check
+  const now = Date.now();
+  const timeSinceLastCall = now - lastApiCallTime;
+  if (timeSinceLastCall < MIN_API_INTERVAL) {
+    const waitTime = MIN_API_INTERVAL - timeSinceLastCall;
+    await new Promise(resolve => setTimeout(resolve, waitTime));
+  }
+  lastApiCallTime = Date.now();
+
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'user',
+          content: `Generate a short, descriptive title (max 8 words) for this audio transcript. Return ONLY the title, no quotes or explanation:\n\n${transcript.slice(0, 1000)}`
+        }
+      ],
+      max_tokens: 50,
+      temperature: 0.7
+    })
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.error?.message || `OpenAI API error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  const title = data.choices?.[0]?.message?.content?.trim() || generateAutoTitle(transcript);
+  // Remove any quotes that might be included
+  const cleanTitle = title.replace(/^["']|["']$/g, '');
+
+  // Cache the result
+  titleCache.set(cacheKey, cleanTitle);
+
+  return cleanTitle;
+};
+
 export const SaveDialog: React.FC<SaveDialogProps> = ({
   isOpen,
   transcript,
@@ -116,14 +175,18 @@ export const SaveDialog: React.FC<SaveDialogProps> = ({
   const [aiTitle, setAiTitle] = useState('');
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [usingGPT, setUsingGPT] = useState(false);
 
   // Track if we've already generated a title for this transcript
   const lastTranscriptRef = useRef<string>('');
   const hasGeneratedRef = useRef(false);
 
   const geminiKey = import.meta.env.VITE_GEMINI_API_KEY;
+  const openaiKey = import.meta.env.VITE_OPENAI_API_KEY;
   const hasAIKey = !!geminiKey && geminiKey !== 'PLACEHOLDER_API_KEY';
+  const hasOpenAIKey = !!openaiKey && openaiKey !== 'PLACEHOLDER_API_KEY';
   const canUseAI = hasAIKey && isQuotaAvailable();
+  const canUseGPTFallback = hasOpenAIKey && !isQuotaAvailable();
 
   const handleGenerateAITitle = useCallback(async (forceRegenerate = false) => {
     // Skip if already generating
@@ -142,6 +205,7 @@ export const SaveDialog: React.FC<SaveDialogProps> = ({
     try {
       const title = await generateAITitle(transcript);
       setAiTitle(title);
+      setUsingGPT(false);
     } catch (error: any) {
       console.error('Failed to generate AI title:', error);
       const errorMsg = error?.message || String(error) || 'Unknown error';
@@ -152,6 +216,30 @@ export const SaveDialog: React.FC<SaveDialogProps> = ({
       } else {
         setAiError(`Failed: ${errorMsg}`);
       }
+      setAiTitle(generateAutoTitle(transcript));
+    } finally {
+      setIsGeneratingAI(false);
+    }
+  }, [transcript, isGeneratingAI]);
+
+  const handleGenerateGPTTitle = useCallback(async () => {
+    // Skip if already generating
+    if (isGeneratingAI) return;
+
+    setIsGeneratingAI(true);
+    setAiError(null);
+    setUsingGPT(true);
+    setTitleMode('ai');
+
+    try {
+      const title = await generateGPTTitle(transcript);
+      setAiTitle(title);
+      hasGeneratedRef.current = true;
+      lastTranscriptRef.current = transcript;
+    } catch (error: any) {
+      console.error('Failed to generate GPT title:', error);
+      const errorMsg = error?.message || String(error) || 'Unknown error';
+      setAiError(`GPT failed: ${errorMsg}`);
       setAiTitle(generateAutoTitle(transcript));
     } finally {
       setIsGeneratingAI(false);
@@ -169,6 +257,7 @@ export const SaveDialog: React.FC<SaveDialogProps> = ({
       if (lastTranscriptRef.current !== transcript) {
         setAiTitle('');
         setAiError(null);
+        setUsingGPT(false);
         hasGeneratedRef.current = false;
       }
     }
@@ -204,11 +293,89 @@ export const SaveDialog: React.FC<SaveDialogProps> = ({
 
           {/* Title Mode Selection */}
           <div className="space-y-3 mb-6">
-            {/* Quota exhausted notice */}
+            {/* Quota exhausted notice with GPT fallback option */}
             {hasAIKey && !canUseAI && (
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-700">
-                AI title generation unavailable (daily quota reached). Try again later.
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                <p className="text-sm text-amber-700">
+                  Gemini AI quota reached for today.
+                </p>
+                {canUseGPTFallback && !usingGPT && !aiTitle && (
+                  <button
+                    onClick={handleGenerateGPTTitle}
+                    disabled={isGeneratingAI}
+                    className="mt-2 w-full py-2 px-3 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {isGeneratingAI ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        <span>Generating with GPT...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Use GPT-4o-mini instead</span>
+                        <span className="px-1.5 py-0.5 text-[10px] font-bold bg-white/20 rounded">OpenAI</span>
+                      </>
+                    )}
+                  </button>
+                )}
+                {!canUseGPTFallback && !hasOpenAIKey && (
+                  <p className="mt-1 text-xs text-amber-600">
+                    Add VITE_OPENAI_API_KEY to enable GPT fallback.
+                  </p>
+                )}
               </div>
+            )}
+
+            {/* GPT-generated title result */}
+            {usingGPT && titleMode === 'ai' && (
+              <label
+                className="flex items-start gap-3 p-4 rounded-xl border-2 border-emerald-500 bg-emerald-50"
+              >
+                <input
+                  type="radio"
+                  name="titleMode"
+                  checked={true}
+                  readOnly
+                  className="mt-1 text-emerald-600 focus:ring-emerald-500"
+                />
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-slate-900">GPT-generated title</span>
+                    <span className="px-1.5 py-0.5 text-[10px] font-bold bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded">GPT</span>
+                  </div>
+                  <p className="text-sm text-slate-500 mt-1">Generated using GPT-4o-mini</p>
+                  <div className="mt-3 p-3 bg-white rounded-lg border border-slate-200">
+                    {isGeneratingAI ? (
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+                        <span className="text-sm text-slate-500">Generating title...</span>
+                      </div>
+                    ) : aiError ? (
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm text-slate-700">{aiTitle}</p>
+                        <button
+                          onClick={(e) => { e.preventDefault(); handleGenerateGPTTitle(); }}
+                          className="text-xs text-emerald-600 hover:text-emerald-700 font-medium"
+                          disabled={isGeneratingAI}
+                        >
+                          Retry
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-medium text-slate-700">{aiTitle}</p>
+                        <button
+                          onClick={(e) => { e.preventDefault(); handleGenerateGPTTitle(); }}
+                          className="text-xs text-emerald-600 hover:text-emerald-700 font-medium"
+                          disabled={isGeneratingAI}
+                        >
+                          Regenerate
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </label>
             )}
 
             {/* AI Title Option - only show if quota available */}
