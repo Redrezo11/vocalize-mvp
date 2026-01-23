@@ -55,6 +55,7 @@ const testQuestionSchema = new mongoose.Schema({
   options: [{ type: String }],
   correctAnswer: { type: String, required: true },
   explanation: { type: String },
+  explanationArabic: { type: String },
   blankIndex: { type: Number }
 });
 
