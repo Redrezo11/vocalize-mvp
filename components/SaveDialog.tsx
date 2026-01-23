@@ -137,7 +137,7 @@ const generateGPTTitle = async (transcript: string): Promise<string> => {
       model: 'gpt-5-nano',
       input: `Generate a short, descriptive title (max 8 words) for this audio transcript. Return ONLY the title, no quotes or explanation:\n\n${transcript.slice(0, 1000)}`,
       reasoning: {
-        effort: 'minimal'
+        effort: 'low'
       }
     })
   });
