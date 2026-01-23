@@ -213,10 +213,11 @@ export const SaveDialog: React.FC<SaveDialogProps> = ({
       if (errorMsg.includes('rate') || errorMsg.includes('quota') || errorMsg.includes('429') || errorMsg.includes('RESOURCE_EXHAUSTED')) {
         markQuotaExhausted();
         setAiError('Daily quota reached. Try again tomorrow.');
+        // Don't set aiTitle here - leave it empty so GPT fallback button can appear
       } else {
         setAiError(`Failed: ${errorMsg}`);
+        setAiTitle(generateAutoTitle(transcript));
       }
-      setAiTitle(generateAutoTitle(transcript));
     } finally {
       setIsGeneratingAI(false);
     }
