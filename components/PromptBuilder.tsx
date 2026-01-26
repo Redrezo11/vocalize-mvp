@@ -344,7 +344,65 @@ CHARACTER/SETTING ANALYSIS
 - Casual/Young British → Dave (Essex accent)
 - Children's stories (classic) → Dorothy
 - Irish/Celtic character → Fin
-- No specific nationality → Default to American` : accentPreference === 'american' ? `**Accent Preference: AMERICAN** - Prefer American-accented voices for most characters. You may still use other accents when a character's nationality strongly calls for it (e.g., a British character in a UK setting), but default to American voices when neutral.` : `**Accent Preference: BRITISH** - Prefer British-accented voices for most characters. You may still use other accents when a character's nationality strongly calls for it, but default to British voices when neutral.`}
+- No specific nationality → Default to American` : accentPreference === 'american' ? `**Accent Preference: AMERICAN** - Default to American voices unless nationality strongly requires otherwise.
+
+\`\`\`
+CHARACTER ANALYSIS
+         │
+         ▼
+┌─────────────────────────────┐
+│ Is character EXPLICITLY     │
+│ British/Irish/Australian?   │
+└─────────────────────────────┘
+         │
+    ┌────┴────┐
+    ▼         ▼
+   YES        NO → Use American voice
+    │              Rachel, Adam, Antoni, Josh, etc.
+    ▼
+┌─────────────────────────────┐
+│ Use matching accent:        │
+│ • UK → Dorothy, Daniel,     │
+│        Dave, George         │
+│ • Irish → Fin               │
+│ • Australian → (PAID only)  │
+└─────────────────────────────┘
+\`\`\`
+
+**Key Points:**
+- American is the DEFAULT for all neutral/unspecified characters
+- Only switch accents when nationality is EXPLICIT in the script
+- "A teacher" → American | "A British teacher" → British
+- When in doubt, use American` : `**Accent Preference: BRITISH** - Default to British voices unless nationality strongly requires otherwise.
+
+\`\`\`
+CHARACTER ANALYSIS
+         │
+         ▼
+┌─────────────────────────────┐
+│ Is character EXPLICITLY     │
+│ American/Irish/Australian?  │
+└─────────────────────────────┘
+         │
+    ┌────┴────┐
+    ▼         ▼
+   YES        NO → Use British voice
+    │              Dorothy, Daniel, Dave, George
+    ▼
+┌─────────────────────────────┐
+│ Use matching accent:        │
+│ • US → Rachel, Adam, etc.   │
+│ • Irish → Fin               │
+│ • Australian → (PAID only)  │
+└─────────────────────────────┘
+\`\`\`
+
+**Key Points:**
+- British is the DEFAULT for all neutral/unspecified characters
+- Only switch accents when nationality is EXPLICIT in the script
+- "A teacher" → British | "An American teacher" → American
+- FREE tier has limited British voices (4 total) - may need American for variety
+- When in doubt, use British`}
 
 **Available Accents by Tier:**
 - **American**: Most voices available - Rachel, Adam, Antoni, Josh, etc.
