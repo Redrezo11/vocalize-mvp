@@ -255,6 +255,7 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
   const [customDuration, setCustomDuration] = useState('');
   const [useCustomDuration, setUseCustomDuration] = useState(false);
   const [elevenLabsTier, setElevenLabsTier] = useState<'free' | 'paid'>('free');
+  const [accentPreference, setAccentPreference] = useState<'auto' | 'american' | 'british'>('auto');
   const [copied, setCopied] = useState(false);
   const [generatedPrompt, setGeneratedPrompt] = useState('');
 
@@ -309,10 +310,12 @@ Create an engaging listening dialogue for English as a Foreign Language (EFL) le
 3. **For young characters**: Use youthful voices (Leda, Puck for Gemini; Gigi, Josh for ElevenLabs)
 4. **For authority figures**: Use firm/professional voices (Kore, Orus for Gemini; Adam, Daniel for ElevenLabs)
 ${engine === EngineType.ELEVEN_LABS ? `
-### ElevenLabs Accent Selection (use your discretion based on character/setting)
+### ElevenLabs Accent Selection
+
+${accentPreference === 'auto' ? `**Accent Preference: AUTO** - Use your discretion based on character nationality and setting context. Match accents to characters when it makes sense for authenticity.` : accentPreference === 'american' ? `**Accent Preference: AMERICAN** - Prefer American-accented voices for most characters. You may still use other accents when a character's nationality strongly calls for it (e.g., a British character in a UK setting), but default to American voices when neutral.` : `**Accent Preference: BRITISH** - Prefer British-accented voices for most characters. You may still use other accents when a character's nationality strongly calls for it, but default to British voices when neutral.`}
 
 **Available Accents by Tier:**
-- **American** (default): Most voices - use for general/neutral content
+- **American**: Most voices available - Rachel, Adam, Antoni, Josh, etc.
 - **British**: Dorothy (F), Dave, Daniel, George (M) on FREE; + Alice, Lily (F), Joseph (M) on PAID
 - **Irish**: Fin on FREE (old sailor character); + Jeremy on PAID (American-Irish blend)
 - **Australian**: Charlie, James on PAID only
@@ -320,15 +323,13 @@ ${engine === EngineType.ELEVEN_LABS ? `
 - **Italian-English**: Giovanni on PAID only
 - **Southern American**: Grace on PAID only
 
-**When to use specific accents:**
-- **British settings/characters**: Use Dorothy, Daniel, Dave, George
-- **Formal/News British**: Daniel (RP accent, authoritative)
-- **Casual/Young British**: Dave (Essex accent, gaming culture)
-- **Children's stories (classic)**: Dorothy (pleasant British)
-- **Irish characters/folklore**: Fin (weathered, old soul)
-- **International/European**: Charlotte, Giovanni (adds authenticity)
-- **Australian content**: Charlie, James (PAID tier only)
-- **Default/neutral**: American voices (Rachel, Antoni, Adam)
+${accentPreference === 'american' ? `**American Voice Options (${elevenLabsTier === 'free' ? 'FREE' : 'PAID'} tier):**
+Female: Rachel (Calm), Domi (Strong), Sarah (Soft), Emily (Calm), Freya (Neutral), Gigi (Childish)${elevenLabsTier === 'paid' ? ', Glinda, Matilda, Nicole, Serena' : ''}
+Male: Adam (Deep), Antoni (Well-rounded), Arnold (Crisp), Josh (Deep), Sam (Raspy), Thomas (Calm), Clyde, Harry, Callum${elevenLabsTier === 'paid' ? ', Bill, Brian, Chris, Drew, Ethan, Liam, Michael, Patrick, Paul, Jessie' : ''}` : accentPreference === 'british' ? `**British Voice Options (${elevenLabsTier === 'free' ? 'FREE' : 'PAID'} tier):**
+Female: Dorothy (Pleasant, RP)${elevenLabsTier === 'paid' ? ', Alice (Confident), Lily (Raspy)' : ''}
+Male: Dave (Conversational, Essex), Daniel (Deep, RP/Formal), George (Raspy, RP)${elevenLabsTier === 'paid' ? ', Joseph (Professional)' : ''}
+
+Note: British voice selection is more limited. For variety, you may supplement with American voices for some characters.` : ''}
 ` : ''}
 
 ${getVoiceReference()}
@@ -493,6 +494,50 @@ Now generate the listening exercise:`;
               )}
             </div>
           </div>
+
+          {/* Accent Preference (ElevenLabs only) */}
+          {engine === EngineType.ELEVEN_LABS && (
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-slate-700">Accent Preference</label>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setAccentPreference('auto')}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                    accentPreference === 'auto'
+                      ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  Auto
+                </button>
+                <button
+                  onClick={() => setAccentPreference('american')}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                    accentPreference === 'american'
+                      ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  American
+                </button>
+                <button
+                  onClick={() => setAccentPreference('british')}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                    accentPreference === 'british'
+                      ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  British
+                </button>
+              </div>
+              <p className="text-xs text-slate-500">
+                {accentPreference === 'auto' && 'LLM will choose accents based on character nationality and context'}
+                {accentPreference === 'american' && 'Prefer American voices, but other accents may be used when appropriate'}
+                {accentPreference === 'british' && 'Prefer British voices, but other accents may be used when appropriate'}
+              </p>
+            </div>
+          )}
 
           {/* Difficulty Level */}
           <div className="space-y-2">
