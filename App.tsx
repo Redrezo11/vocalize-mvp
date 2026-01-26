@@ -222,12 +222,18 @@ const App: React.FC = () => {
 
         // Map voice names to voice IDs for ElevenLabs
         if (engine === EngineType.ELEVEN_LABS && elevenTTS.voices.length > 0) {
+          console.log('[LLM Parser] Available ElevenLabs voices:', elevenTTS.voices.map(v => v.name));
           const mappedAssignments: SpeakerVoiceMapping = {};
           Object.entries(parsed.voiceAssignments).forEach(([speaker, voiceName]) => {
-            // Find the voice by name (case-insensitive)
-            const voice = elevenTTS.voices.find(v =>
-              v.name.toLowerCase() === voiceName.toLowerCase()
-            );
+            const searchName = voiceName.toLowerCase().trim();
+            // Try exact match first, then starts-with, then includes
+            let voice = elevenTTS.voices.find(v => v.name.toLowerCase() === searchName);
+            if (!voice) {
+              voice = elevenTTS.voices.find(v => v.name.toLowerCase().startsWith(searchName));
+            }
+            if (!voice) {
+              voice = elevenTTS.voices.find(v => v.name.toLowerCase().includes(searchName));
+            }
             console.log(`[LLM Parser] ElevenLabs mapping: ${speaker} -> ${voiceName}, found:`, voice?.name, voice?.voice_id);
             if (voice) {
               mappedAssignments[speaker] = voice.voice_id;
@@ -279,12 +285,19 @@ const App: React.FC = () => {
     if (Object.keys(pendingVoiceAssignmentsRef.current).length === 0) return;
 
     console.log('[Voice Loader] Applying pending voice assignments:', pendingVoiceAssignmentsRef.current);
+    console.log('[Voice Loader] Available voices:', elevenTTS.voices.map(v => v.name));
 
     const mappedAssignments: SpeakerVoiceMapping = {};
     Object.entries(pendingVoiceAssignmentsRef.current).forEach(([speaker, voiceName]) => {
-      const voice = elevenTTS.voices.find(v =>
-        v.name.toLowerCase() === voiceName.toLowerCase()
-      );
+      const searchName = voiceName.toLowerCase().trim();
+      // Try exact match first, then starts-with, then includes
+      let voice = elevenTTS.voices.find(v => v.name.toLowerCase() === searchName);
+      if (!voice) {
+        voice = elevenTTS.voices.find(v => v.name.toLowerCase().startsWith(searchName));
+      }
+      if (!voice) {
+        voice = elevenTTS.voices.find(v => v.name.toLowerCase().includes(searchName));
+      }
       console.log(`[Voice Loader] ElevenLabs mapping: ${speaker} -> ${voiceName}, found:`, voice?.name, voice?.voice_id);
       if (voice) {
         mappedAssignments[speaker] = voice.voice_id;
