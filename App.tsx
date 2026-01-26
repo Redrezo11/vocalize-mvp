@@ -5,7 +5,7 @@ import { useElevenLabsTTS } from './hooks/useElevenLabsTTS';
 import { useMongoStorage } from './hooks/useMongoStorage';
 import { parseDialogue, guessGender } from './utils/parser';
 import { BrowserVoiceConfig, EngineType, GEMINI_VOICES, SpeakerVoiceMapping, AppView, SavedAudio, ListeningTest, TestAttempt } from './types';
-import { PlayIcon, StopIcon, Volume2Icon, FolderIcon, PlusIcon, SaveIcon, ArrowLeftIcon, PresentationIcon, FileTextIcon } from './components/Icons';
+import { PlayIcon, StopIcon, FolderIcon, PlusIcon, SaveIcon, ArrowLeftIcon, PresentationIcon, FileTextIcon } from './components/Icons';
 import { SaveDialog } from './components/SaveDialog';
 
 // Lazy load components for better initial load
@@ -68,7 +68,7 @@ const App: React.FC = () => {
 
   // Editor state
   const [title, setTitle] = useState("Untitled Audio");
-  const [text, setText] = useState("Narrator: Welcome to Vocalize.\n\nJane: This tool can automatically detect different speakers in your text.\n\nJohn: That is correct. Just type a name followed by a colon, and assign us a voice!");
+  const [text, setText] = useState("Narrator: Welcome to DialogueForge.\n\nJane: This tool can automatically detect different speakers in your text.\n\nJohn: That is correct. Just type a name followed by a colon, and assign us a voice!");
   const [engine, setEngine] = useState<EngineType>(EngineType.BROWSER);
   const [elevenLabsKey, setElevenLabsKey] = useState("");
   const [lastGeneratedBlob, setLastGeneratedBlob] = useState<Blob | null>(null);
@@ -321,7 +321,7 @@ const App: React.FC = () => {
   const handleCreateNew = () => {
     setEditingAudioId(null);
     setTitle('Untitled Audio');
-    setText("Narrator: Welcome to Vocalize.\n\nJane: This tool can automatically detect different speakers in your text.\n\nJohn: That is correct. Just type a name followed by a colon, and assign us a voice!");
+    setText("Narrator: Welcome to DialogueForge.\n\nJane: This tool can automatically detect different speakers in your text.\n\nJohn: That is correct. Just type a name followed by a colon, and assign us a voice!");
     setEngine(EngineType.BROWSER);
     setSpeakerMapping({});
     setLastGeneratedBlob(null);
@@ -550,10 +550,14 @@ const App: React.FC = () => {
     <nav className="sticky top-0 z-30 bg-white/70 backdrop-blur-xl border-b border-slate-200/50 shadow-sm shadow-slate-200/50 px-6 py-3">
       <div className="max-w-7xl mx-auto flex items-center justify-between">
         <div className="flex items-center gap-3 group cursor-pointer" onClick={() => setCurrentView('editor')}>
-          <div className="h-9 w-9 bg-gradient-to-br from-indigo-500 to-violet-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-500/30 group-hover:shadow-indigo-500/50 group-hover:scale-105 transition-all duration-200">
-            <Volume2Icon className="w-5 h-5" />
+          <div className="h-10 w-10 rounded-xl overflow-hidden shadow-lg shadow-indigo-500/30 group-hover:shadow-indigo-500/50 group-hover:scale-105 transition-all duration-200">
+            <img
+              src="/logo-512.png"
+              alt="DialogueForge"
+              className="h-full w-full scale-150"
+            />
           </div>
-          <span className="font-bold text-xl tracking-tight bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">Vocalize</span>
+          <span className="font-bold text-xl tracking-tight bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">DialogueForge</span>
         </div>
         <div className="flex items-center gap-2">
           {currentView === 'editor' && analysis.isDialogue && (
@@ -574,21 +578,25 @@ const App: React.FC = () => {
           <button
             onClick={() => setCurrentView('transcript')}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] ${
-              currentView === 'transcript'
-                ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg shadow-emerald-500/30'
-                : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/50'
+              currentView === 'editor'
+                ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-500/30 hover:from-indigo-500 hover:to-violet-500'
+                : 'bg-white text-indigo-600 hover:bg-indigo-50 border border-indigo-300'
             }`}
             title="Text-only mode - create tests without storing audio"
           >
             <FileTextIcon className="w-4 h-4" />
             <span className="text-sm">Text Only</span>
           </button>
-          {currentView === 'editor' ? (
+          {currentView === 'editor' || currentView === 'library' ? (
             <button
               onClick={() => setCurrentView('library')}
               onMouseEnter={preloadLibrary}
               onTouchStart={preloadLibrary}
-              className="flex items-center gap-2 px-4 py-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] ${
+                currentView === 'library'
+                  ? 'bg-indigo-100 text-indigo-800 border border-indigo-200'
+                  : 'text-indigo-900 hover:text-indigo-700 hover:bg-indigo-50'
+              }`}
             >
               <FolderIcon className="w-4 h-4" />
               <span className="text-sm font-medium">My Library</span>
@@ -713,8 +721,8 @@ const App: React.FC = () => {
                   />
                 )}
                 {elevenTTS.voices.length > 0 && (
-                  <p className="text-xs text-emerald-600 font-semibold flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
+                  <p className="text-xs text-indigo-600 font-semibold flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full"></span>
                     {elevenTTS.voices.length} voices loaded
                   </p>
                 )}
