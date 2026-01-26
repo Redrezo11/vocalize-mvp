@@ -822,7 +822,6 @@ const App: React.FC = () => {
               setAudioTests([]);
               setCurrentView('library');
             }}
-            onEdit={handleEdit}
             onDelete={handleDelete}
             onCreateTest={handleCreateTest}
             onEditTest={handleEditTest}

@@ -1,12 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { SavedAudio, EngineType, ListeningTest } from '../types';
-import { ArrowLeftIcon, PlayIcon, PauseIcon, EditIcon, TrashIcon, ClipboardIcon, CheckCircleIcon, PlusIcon } from './Icons';
+import { ArrowLeftIcon, PlayIcon, PauseIcon, EditIcon, TrashIcon, ClipboardIcon, CheckCircleIcon } from './Icons';
 
 interface AudioDetailProps {
   audio: SavedAudio;
   tests?: ListeningTest[];
   onBack: () => void;
-  onEdit: (audio: SavedAudio) => void;
   onDelete: (audio: SavedAudio) => void;
   onCreateTest: (audio: SavedAudio) => void;
   onEditTest: (test: ListeningTest) => void;
@@ -53,7 +52,6 @@ export const AudioDetail: React.FC<AudioDetailProps> = ({
   audio,
   tests = [],
   onBack,
-  onEdit,
   onDelete,
   onCreateTest,
   onEditTest,
@@ -128,24 +126,13 @@ export const AudioDetail: React.FC<AudioDetailProps> = ({
           <ArrowLeftIcon className="w-4 h-4" />
           <span className="font-medium">Back to Library</span>
         </button>
-        <div className="flex items-center gap-2">
-          {!audio.isTranscriptOnly && (
-            <button
-              onClick={() => onEdit(audio)}
-              className="flex items-center gap-2 px-4 py-2 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all duration-200"
-            >
-              <EditIcon className="w-4 h-4" />
-              <span className="text-sm font-semibold">Edit</span>
-            </button>
-          )}
-          <button
-            onClick={handleDelete}
-            className="flex items-center gap-2 px-4 py-2 text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200"
-          >
-            <TrashIcon className="w-4 h-4" />
-            <span className="text-sm font-semibold">Delete</span>
-          </button>
-        </div>
+        <button
+          onClick={handleDelete}
+          className="flex items-center gap-2 px-4 py-2 text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200"
+        >
+          <TrashIcon className="w-4 h-4" />
+          <span className="text-sm font-semibold">Delete</span>
+        </button>
       </div>
 
       {/* Main Content */}
