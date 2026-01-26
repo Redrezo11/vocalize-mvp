@@ -1,13 +1,8 @@
 import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
-import dotenv from 'dotenv';
-import { v2 as cloudinary } from 'cloudinary';
 import path from 'path';
 import { fileURLToPath } from 'url';
-
-// Load env from .env.local in development, Heroku provides env vars in production
-dotenv.config({ path: '.env.local' });
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -18,20 +13,6 @@ const PORT = process.env.PORT || 3001;
 // Middleware
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
-
-// Cloudinary Configuration
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET
-});
-
-// MongoDB Connection - use MONGODB_URI in production, fall back to VITE_MONGODB_URI for local dev
-const MONGODB_URI = process.env.MONGODB_URI || process.env.VITE_MONGODB_URI;
-
-mongoose.connect(MONGODB_URI)
-  .then(() => console.log('Connected to MongoDB'))
-  .catch(err => console.error('MongoDB connection error:', err));
 
 // Audio Entry Schema
 const audioEntrySchema = new mongoose.Schema({
@@ -71,38 +52,6 @@ const listeningTestSchema = new mongoose.Schema({
 
 const ListeningTest = mongoose.model('ListeningTest', listeningTestSchema);
 
-// Helper: Upload audio to Cloudinary
-const uploadToCloudinary = async (base64Audio, publicId) => {
-  try {
-    const dataUri = `data:audio/mpeg;base64,${base64Audio}`;
-    const result = await cloudinary.uploader.upload(dataUri, {
-      resource_type: 'video', // Cloudinary uses 'video' for audio files
-      public_id: publicId,
-      folder: 'vocalize-audio',
-      overwrite: true
-    });
-    return {
-      url: result.secure_url,
-      public_id: result.public_id,
-      duration: result.duration
-    };
-  } catch (error) {
-    console.error('Cloudinary upload error:', error);
-    throw error;
-  }
-};
-
-// Helper: Delete audio from Cloudinary
-const deleteFromCloudinary = async (publicId) => {
-  try {
-    if (publicId) {
-      await cloudinary.uploader.destroy(publicId, { resource_type: 'video' });
-    }
-  } catch (error) {
-    console.error('Cloudinary delete error:', error);
-  }
-};
-
 // API Routes
 
 // Get all audio entries
@@ -128,30 +77,22 @@ app.get('/api/audio-entries/:id', async (req, res) => {
   }
 });
 
-// Create audio entry
+// Create audio entry (stores audio as base64 in DB for local dev - no Cloudinary)
 app.post('/api/audio-entries', async (req, res) => {
   try {
     const { title, transcript, audio_data, duration, engine, speaker_mapping, speakers } = req.body;
 
+    // For local dev, store audio as data URL directly
     let audioUrl = null;
-    let cloudinaryPublicId = null;
-    let audioDuration = duration;
-
-    // Upload audio to Cloudinary if provided
     if (audio_data) {
-      const tempId = new mongoose.Types.ObjectId();
-      const uploadResult = await uploadToCloudinary(audio_data, `audio_${tempId}`);
-      audioUrl = uploadResult.url;
-      cloudinaryPublicId = uploadResult.public_id;
-      audioDuration = uploadResult.duration || duration;
+      audioUrl = `data:audio/mpeg;base64,${audio_data}`;
     }
 
     const entry = new AudioEntry({
       title,
       transcript,
       audio_url: audioUrl,
-      cloudinary_public_id: cloudinaryPublicId,
-      duration: audioDuration,
+      duration,
       engine,
       speaker_mapping,
       speakers
@@ -184,17 +125,10 @@ app.put('/api/audio-entries/:id', async (req, res) => {
       updated_at: new Date()
     };
 
-    // Upload new audio if provided
+    // For local dev, store audio as data URL directly
     if (audio_data) {
-      // Delete old audio from Cloudinary
-      if (existingEntry.cloudinary_public_id) {
-        await deleteFromCloudinary(existingEntry.cloudinary_public_id);
-      }
-
-      const uploadResult = await uploadToCloudinary(audio_data, `audio_${req.params.id}`);
-      updateData.audio_url = uploadResult.url;
-      updateData.cloudinary_public_id = uploadResult.public_id;
-      updateData.duration = uploadResult.duration || duration;
+      updateData.audio_url = `data:audio/mpeg;base64,${audio_data}`;
+      updateData.duration = duration;
     }
 
     const entry = await AudioEntry.findByIdAndUpdate(
@@ -216,11 +150,6 @@ app.delete('/api/audio-entries/:id', async (req, res) => {
     const entry = await AudioEntry.findById(req.params.id);
     if (!entry) {
       return res.status(404).json({ error: 'Entry not found' });
-    }
-
-    // Delete audio from Cloudinary
-    if (entry.cloudinary_public_id) {
-      await deleteFromCloudinary(entry.cloudinary_public_id);
     }
 
     await AudioEntry.findByIdAndDelete(req.params.id);
@@ -341,20 +270,29 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     mongodb: mongoose.connection.readyState === 1,
-    cloudinary: !!process.env.CLOUDINARY_CLOUD_NAME
+    mode: 'local-memory'
   });
 });
 
-// Serve static files from the React app in production
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../dist')));
+// Start server with local MongoDB
+async function startServer() {
+  const uri = 'mongodb://localhost:27017/vocalize-local';
+  console.log('Connecting to local MongoDB...');
 
-  // Handle React routing, return all requests to React app
-  app.get('/{*splat}', (req, res) => {
-    res.sendFile(path.join(__dirname, '../dist', 'index.html'));
+  await mongoose.connect(uri);
+  console.log('Connected to local MongoDB:', uri);
+
+  app.listen(PORT, () => {
+    console.log(`Local server running on port ${PORT}`);
+    console.log('Data is persisted in database: vocalize-local');
+  });
+
+  // Graceful shutdown
+  process.on('SIGINT', async () => {
+    console.log('\nShutting down...');
+    await mongoose.disconnect();
+    process.exit(0);
   });
 }
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+startServer().catch(console.error);

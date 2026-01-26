@@ -148,7 +148,11 @@ const generateGPTTitle = async (transcript: string): Promise<string> => {
   }
 
   const data = await response.json();
-  const title = data.output_text?.trim() || generateAutoTitle(transcript);
+  // Extract text from Responses API structure: output[1].content[0].text
+  const messageOutput = data.output?.find((o: { type: string }) => o.type === 'message');
+  const rawTitle = messageOutput?.content?.[0]?.text?.trim() || generateAutoTitle(transcript);
+  // Take first line only (model may return multiple suggestions)
+  const title = rawTitle.split('\n')[0].replace(/^[-•]\s*/, '');
   // Remove any quotes that might be included
   const cleanTitle = title.replace(/^["']|["']$/g, '');
 

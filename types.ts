@@ -52,11 +52,38 @@ export interface SpeakerVoiceMapping {
 }
 
 export const GEMINI_VOICES = [
-  { name: 'Kore', gender: 'Female', style: 'Calm' },
-  { name: 'Puck', gender: 'Male', style: 'Energetic' },
-  { name: 'Charon', gender: 'Male', style: 'Deep' },
-  { name: 'Fenrir', gender: 'Male', style: 'Intense' },
-  { name: 'Zephyr', gender: 'Female', style: 'Soft' }
+  // Female voices
+  { name: 'Aoede', gender: 'Female', style: 'Breezy' },
+  { name: 'Kore', gender: 'Female', style: 'Firm' },
+  { name: 'Leda', gender: 'Female', style: 'Youthful' },
+  { name: 'Zephyr', gender: 'Female', style: 'Bright' },
+  { name: 'Autonoe', gender: 'Female', style: 'Warm' },
+  { name: 'Callirhoe', gender: 'Female', style: 'Gentle' },
+  { name: 'Despina', gender: 'Female', style: 'Smooth' },
+  { name: 'Erinome', gender: 'Female', style: 'Clear' },
+  { name: 'Gacrux', gender: 'Female', style: 'Mature' },
+  { name: 'Laomedeia', gender: 'Female', style: 'Calm' },
+  { name: 'Pulcherrima', gender: 'Female', style: 'Elegant' },
+  { name: 'Sulafat', gender: 'Female', style: 'Serene' },
+  { name: 'Vindemiatrix', gender: 'Female', style: 'Refined' },
+  { name: 'Achernar', gender: 'Female', style: 'Soft' },
+  // Male voices
+  { name: 'Puck', gender: 'Male', style: 'Upbeat' },
+  { name: 'Charon', gender: 'Male', style: 'Informative' },
+  { name: 'Fenrir', gender: 'Male', style: 'Excitable' },
+  { name: 'Orus', gender: 'Male', style: 'Firm' },
+  { name: 'Achird', gender: 'Male', style: 'Friendly' },
+  { name: 'Algenib', gender: 'Male', style: 'Gravelly' },
+  { name: 'Algieba', gender: 'Male', style: 'Smooth' },
+  { name: 'Alnilam', gender: 'Male', style: 'Firm' },
+  { name: 'Enceladus', gender: 'Male', style: 'Breathy' },
+  { name: 'Iapetus', gender: 'Male', style: 'Deep' },
+  { name: 'Rasalgethi', gender: 'Male', style: 'Lively' },
+  { name: 'Sadachbia', gender: 'Male', style: 'Clear' },
+  { name: 'Sadaltager', gender: 'Male', style: 'Knowledgeable' },
+  { name: 'Schedar', gender: 'Male', style: 'Professional' },
+  { name: 'Umbriel', gender: 'Male', style: 'Relaxed' },
+  { name: 'Zubenelgenubi', gender: 'Male', style: 'Casual' },
 ];
 
 // Saved Audio types for CRUD operations
@@ -85,7 +112,7 @@ export interface AudioEntryRow {
   updated_at: string;
 }
 
-export type AppView = 'editor' | 'library' | 'detail' | 'test-builder' | 'test-take' | 'classroom' | 'student-test';
+export type AppView = 'editor' | 'library' | 'detail' | 'test-builder' | 'test-take' | 'classroom' | 'student-test' | 'transcript';
 
 // Test/Exercise Types
 export type TestType = 'listening-comprehension' | 'fill-in-blank' | 'dictation';

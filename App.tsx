@@ -5,7 +5,7 @@ import { useElevenLabsTTS } from './hooks/useElevenLabsTTS';
 import { useMongoStorage } from './hooks/useMongoStorage';
 import { parseDialogue, guessGender } from './utils/parser';
 import { BrowserVoiceConfig, EngineType, GEMINI_VOICES, SpeakerVoiceMapping, AppView, SavedAudio, ListeningTest, TestAttempt } from './types';
-import { PlayIcon, StopIcon, Volume2Icon, FolderIcon, PlusIcon, SaveIcon, ArrowLeftIcon, PresentationIcon } from './components/Icons';
+import { PlayIcon, StopIcon, Volume2Icon, FolderIcon, PlusIcon, SaveIcon, ArrowLeftIcon, PresentationIcon, FileTextIcon } from './components/Icons';
 import { SaveDialog } from './components/SaveDialog';
 
 // Lazy load components for better initial load
@@ -16,6 +16,7 @@ const TestBuilder = lazy(() => import('./components/TestBuilder').then(m => ({ d
 const TestTaker = lazy(() => import('./components/TestTaker').then(m => ({ default: m.TestTaker })));
 const ClassroomMode = lazy(() => import('./components/ClassroomMode').then(m => ({ default: m.ClassroomMode })));
 const StudentTest = lazy(() => import('./components/StudentTest').then(m => ({ default: m.StudentTest })));
+const TranscriptMode = lazy(() => import('./components/TranscriptMode').then(m => ({ default: m.TranscriptMode })));
 
 // Preload functions for components
 const preloadClassroom = () => import('./components/ClassroomMode');
@@ -63,6 +64,7 @@ const App: React.FC = () => {
   const [studentTestId, setStudentTestId] = useState<string | null>(null);
   const [studentTest, setStudentTest] = useState<ListeningTest | null>(null);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
+  const [transcriptOnlyAudio, setTranscriptOnlyAudio] = useState<SavedAudio | null>(null);
 
   // Editor state
   const [title, setTitle] = useState("Untitled Audio");
@@ -79,7 +81,7 @@ const App: React.FC = () => {
 
   // Config States
   const [browserConfig, setBrowserConfig] = useState<BrowserVoiceConfig>({ voice: null, rate: 1, pitch: 1, volume: 1 });
-  const [geminiVoice, setGeminiVoice] = useState(GEMINI_VOICES[0].name);
+  const [geminiVoice, setGeminiVoice] = useState('Puck'); // Google's default voice
   const [elevenVoiceId, setElevenVoiceId] = useState("");
 
   // Hooks
@@ -236,8 +238,31 @@ const App: React.FC = () => {
     let blobToSave: Blob | undefined = undefined;
 
     if (engine === EngineType.ELEVEN_LABS) {
-      // Use the last generated blob for ElevenLabs
-      blobToSave = lastGeneratedBlob || undefined;
+      // Generate audio on-demand for ElevenLabs (or use cached blob if available)
+      if (lastGeneratedBlob) {
+        blobToSave = lastGeneratedBlob;
+      } else {
+        const keyToUse = elevenTTS.apiKey || elevenLabsKey;
+        if (keyToUse) {
+          try {
+            console.log('Generating ElevenLabs audio for save...');
+            const defaultVoiceId = Object.values(speakerMapping)[0] || elevenVoiceId;
+            const elevenBlob = await elevenTTS.generateAudio(
+              text,
+              keyToUse,
+              analysis.isDialogue ? analysis.segments : undefined,
+              analysis.isDialogue ? speakerMapping : undefined,
+              defaultVoiceId
+            );
+            if (elevenBlob) {
+              console.log('ElevenLabs audio generated successfully, size:', elevenBlob.size);
+              blobToSave = elevenBlob;
+            }
+          } catch (error) {
+            console.error('Failed to generate ElevenLabs audio:', error);
+          }
+        }
+      }
     } else if (engine === EngineType.GEMINI) {
       // Generate audio blob for Gemini TTS
       console.log('Engine is Gemini, hasKey:', geminiTTS.hasKey);
@@ -405,8 +430,15 @@ const App: React.FC = () => {
       alert(editingTest ? 'Test updated successfully!' : 'Test created successfully!');
       setEditingTest(null);
 
-      // Go back to detail view and refresh tests
-      if (selectedAudio) {
+      // Check if this was a transcript-only test
+      if (transcriptOnlyAudio && selectedAudio?.id === transcriptOnlyAudio.id) {
+        // Clear transcript-only state and go to classroom
+        setTranscriptOnlyAudio(null);
+        setSelectedAudio(null);
+        await loadAllTests();
+        setCurrentView('classroom');
+      } else if (selectedAudio) {
+        // Go back to detail view and refresh tests
         handleViewDetail(selectedAudio);
       }
     } catch (error) {
@@ -418,6 +450,26 @@ const App: React.FC = () => {
   const handleTakeTest = (test: ListeningTest) => {
     setSelectedTest(test);
     setCurrentView('test-take');
+  };
+
+  // Transcript-only mode handlers
+  const handleTranscriptCreateTest = (title: string, transcript: string) => {
+    // Create a virtual audio object for transcript-only mode
+    const virtualAudio: SavedAudio = {
+      id: `transcript-${Date.now()}`,
+      title,
+      transcript,
+      audioUrl: null,
+      engine: EngineType.BROWSER,
+      speakerMapping: {},
+      speakers: parseDialogue(transcript).speakers,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    setTranscriptOnlyAudio(virtualAudio);
+    setSelectedAudio(virtualAudio);
+    setEditingTest(null);
+    setCurrentView('test-builder');
   };
 
   const handleTestComplete = (attempt: TestAttempt) => {
@@ -519,6 +571,18 @@ const App: React.FC = () => {
             <PresentationIcon className="w-4 h-4" />
             <span className="text-sm">Classroom</span>
           </button>
+          <button
+            onClick={() => setCurrentView('transcript')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium transition-colors ${
+              currentView === 'transcript'
+                ? 'bg-emerald-600 text-white'
+                : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+            }`}
+            title="Text-only mode - create tests without storing audio"
+          >
+            <FileTextIcon className="w-4 h-4" />
+            <span className="text-sm">Text Only</span>
+          </button>
           {currentView === 'editor' ? (
             <button
               onClick={() => setCurrentView('library')}
@@ -598,17 +662,17 @@ const App: React.FC = () => {
             </div>
             <button
               onClick={handleSaveClick}
-              disabled={!text.trim() || (engine === EngineType.ELEVEN_LABS && !lastGeneratedBlob) || (engine === EngineType.GEMINI && geminiTTS.quotaExceeded) || isLoading}
+              disabled={!text.trim() || (engine === EngineType.GEMINI && geminiTTS.quotaExceeded) || isLoading}
               className="w-full mt-3 py-3 bg-slate-800 text-slate-300 rounded-xl font-medium hover:bg-slate-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-              title={engine === EngineType.ELEVEN_LABS && !lastGeneratedBlob ? 'Generate audio first by clicking Play' : (engine === EngineType.GEMINI && geminiTTS.quotaExceeded ? 'Gemini quota exceeded' : '')}
+              title={engine === EngineType.GEMINI && geminiTTS.quotaExceeded ? 'Gemini quota exceeded' : 'Generates audio and saves to library'}
             >
               <SaveIcon className="w-4 h-4" />
-              <span>{editingAudioId ? 'Update' : 'Save to Library'}</span>
+              <span>{editingAudioId ? 'Update' : 'Quick Save'}</span>
               {engine === EngineType.ELEVEN_LABS && lastGeneratedBlob && (
-                <span className="ml-1 w-2 h-2 bg-green-500 rounded-full animate-pulse" title="Audio ready to save" />
+                <span className="ml-1 w-2 h-2 bg-green-500 rounded-full animate-pulse" title="Audio cached - faster save" />
               )}
               {engine === EngineType.GEMINI && geminiPlaybackSuccess && (
-                <span className="ml-1 w-2 h-2 bg-blue-500 rounded-full animate-pulse" title="Audio verified - ready to save" />
+                <span className="ml-1 w-2 h-2 bg-blue-500 rounded-full animate-pulse" title="Audio verified" />
               )}
             </button>
           </div>
@@ -668,7 +732,7 @@ const App: React.FC = () => {
                         onChange={(e) => setSpeakerMapping(prev => ({ ...prev, [speaker]: e.target.value }))}
                       >
                         {engine === EngineType.BROWSER && browserTTS.voices.map(v => <option key={v.name} value={v.name}>{v.name}</option>)}
-                        {engine === EngineType.GEMINI && GEMINI_VOICES.map(v => <option key={v.name} value={v.name}>{v.name}</option>)}
+                        {engine === EngineType.GEMINI && GEMINI_VOICES.map(v => <option key={v.name} value={v.name}>{v.name} [{v.gender === 'Female' ? 'F' : 'M'}] - {v.style}</option>)}
                         {engine === EngineType.ELEVEN_LABS && elevenTTS.voices.map(v => <option key={v.voice_id} value={v.voice_id}>{v.name}</option>)}
                       </select>
                     </div>
@@ -755,7 +819,14 @@ const App: React.FC = () => {
             onSave={handleSaveTest}
             onCancel={() => {
               setEditingTest(null);
-              handleViewDetail(selectedAudio);
+              // Check if this was a transcript-only test
+              if (transcriptOnlyAudio && selectedAudio?.id === transcriptOnlyAudio.id) {
+                setTranscriptOnlyAudio(null);
+                setSelectedAudio(null);
+                setCurrentView('transcript');
+              } else {
+                handleViewDetail(selectedAudio);
+              }
             }}
           />
         </main>
@@ -822,6 +893,14 @@ const App: React.FC = () => {
       {currentView === 'detail' && renderDetail()}
       {currentView === 'test-builder' && renderTestBuilder()}
       {currentView === 'test-take' && renderTestTaker()}
+      {currentView === 'transcript' && (
+        <Suspense fallback={<InlineSpinner />}>
+          <TranscriptMode
+            onCreateTest={handleTranscriptCreateTest}
+            onBack={() => setCurrentView('editor')}
+          />
+        </Suspense>
+      )}
 
       <SaveDialog
         isOpen={showSaveDialog}
