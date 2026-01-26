@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { SavedAudio, EngineType } from '../types';
 import { PlayIcon, TrashIcon, PlusIcon, FileAudioIcon, FileTextIcon } from './Icons';
 
@@ -7,6 +7,7 @@ type LibraryTab = 'audio' | 'transcripts';
 interface AudioLibraryProps {
   savedAudios: SavedAudio[];
   isLoading: boolean;
+  initialTab?: LibraryTab;
   onPlay: (audio: SavedAudio) => void;
   onDelete: (audio: SavedAudio) => void;
   onCreateNew: () => void;
@@ -42,12 +43,18 @@ const truncateText = (text: string, maxLength: number): string => {
 export const AudioLibrary: React.FC<AudioLibraryProps> = ({
   savedAudios,
   isLoading,
+  initialTab = 'audio',
   onPlay,
   onDelete,
   onCreateNew,
   onViewDetail,
 }) => {
-  const [activeTab, setActiveTab] = useState<LibraryTab>('audio');
+  const [activeTab, setActiveTab] = useState<LibraryTab>(initialTab);
+
+  // Sync with initialTab prop when it changes
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
 
   // Separate audio entries from transcript-only entries
   const audioEntries = useMemo(

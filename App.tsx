@@ -53,6 +53,7 @@ const API_BASE = '/api';
 const App: React.FC = () => {
   // Navigation state
   const [currentView, setCurrentView] = useState<AppView>('editor');
+  const [libraryTab, setLibraryTab] = useState<'audio' | 'transcripts'>('audio');
   const [selectedAudio, setSelectedAudio] = useState<SavedAudio | null>(null);
   const [editingAudioId, setEditingAudioId] = useState<string | null>(null);
 
@@ -468,6 +469,7 @@ const App: React.FC = () => {
       console.log('[handleSaveTranscript] Result:', result);
 
       if (result) {
+        setLibraryTab('transcripts');
         setCurrentView('library');
       } else {
         alert('Failed to save transcript. Please try again.');
@@ -795,6 +797,7 @@ const App: React.FC = () => {
         <AudioLibrary
           savedAudios={audioStorage.savedAudios}
           isLoading={audioStorage.isLoading}
+          initialTab={libraryTab}
           onPlay={handlePlayFromLibrary}
           onDelete={handleDelete}
           onCreateNew={handleCreateNew}
