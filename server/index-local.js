@@ -24,6 +24,7 @@ const audioEntrySchema = new mongoose.Schema({
   engine: { type: String, default: null },
   speaker_mapping: { type: Object, default: {} },
   speakers: [{ type: String }],
+  is_transcript_only: { type: Boolean, default: false },
   created_at: { type: Date, default: Date.now },
   updated_at: { type: Date, default: Date.now }
 });
@@ -80,11 +81,11 @@ app.get('/api/audio-entries/:id', async (req, res) => {
 // Create audio entry (stores audio as base64 in DB for local dev - no Cloudinary)
 app.post('/api/audio-entries', async (req, res) => {
   try {
-    const { title, transcript, audio_data, duration, engine, speaker_mapping, speakers } = req.body;
+    const { title, transcript, audio_data, duration, engine, speaker_mapping, speakers, is_transcript_only } = req.body;
 
     // For local dev, store audio as data URL directly
     let audioUrl = null;
-    if (audio_data) {
+    if (audio_data && !is_transcript_only) {
       audioUrl = `data:audio/mpeg;base64,${audio_data}`;
     }
 
@@ -95,7 +96,8 @@ app.post('/api/audio-entries', async (req, res) => {
       duration,
       engine,
       speaker_mapping,
-      speakers
+      speakers,
+      is_transcript_only: is_transcript_only || false
     });
 
     await entry.save();
@@ -109,7 +111,7 @@ app.post('/api/audio-entries', async (req, res) => {
 // Update audio entry
 app.put('/api/audio-entries/:id', async (req, res) => {
   try {
-    const { title, transcript, audio_data, duration, engine, speaker_mapping, speakers } = req.body;
+    const { title, transcript, audio_data, duration, engine, speaker_mapping, speakers, is_transcript_only } = req.body;
 
     const existingEntry = await AudioEntry.findById(req.params.id);
     if (!existingEntry) {
@@ -124,6 +126,11 @@ app.put('/api/audio-entries/:id', async (req, res) => {
       speakers,
       updated_at: new Date()
     };
+
+    // Only update is_transcript_only if provided
+    if (is_transcript_only !== undefined) {
+      updateData.is_transcript_only = is_transcript_only;
+    }
 
     // For local dev, store audio as data URL directly
     if (audio_data) {

@@ -64,7 +64,7 @@ const App: React.FC = () => {
   const [studentTestId, setStudentTestId] = useState<string | null>(null);
   const [studentTest, setStudentTest] = useState<ListeningTest | null>(null);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
-  const [transcriptOnlyAudio, setTranscriptOnlyAudio] = useState<SavedAudio | null>(null);
+  const [isSavingTranscript, setIsSavingTranscript] = useState(false);
 
   // Editor state
   const [title, setTitle] = useState("Untitled Audio");
@@ -430,14 +430,7 @@ const App: React.FC = () => {
       alert(editingTest ? 'Test updated successfully!' : 'Test created successfully!');
       setEditingTest(null);
 
-      // Check if this was a transcript-only test
-      if (transcriptOnlyAudio && selectedAudio?.id === transcriptOnlyAudio.id) {
-        // Clear transcript-only state and go to classroom
-        setTranscriptOnlyAudio(null);
-        setSelectedAudio(null);
-        await loadAllTests();
-        setCurrentView('classroom');
-      } else if (selectedAudio) {
+      if (selectedAudio) {
         // Go back to detail view and refresh tests
         handleViewDetail(selectedAudio);
       }
@@ -453,23 +446,32 @@ const App: React.FC = () => {
   };
 
   // Transcript-only mode handlers
-  const handleTranscriptCreateTest = (title: string, transcript: string) => {
-    // Create a virtual audio object for transcript-only mode
-    const virtualAudio: SavedAudio = {
-      id: `transcript-${Date.now()}`,
-      title,
-      transcript,
-      audioUrl: null,
-      engine: EngineType.BROWSER,
-      speakerMapping: {},
-      speakers: parseDialogue(transcript).speakers,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    setTranscriptOnlyAudio(virtualAudio);
-    setSelectedAudio(virtualAudio);
-    setEditingTest(null);
-    setCurrentView('test-builder');
+  const handleSaveTranscript = async (title: string, transcript: string, speakers: string[]) => {
+    setIsSavingTranscript(true);
+    console.log('[handleSaveTranscript] Called with:', { title, transcript: transcript.substring(0, 50), speakers });
+    console.log('[handleSaveTranscript] Passing isTranscriptOnly: true');
+    try {
+      const result = await audioStorage.create({
+        title,
+        transcript,
+        engine: EngineType.BROWSER,
+        speakerMapping: {},
+        speakers,
+        isTranscriptOnly: true,
+      });
+      console.log('[handleSaveTranscript] Result:', result);
+
+      if (result) {
+        setCurrentView('library');
+      } else {
+        alert('Failed to save transcript. Please try again.');
+      }
+    } catch (error) {
+      console.error('Failed to save transcript:', error);
+      alert('Failed to save transcript. Please try again.');
+    } finally {
+      setIsSavingTranscript(false);
+    }
   };
 
   const handleTestComplete = (attempt: TestAttempt) => {
@@ -843,14 +845,7 @@ const App: React.FC = () => {
             onSave={handleSaveTest}
             onCancel={() => {
               setEditingTest(null);
-              // Check if this was a transcript-only test
-              if (transcriptOnlyAudio && selectedAudio?.id === transcriptOnlyAudio.id) {
-                setTranscriptOnlyAudio(null);
-                setSelectedAudio(null);
-                setCurrentView('transcript');
-              } else {
-                handleViewDetail(selectedAudio);
-              }
+              handleViewDetail(selectedAudio);
             }}
           />
         </main>
@@ -920,8 +915,9 @@ const App: React.FC = () => {
       {currentView === 'transcript' && (
         <Suspense fallback={<InlineSpinner />}>
           <TranscriptMode
-            onCreateTest={handleTranscriptCreateTest}
+            onSave={handleSaveTranscript}
             onBack={() => setCurrentView('editor')}
+            isSaving={isSavingTranscript}
           />
         </Suspense>
       )}

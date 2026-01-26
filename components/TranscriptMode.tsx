@@ -1,25 +1,26 @@
 import React, { useState, useMemo } from 'react';
 import { parseDialogue } from '../utils/parser';
-import { FileTextIcon, ArrowRightIcon } from './Icons';
+import { FileTextIcon, SaveIcon } from './Icons';
 
 interface TranscriptModeProps {
-  onCreateTest: (title: string, transcript: string) => void;
+  onSave: (title: string, transcript: string, speakers: string[]) => void;
   onBack: () => void;
+  isSaving?: boolean;
 }
 
-export const TranscriptMode: React.FC<TranscriptModeProps> = ({ onCreateTest, onBack }) => {
+export const TranscriptMode: React.FC<TranscriptModeProps> = ({ onSave, onBack, isSaving }) => {
   const [title, setTitle] = useState('');
   const [transcript, setTranscript] = useState('');
 
   const analysis = useMemo(() => parseDialogue(transcript), [transcript]);
 
-  const handleCreateTest = () => {
+  const handleSave = () => {
     if (!transcript.trim()) {
       alert('Please enter a transcript first.');
       return;
     }
     const finalTitle = title.trim() || 'Untitled Transcript';
-    onCreateTest(finalTitle, transcript);
+    onSave(finalTitle, transcript, analysis.speakers);
   };
 
   return (
@@ -40,7 +41,7 @@ export const TranscriptMode: React.FC<TranscriptModeProps> = ({ onCreateTest, on
           </div>
           <div>
             <h1 className="text-xl font-bold bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">Text-Only Mode</h1>
-            <p className="text-sm text-slate-500">Create tests from transcript without storing audio</p>
+            <p className="text-sm text-slate-500">Save transcripts to your library without audio</p>
           </div>
         </div>
 
@@ -84,15 +85,24 @@ Speaker B: I'm fine, thank you!"
 
           <div className="pt-5 border-t border-slate-100">
             <button
-              onClick={handleCreateTest}
-              disabled={!transcript.trim()}
+              onClick={handleSave}
+              disabled={!transcript.trim() || isSaving}
               className="w-full py-3.5 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-xl font-semibold hover:from-indigo-500 hover:to-violet-500 hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/30"
             >
-              <span>Create Test from Transcript</span>
-              <ArrowRightIcon className="w-4 h-4" />
+              {isSaving ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Saving...</span>
+                </>
+              ) : (
+                <>
+                  <SaveIcon className="w-4 h-4" />
+                  <span>Save to Library</span>
+                </>
+              )}
             </button>
             <p className="text-xs text-slate-400 text-center mt-4">
-              No audio will be stored. Play audio from your own device during tests.
+              No audio will be stored. Create tests from your library.
             </p>
           </div>
         </div>

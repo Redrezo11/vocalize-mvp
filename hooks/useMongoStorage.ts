@@ -14,22 +14,29 @@ interface MongoAudioEntry {
   engine?: string;
   speaker_mapping?: SpeakerVoiceMapping;
   speakers?: string[];
+  is_transcript_only?: boolean;
   duration?: number;
   created_at: string;
   updated_at: string;
 }
 
-const docToSavedAudio = (doc: MongoAudioEntry): SavedAudio => ({
-  id: doc._id,
-  title: doc.title,
-  transcript: doc.transcript,
-  audioUrl: doc.audio_url || (doc.audio_data ? `data:audio/mpeg;base64,${doc.audio_data}` : null),
-  engine: (doc.engine as EngineType) || EngineType.ELEVEN_LABS,
-  speakerMapping: doc.speaker_mapping || {},
-  speakers: doc.speakers || [],
-  createdAt: doc.created_at,
-  updatedAt: doc.updated_at,
-});
+const docToSavedAudio = (doc: MongoAudioEntry): SavedAudio => {
+  console.log('[docToSavedAudio] doc.is_transcript_only =', doc.is_transcript_only);
+  const result = {
+    id: doc._id,
+    title: doc.title,
+    transcript: doc.transcript,
+    audioUrl: doc.audio_url || (doc.audio_data ? `data:audio/mpeg;base64,${doc.audio_data}` : null),
+    engine: (doc.engine as EngineType) || EngineType.BROWSER,
+    speakerMapping: doc.speaker_mapping || {},
+    speakers: doc.speakers || [],
+    isTranscriptOnly: doc.is_transcript_only || false,
+    createdAt: doc.created_at,
+    updatedAt: doc.updated_at,
+  };
+  console.log('[docToSavedAudio] result.isTranscriptOnly =', result.isTranscriptOnly);
+  return result;
+};
 
 export const useMongoStorage = () => {
   const [savedAudios, setSavedAudios] = useState<SavedAudio[]>([]);
@@ -98,17 +105,23 @@ export const useMongoStorage = () => {
         audioData = await blobToBase64(audioBlob);
       }
 
+      const requestBody = {
+        title: audio.title,
+        transcript: audio.transcript,
+        audio_data: audioData,
+        engine: audio.engine,
+        speaker_mapping: audio.speakerMapping,
+        speakers: audio.speakers,
+        is_transcript_only: audio.isTranscriptOnly || false,
+      };
+      console.log('[useMongoStorage.create] Request body:', { ...requestBody, transcript: requestBody.transcript?.substring(0, 50) });
+      console.log('[useMongoStorage.create] audio.isTranscriptOnly =', audio.isTranscriptOnly);
+      console.log('[useMongoStorage.create] is_transcript_only being sent =', requestBody.is_transcript_only);
+
       const response = await fetch(`${API_BASE}/audio-entries`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: audio.title,
-          transcript: audio.transcript,
-          audio_data: audioData,
-          engine: audio.engine,
-          speaker_mapping: audio.speakerMapping,
-          speakers: audio.speakers,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) throw new Error('Failed to create entry');
@@ -148,6 +161,7 @@ export const useMongoStorage = () => {
           engine: updates.engine,
           speaker_mapping: updates.speakerMapping,
           speakers: updates.speakers,
+          is_transcript_only: updates.isTranscriptOnly,
         }),
       });
 

@@ -95,6 +95,7 @@ export interface SavedAudio {
   engine: EngineType;
   speakerMapping: SpeakerVoiceMapping;
   speakers: string[];
+  isTranscriptOnly?: boolean;  // True for transcript-only entries (no audio)
   createdAt: string;
   updatedAt: string;
 }
@@ -108,6 +109,7 @@ export interface AudioEntryRow {
   engine: string;
   speaker_mapping: SpeakerVoiceMapping;
   speakers: string[];
+  is_transcript_only?: boolean;
   created_at: string;
   updated_at: string;
 }

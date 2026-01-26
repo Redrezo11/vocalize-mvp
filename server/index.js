@@ -43,6 +43,7 @@ const audioEntrySchema = new mongoose.Schema({
   engine: { type: String, default: null },
   speaker_mapping: { type: Object, default: {} },
   speakers: [{ type: String }],
+  is_transcript_only: { type: Boolean, default: false },
   created_at: { type: Date, default: Date.now },
   updated_at: { type: Date, default: Date.now }
 });
@@ -131,14 +132,17 @@ app.get('/api/audio-entries/:id', async (req, res) => {
 // Create audio entry
 app.post('/api/audio-entries', async (req, res) => {
   try {
-    const { title, transcript, audio_data, duration, engine, speaker_mapping, speakers } = req.body;
+    const { title, transcript, audio_data, duration, engine, speaker_mapping, speakers, is_transcript_only } = req.body;
+    console.log('[SERVER] POST /api/audio-entries received:');
+    console.log('[SERVER] is_transcript_only from req.body =', is_transcript_only);
+    console.log('[SERVER] typeof is_transcript_only =', typeof is_transcript_only);
 
     let audioUrl = null;
     let cloudinaryPublicId = null;
     let audioDuration = duration;
 
-    // Upload audio to Cloudinary if provided
-    if (audio_data) {
+    // Upload audio to Cloudinary if provided (skip for transcript-only entries)
+    if (audio_data && !is_transcript_only) {
       const tempId = new mongoose.Types.ObjectId();
       const uploadResult = await uploadToCloudinary(audio_data, `audio_${tempId}`);
       audioUrl = uploadResult.url;
@@ -154,10 +158,12 @@ app.post('/api/audio-entries', async (req, res) => {
       duration: audioDuration,
       engine,
       speaker_mapping,
-      speakers
+      speakers,
+      is_transcript_only: is_transcript_only || false
     });
 
     await entry.save();
+    console.log('[SERVER] Saved entry with is_transcript_only =', entry.is_transcript_only);
     res.status(201).json(entry);
   } catch (error) {
     console.error('Create error:', error);
@@ -168,7 +174,7 @@ app.post('/api/audio-entries', async (req, res) => {
 // Update audio entry
 app.put('/api/audio-entries/:id', async (req, res) => {
   try {
-    const { title, transcript, audio_data, duration, engine, speaker_mapping, speakers } = req.body;
+    const { title, transcript, audio_data, duration, engine, speaker_mapping, speakers, is_transcript_only } = req.body;
 
     const existingEntry = await AudioEntry.findById(req.params.id);
     if (!existingEntry) {
@@ -183,6 +189,11 @@ app.put('/api/audio-entries/:id', async (req, res) => {
       speakers,
       updated_at: new Date()
     };
+
+    // Only update is_transcript_only if provided
+    if (is_transcript_only !== undefined) {
+      updateData.is_transcript_only = is_transcript_only;
+    }
 
     // Upload new audio if provided
     if (audio_data) {
