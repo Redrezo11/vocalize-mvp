@@ -400,6 +400,107 @@ Edgy/Dramatic          → Enceladus, Iapetus→ Sam, George       → + Brian, 
 
 ---
 
+### ElevenLabs Accent/Nationality Selection Guide
+
+ElevenLabs offers more accent variety than Gemini. Use this guide when character nationality or regional background matters.
+
+#### Accent Quick Reference by Tier
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        ELEVENLABS ACCENT GUIDE                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ AMERICAN VOICES                                                             │
+│ ───────────────────────────────────────────────────────────────────────────│
+│ FREE TIER:                                                                  │
+│   Female: Rachel, Domi, Sarah, Emily, Freya, Gigi                          │
+│   Male:   Adam, Antoni, Arnold, Josh, Sam, Thomas, Clyde, Harry, Callum    │
+│                                                                             │
+│ PAID TIER (additional):                                                     │
+│   Female: Glinda, Grace (Southern), Matilda, Nicole, Serena                │
+│   Male:   Bill, Brian, Chris, Drew, Ethan, Jeremy, Jessie, Liam,           │
+│           Michael, Patrick, Paul                                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ BRITISH VOICES                                                              │
+│ ───────────────────────────────────────────────────────────────────────────│
+│ FREE TIER:                                                                  │
+│   Female: Dorothy (RP/Standard)                                             │
+│   Male:   Dave (Essex/Casual), Daniel (RP/Formal), George (RP/Raspy)       │
+│                                                                             │
+│ PAID TIER (additional):                                                     │
+│   Female: Alice (Confident), Lily (Raspy)                                   │
+│   Male:   Joseph (Professional)                                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ AUSTRALIAN VOICES                                                           │
+│ ───────────────────────────────────────────────────────────────────────────│
+│ FREE TIER:  None available                                                  │
+│ PAID TIER:  Charlie (Casual), James (Mature/Calm)                          │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ IRISH VOICES                                                                │
+│ ───────────────────────────────────────────────────────────────────────────│
+│ FREE TIER:  Fin (Old, Sailor character)                                     │
+│ PAID TIER:  Jeremy (American-Irish blend, Excited)                         │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ OTHER ACCENTS                                                               │
+│ ───────────────────────────────────────────────────────────────────────────│
+│ Swedish-English:                                                            │
+│   FREE:  Charlotte (Female, Seductive)                                      │
+│   PAID:  Mimi (Female, Childish)                                           │
+│                                                                             │
+│ Italian-English:                                                            │
+│   PAID:  Giovanni (Male, Young)                                            │
+│                                                                             │
+│ Southern American:                                                          │
+│   PAID:  Grace (Female, Warm)                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### When to Use Specific Accents
+
+| Content Type | Recommended Accent | FREE Tier Options | PAID Tier Options |
+|--------------|-------------------|-------------------|-------------------|
+| **General/Neutral** | American | Rachel, Antoni, Adam | + Drew, Liam, Matilda |
+| **British Drama/Period** | British RP | Dorothy, Daniel, George | + Alice, Joseph, Lily |
+| **Casual British** | British Essex | Dave | - |
+| **Australian Content** | Australian | *Not available* | Charlie, James |
+| **Irish Character** | Irish | Fin | + Jeremy (blend) |
+| **European Character** | Swedish/Italian | Charlotte | + Mimi, Giovanni |
+| **Southern US** | Southern American | *Not available* | Grace |
+| **News/Formal** | British or American | Daniel (UK), Sarah (US) | + Alice (UK), Drew (US) |
+| **Children's Stories** | British (classic) | Dorothy | + Alice |
+
+#### Accent Selection Decision Flow
+
+```
+CHARACTER BACKGROUND/SETTING
+            │
+            ▼
+┌─────────────────────────────────┐
+│ Is nationality/region important │
+│ for this character?             │
+└─────────────────────────────────┘
+            │
+     ┌──────┴──────┐
+     ▼             ▼
+    YES            NO
+     │             │
+     │             └──► Use American (default/neutral)
+     │                  FREE: Rachel, Antoni, Adam
+     │                  PAID: + Drew, Liam, Matilda
+     ▼
+┌─────────────────────────────────┐
+│ What region/nationality?        │
+└─────────────────────────────────┘
+     │
+     ├──► UK → British voices (Dorothy, Daniel, Dave, George)
+     ├──► Ireland → Fin (FREE) or Jeremy (PAID)
+     ├──► Australia → Charlie, James (PAID only)
+     ├──► Europe → Charlotte, Mimi, Giovanni
+     └──► Southern US → Grace (PAID only)
+```
+
+---
+
 ## LLM Prompt Template
 
 Use this template when asking an LLM to generate dialogue content with voice assignments:
@@ -451,20 +552,40 @@ Male:   Puck (Upbeat), Charon (Informative), Fenrir (Excitable), Orus (Firm),
         Zubenelgenubi (Casual)
 
 ### For ElevenLabs FREE TIER (21 voices only):
-Female: Rachel (Calm), Domi (Strong), Sarah (Soft), Emily (Calm), Dorothy (Pleasant),
-        Freya (Neutral), Gigi (Childish), Charlotte (Seductive)
+
+**American Accent:**
+Female: Rachel (Calm), Domi (Strong), Sarah (Soft), Emily (Calm), Freya (Neutral), Gigi (Childish)
 Male:   Adam (Deep), Antoni (Well-rounded), Arnold (Crisp), Josh (Deep), Sam (Raspy),
-        Thomas (Calm), Clyde (War veteran), Dave (Conversational), Fin (Sailor),
-        Harry (Anxious), Daniel (Deep), George (Raspy), Callum (Hoarse)
+        Thomas (Calm), Clyde (War veteran), Harry (Anxious), Callum (Hoarse)
+
+**British Accent:**
+Female: Dorothy (Pleasant, RP)
+Male:   Dave (Conversational, Essex), Daniel (Deep, RP), George (Raspy, RP)
+
+**Irish Accent:**
+Male:   Fin (Old, Sailor-like)
+
+**Swedish-English Accent:**
+Female: Charlotte (Seductive)
 
 ### For ElevenLabs PAID TIER (all voices):
 [All FREE tier voices PLUS:]
-Female: Alice (Confident), Glinda (Witch-like), Grace (Warm), Lily (Raspy),
-        Matilda (Warm), Mimi (Childish), Nicole (Whisper), Serena (Pleasant)
-Male:   Bill (Strong), Brian (Deep), Charlie (Casual), Chris (Casual), Drew (Well-rounded),
-        Ethan (Soft), Giovanni (Foreigner), James (Calm), Jeremy (Excited),
-        Jessie (Raspy), Joseph (Professional), Liam (Neutral), Michael (Wise),
-        Patrick (Shouty), Paul (Reporter)
+
+**American Accent (additional):**
+Female: Glinda (Witch-like), Matilda (Warm), Nicole (Whisper), Serena (Pleasant)
+Male:   Bill (Strong), Brian (Deep), Chris (Casual), Drew (Well-rounded), Ethan (Soft),
+        Liam (Neutral), Michael (Wise), Patrick (Shouty), Paul (Reporter), Jessie (Raspy)
+
+**British Accent (additional):**
+Female: Alice (Confident), Lily (Raspy)
+Male:   Joseph (Professional)
+
+**Australian Accent:**
+Male:   Charlie (Casual), James (Calm/Mature)
+
+**Other Accents:**
+Female: Grace (American-Southern, Warm), Mimi (Swedish-English, Childish)
+Male:   Giovanni (Italian-English, Young), Jeremy (American-Irish, Excited)
 
 ## Voice Selection Guidelines
 
@@ -485,14 +606,27 @@ Male:   Bill (Strong), Brian (Deep), Charlie (Casual), Chris (Casual), Drew (Wel
    - Meditation → Calm, Soft voices
    - Drama → Expressive, Dynamic voices
 
-4. **Consider accent appropriateness**
-   - Match accent to character background
-   - Use neutral accents for general content
-   - Use specific accents for character authenticity
+4. **ElevenLabs Accent Selection** (use your discretion based on character/setting)
+   - **Default to American** for general/neutral content
+   - **Use British** for: UK settings, period dramas, formal news, classic literature
+   - **Use Australian** (PAID only) for: Australian characters, casual/laid-back personas
+   - **Use Irish** for: Irish characters, fantasy/folklore (Fin has a weathered sailor quality)
+   - **Use accented English** for: international characters (Giovanni for Italian, Charlotte/Mimi for Swedish)
+   - **Use Southern American** (PAID only) for: US Southern characters, warm storytelling
+
+   **FREE Tier Accent Limitations:**
+   - American: Most options (15 voices)
+   - British: 4 voices (Dorothy, Dave, Daniel, George)
+   - Irish: 1 voice (Fin - old, character voice)
+   - Swedish-English: 1 voice (Charlotte)
+   - Australian: None (PAID only)
+   - Southern American: None (PAID only)
+   - Italian-English: None (PAID only)
 
 5. **CRITICAL: Respect tier restrictions**
    - If user specifies "ElevenLabs FREE", ONLY use the 21 free tier voices
    - Never suggest paid voices to free tier users
+   - If a specific accent is needed but unavailable on FREE tier, note this limitation
 ```
 
 ### Example User Prompts
@@ -529,6 +663,31 @@ Requirements:
 - Young female protagonist
 - Elderly male mentor character
 - Include emotional range
+```
+
+#### Example 4: ElevenLabs with Accent Requirements (FREE Tier)
+```
+Create a scene set in a London pub where an American tourist asks locals for directions.
+Use ElevenLabs FREE tier voices only.
+
+Requirements:
+- American tourist (female, friendly)
+- British bartender (male, casual/working class)
+- British regular customer (male, older/authoritative)
+- Natural dialogue with personality
+```
+
+#### Example 5: ElevenLabs Multi-Accent (PAID Tier)
+```
+Create a scene at an international conference with speakers from different countries.
+Use ElevenLabs PAID tier (full voice selection).
+
+Requirements:
+- British moderator (professional, formal)
+- American presenter (confident)
+- Australian participant (casual, friendly)
+- Italian-accented speaker (young, enthusiastic)
+- Match accents to character nationalities
 ```
 
 ### Example LLM Output
@@ -568,6 +727,36 @@ Narrator: You've got it! This cycle has been running for billions of years, recy
 Jake: No way! That's amazing!
 ```
 
+### Example LLM Output (ElevenLabs with Accents - FREE Tier)
+
+```
+TITLE: Lost in London
+
+VOICE_ASSIGNMENTS:
+Tourist: Rachel
+Bartender: Dave
+Regular: Daniel
+
+DIALOGUE:
+Tourist: Excuse me, I'm trying to find the British Museum but my phone died. Could you point me in the right direction?
+
+Bartender: Ah, you're not too far off, love. Head out the door, take a left, walk about ten minutes down Great Russell Street and you'll see it on your right. Can't miss it.
+
+Regular: Though at this hour, you might want to pop in for a pint first. Museum's not going anywhere.
+
+Tourist: That's really tempting, but I've only got a few hours before my flight. This trip has been so rushed!
+
+Bartender: Shame, that. London's best enjoyed slow, like a proper cup of tea.
+
+Regular: She's American, Dave. They don't do slow.
+
+Tourist: Hey! I can do slow. I just... choose not to.
+
+Bartender: Tell you what - grab a quick half, and I'll draw you a proper map. Better than any phone app.
+
+Tourist: You know what? Deal. When in London, right?
+```
+
 ---
 
 ## Voice Assignment Checklist
@@ -577,11 +766,16 @@ Before finalizing voice assignments, verify:
 - [ ] Each speaker has a unique voice
 - [ ] Voice styles match character personalities
 - [ ] Voice ages match character ages
-- [ ] Accents are appropriate for the content
 - [ ] There's sufficient variety between voices
 - [ ] The narrator voice suits the content tone
 - [ ] All voice names are spelled correctly
 - [ ] Voice gender matches character gender (unless intentionally different)
+
+**ElevenLabs-specific checks:**
+- [ ] Accents match character nationalities/backgrounds when specified
+- [ ] British voices used for UK characters (Dorothy, Dave, Daniel, George on FREE)
+- [ ] American voices used as default/neutral or for US characters
+- [ ] If Australian/Italian/Southern accents needed, PAID tier is required
 - [ ] **For ElevenLabs FREE tier**: All selected voices are in the 21-voice free list
 - [ ] **For ElevenLabs PAID tier**: User has confirmed paid subscription before using extended voices
 

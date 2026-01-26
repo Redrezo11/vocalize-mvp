@@ -308,6 +308,28 @@ Create an engaging listening dialogue for English as a Foreign Language (EFL) le
 2. **For dialogues**: Use contrasting voices for different speakers (different genders, styles, or ages)
 3. **For young characters**: Use youthful voices (Leda, Puck for Gemini; Gigi, Josh for ElevenLabs)
 4. **For authority figures**: Use firm/professional voices (Kore, Orus for Gemini; Adam, Daniel for ElevenLabs)
+${engine === EngineType.ELEVEN_LABS ? `
+### ElevenLabs Accent Selection (use your discretion based on character/setting)
+
+**Available Accents by Tier:**
+- **American** (default): Most voices - use for general/neutral content
+- **British**: Dorothy (F), Dave, Daniel, George (M) on FREE; + Alice, Lily (F), Joseph (M) on PAID
+- **Irish**: Fin on FREE (old sailor character); + Jeremy on PAID (American-Irish blend)
+- **Australian**: Charlie, James on PAID only
+- **Swedish-English**: Charlotte on FREE; + Mimi on PAID
+- **Italian-English**: Giovanni on PAID only
+- **Southern American**: Grace on PAID only
+
+**When to use specific accents:**
+- **British settings/characters**: Use Dorothy, Daniel, Dave, George
+- **Formal/News British**: Daniel (RP accent, authoritative)
+- **Casual/Young British**: Dave (Essex accent, gaming culture)
+- **Children's stories (classic)**: Dorothy (pleasant British)
+- **Irish characters/folklore**: Fin (weathered, old soul)
+- **International/European**: Charlotte, Giovanni (adds authenticity)
+- **Australian content**: Charlie, James (PAID tier only)
+- **Default/neutral**: American voices (Rachel, Antoni, Adam)
+` : ''}
 
 ${getVoiceReference()}
 
