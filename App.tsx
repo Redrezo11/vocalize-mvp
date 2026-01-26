@@ -82,6 +82,17 @@ const App: React.FC = () => {
   const analysis = useMemo(() => parseDialogue(text), [text]);
   const [speakerMapping, setSpeakerMapping] = useState<SpeakerVoiceMapping>({});
 
+  // Config States
+  const [browserConfig, setBrowserConfig] = useState<BrowserVoiceConfig>({ voice: null, rate: 1, pitch: 1, volume: 1 });
+  const [geminiVoice, setGeminiVoice] = useState('Puck'); // Google's default voice
+  const [elevenVoiceId, setElevenVoiceId] = useState("");
+
+  // Hooks
+  const browserTTS = useBrowserTTS();
+  const geminiTTS = useGeminiTTS();
+  const elevenTTS = useElevenLabsTTS();
+  const audioStorage = useMongoStorage();
+
   // Sort ElevenLabs voices by accent (American first, then British, then others alphabetically)
   const sortedElevenVoices = useMemo(() => {
     if (elevenTTS.voices.length === 0) return [];
@@ -102,17 +113,6 @@ const App: React.FC = () => {
       return a.name.localeCompare(b.name);
     });
   }, [elevenTTS.voices]);
-
-  // Config States
-  const [browserConfig, setBrowserConfig] = useState<BrowserVoiceConfig>({ voice: null, rate: 1, pitch: 1, volume: 1 });
-  const [geminiVoice, setGeminiVoice] = useState('Puck'); // Google's default voice
-  const [elevenVoiceId, setElevenVoiceId] = useState("");
-
-  // Hooks
-  const browserTTS = useBrowserTTS();
-  const geminiTTS = useGeminiTTS();
-  const elevenTTS = useElevenLabsTTS();
-  const audioStorage = useMongoStorage();
 
   useEffect(() => {
     if (browserTTS.voices.length > 0 && !browserConfig.voice) {
