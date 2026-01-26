@@ -182,8 +182,10 @@ const App: React.FC = () => {
   // Auto-detect LLM format and apply voice assignments and title
   const lastParsedTextRef = React.useRef('');
   const skipAutoCastCountRef = React.useRef(0); // Counter to skip multiple auto-cast cycles
+  const pendingVoiceAssignmentsRef = React.useRef<{ [speaker: string]: string }>({}); // Store pending voice assignments for when voices load
+
   useEffect(() => {
-    // Skip if we've already parsed this exact text
+    // Skip if we've already parsed this exact text (including dialogue-only version)
     if (text === lastParsedTextRef.current) {
       console.log('[LLM Parser] Skipping - already parsed this text');
       return;
@@ -198,7 +200,8 @@ const App: React.FC = () => {
     });
 
     if (parsed.hasLLMFormat) {
-      lastParsedTextRef.current = text;
+      // Store the dialogue text as the "parsed" text so we don't re-parse after setText
+      lastParsedTextRef.current = parsed.dialogueText;
 
       // Auto-fill title if found
       if (parsed.title && title === 'Untitled Audio') {
@@ -212,6 +215,10 @@ const App: React.FC = () => {
         // Skip next 3 auto-cast cycles (to handle setText triggering additional renders)
         skipAutoCastCountRef.current = 3;
         console.log('[LLM Parser] Set skipAutoCastCountRef to 3');
+
+        // Store voice assignments for later (in case voices aren't loaded yet)
+        pendingVoiceAssignmentsRef.current = parsed.voiceAssignments;
+        console.log('[LLM Parser] Stored pending voice assignments:', pendingVoiceAssignmentsRef.current);
 
         // Map voice names to voice IDs for ElevenLabs
         if (engine === EngineType.ELEVEN_LABS && elevenTTS.voices.length > 0) {
@@ -229,6 +236,8 @@ const App: React.FC = () => {
           console.log('[LLM Parser] Final ElevenLabs mappedAssignments:', mappedAssignments);
           if (Object.keys(mappedAssignments).length > 0) {
             setSpeakerMapping(mappedAssignments);
+            // Clear pending since we applied successfully
+            pendingVoiceAssignmentsRef.current = {};
           }
         } else if (engine === EngineType.GEMINI) {
           // For Gemini, voice names can be used directly
@@ -246,9 +255,12 @@ const App: React.FC = () => {
           console.log('[LLM Parser] Final Gemini mappedAssignments:', mappedAssignments);
           if (Object.keys(mappedAssignments).length > 0) {
             setSpeakerMapping(mappedAssignments);
+            // Clear pending since we applied successfully
+            pendingVoiceAssignmentsRef.current = {};
           }
         } else {
           console.log('[LLM Parser] Engine not supported or voices not loaded. Engine:', engine, 'ElevenLabs voices:', elevenTTS.voices.length);
+          console.log('[LLM Parser] Voice assignments stored for later application');
         }
       }
 
@@ -258,7 +270,37 @@ const App: React.FC = () => {
         setText(parsed.dialogueText);
       }
     }
-  }, [text, engine, elevenTTS.voices, title]);
+  }, [text, engine, title]); // Removed elevenTTS.voices - we handle that in a separate effect
+
+  // Apply pending voice assignments when ElevenLabs voices become available
+  useEffect(() => {
+    if (engine !== EngineType.ELEVEN_LABS) return;
+    if (elevenTTS.voices.length === 0) return;
+    if (Object.keys(pendingVoiceAssignmentsRef.current).length === 0) return;
+
+    console.log('[Voice Loader] Applying pending voice assignments:', pendingVoiceAssignmentsRef.current);
+
+    const mappedAssignments: SpeakerVoiceMapping = {};
+    Object.entries(pendingVoiceAssignmentsRef.current).forEach(([speaker, voiceName]) => {
+      const voice = elevenTTS.voices.find(v =>
+        v.name.toLowerCase() === voiceName.toLowerCase()
+      );
+      console.log(`[Voice Loader] ElevenLabs mapping: ${speaker} -> ${voiceName}, found:`, voice?.name, voice?.voice_id);
+      if (voice) {
+        mappedAssignments[speaker] = voice.voice_id;
+      }
+    });
+
+    if (Object.keys(mappedAssignments).length > 0) {
+      console.log('[Voice Loader] Setting speaker mapping:', mappedAssignments);
+      setSpeakerMapping(mappedAssignments);
+      // Prevent auto-cast from overwriting
+      skipAutoCastCountRef.current = 3;
+    }
+
+    // Clear pending assignments
+    pendingVoiceAssignmentsRef.current = {};
+  }, [engine, elevenTTS.voices]);
 
   // Track Gemini playback completion - set success when playback ends (not loading, not playing)
   const prevGeminiPlayingRef = React.useRef(false);
