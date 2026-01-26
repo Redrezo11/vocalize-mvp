@@ -3,10 +3,11 @@ import { useBrowserTTS } from './hooks/useBrowserTTS';
 import { useGeminiTTS } from './hooks/useGeminiTTS';
 import { useElevenLabsTTS } from './hooks/useElevenLabsTTS';
 import { useMongoStorage } from './hooks/useMongoStorage';
-import { parseDialogue, guessGender } from './utils/parser';
+import { parseDialogue, parseLLMTranscript, guessGender } from './utils/parser';
 import { BrowserVoiceConfig, EngineType, GEMINI_VOICES, SpeakerVoiceMapping, AppView, SavedAudio, ListeningTest, TestAttempt } from './types';
-import { PlayIcon, StopIcon, FolderIcon, PlusIcon, SaveIcon, ArrowLeftIcon, PresentationIcon, FileTextIcon } from './components/Icons';
+import { PlayIcon, StopIcon, FolderIcon, PlusIcon, SaveIcon, ArrowLeftIcon, PresentationIcon, FileTextIcon, SparklesIcon } from './components/Icons';
 import { SaveDialog } from './components/SaveDialog';
+import { PromptBuilder } from './components/PromptBuilder';
 
 // Lazy load components for better initial load
 const Visualizer = lazy(() => import('./components/Visualizer'));
@@ -75,6 +76,7 @@ const App: React.FC = () => {
   const [lastGeneratedBlob, setLastGeneratedBlob] = useState<Blob | null>(null);
   const [geminiPlaybackSuccess, setGeminiPlaybackSuccess] = useState(false);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [showPromptBuilder, setShowPromptBuilder] = useState(false);
 
   // Analysis State
   const analysis = useMemo(() => parseDialogue(text), [text]);
@@ -156,6 +158,87 @@ const App: React.FC = () => {
     setGeminiPlaybackSuccess(false);
   }, [text]);
 
+  // Auto-detect LLM format and apply voice assignments and title
+  const lastParsedTextRef = React.useRef('');
+  const skipAutoCastCountRef = React.useRef(0); // Counter to skip multiple auto-cast cycles
+  useEffect(() => {
+    // Skip if we've already parsed this exact text
+    if (text === lastParsedTextRef.current) {
+      console.log('[LLM Parser] Skipping - already parsed this text');
+      return;
+    }
+
+    const parsed = parseLLMTranscript(text);
+    console.log('[LLM Parser] Parsed result:', {
+      hasLLMFormat: parsed.hasLLMFormat,
+      title: parsed.title,
+      voiceAssignments: parsed.voiceAssignments,
+      dialogueTextLength: parsed.dialogueText.length,
+    });
+
+    if (parsed.hasLLMFormat) {
+      lastParsedTextRef.current = text;
+
+      // Auto-fill title if found
+      if (parsed.title && title === 'Untitled Audio') {
+        console.log('[LLM Parser] Setting title:', parsed.title);
+        setTitle(parsed.title);
+      }
+
+      // Auto-apply voice assignments if we have them and the engine supports them
+      if (Object.keys(parsed.voiceAssignments).length > 0) {
+        console.log('[LLM Parser] Processing voice assignments, engine:', engine);
+        // Skip next 3 auto-cast cycles (to handle setText triggering additional renders)
+        skipAutoCastCountRef.current = 3;
+        console.log('[LLM Parser] Set skipAutoCastCountRef to 3');
+
+        // Map voice names to voice IDs for ElevenLabs
+        if (engine === EngineType.ELEVEN_LABS && elevenTTS.voices.length > 0) {
+          const mappedAssignments: SpeakerVoiceMapping = {};
+          Object.entries(parsed.voiceAssignments).forEach(([speaker, voiceName]) => {
+            // Find the voice by name (case-insensitive)
+            const voice = elevenTTS.voices.find(v =>
+              v.name.toLowerCase() === voiceName.toLowerCase()
+            );
+            console.log(`[LLM Parser] ElevenLabs mapping: ${speaker} -> ${voiceName}, found:`, voice?.name, voice?.voice_id);
+            if (voice) {
+              mappedAssignments[speaker] = voice.voice_id;
+            }
+          });
+          console.log('[LLM Parser] Final ElevenLabs mappedAssignments:', mappedAssignments);
+          if (Object.keys(mappedAssignments).length > 0) {
+            setSpeakerMapping(mappedAssignments);
+          }
+        } else if (engine === EngineType.GEMINI) {
+          // For Gemini, voice names can be used directly
+          const mappedAssignments: SpeakerVoiceMapping = {};
+          Object.entries(parsed.voiceAssignments).forEach(([speaker, voiceName]) => {
+            // Verify it's a valid Gemini voice name
+            const voice = GEMINI_VOICES.find(v =>
+              v.name.toLowerCase() === voiceName.toLowerCase()
+            );
+            console.log(`[LLM Parser] Gemini mapping: ${speaker} -> ${voiceName}, found:`, voice?.name);
+            if (voice) {
+              mappedAssignments[speaker] = voice.name;
+            }
+          });
+          console.log('[LLM Parser] Final Gemini mappedAssignments:', mappedAssignments);
+          if (Object.keys(mappedAssignments).length > 0) {
+            setSpeakerMapping(mappedAssignments);
+          }
+        } else {
+          console.log('[LLM Parser] Engine not supported or voices not loaded. Engine:', engine, 'ElevenLabs voices:', elevenTTS.voices.length);
+        }
+      }
+
+      // Replace text with just the dialogue portion (cleaner for TTS)
+      if (parsed.dialogueText !== text) {
+        console.log('[LLM Parser] Replacing text with dialogue portion');
+        setText(parsed.dialogueText);
+      }
+    }
+  }, [text, engine, elevenTTS.voices, title]);
+
   // Track Gemini playback completion - set success when playback ends (not loading, not playing)
   const prevGeminiPlayingRef = React.useRef(false);
   useEffect(() => {
@@ -168,17 +251,33 @@ const App: React.FC = () => {
 
   // Auto-cast speakers when speakers change or voices become available
   useEffect(() => {
+    console.log('[Auto-Cast] Effect triggered. skipAutoCastCountRef:', skipAutoCastCountRef.current, 'speakers:', analysis.speakers);
+    // Skip auto-cast if LLM voice assignments were just applied
+    if (skipAutoCastCountRef.current > 0) {
+      console.log('[Auto-Cast] Skipping due to skipAutoCastCountRef:', skipAutoCastCountRef.current);
+      skipAutoCastCountRef.current--;
+      return;
+    }
+
     const hasVoices =
       (engine === EngineType.BROWSER && browserTTS.voices.length > 0) ||
       (engine === EngineType.GEMINI) ||
       (engine === EngineType.ELEVEN_LABS && elevenTTS.voices.length > 0);
 
+    console.log('[Auto-Cast] hasVoices:', hasVoices, 'speakers count:', analysis.speakers.length);
+
     if (hasVoices && analysis.speakers.length > 0) {
       setSpeakerMapping(prev => {
         // Only auto-cast if mapping is empty or has stale entries
         const hasValidMapping = analysis.speakers.every(s => prev[s]);
-        if (hasValidMapping) return prev;
-        return performSmartCast(analysis.speakers, {}, true);
+        console.log('[Auto-Cast] Inside setSpeakerMapping. prev:', prev, 'hasValidMapping:', hasValidMapping);
+        if (hasValidMapping) {
+          console.log('[Auto-Cast] Valid mapping exists, keeping prev');
+          return prev;
+        }
+        const newMapping = performSmartCast(analysis.speakers, {}, true);
+        console.log('[Auto-Cast] Performing smart cast, new mapping:', newMapping);
+        return newMapping;
       });
     }
   }, [analysis.speakers, engine, browserTTS.voices, elevenTTS.voices, performSmartCast]);
@@ -759,6 +858,17 @@ const App: React.FC = () => {
               </div>
             )}
 
+            {/* EFL Prompt Builder Button - only for Gemini and ElevenLabs */}
+            {(engine === EngineType.GEMINI || engine === EngineType.ELEVEN_LABS) && (
+              <button
+                onClick={() => setShowPromptBuilder(true)}
+                className="w-full py-3 bg-gradient-to-r from-violet-50 to-indigo-50 text-indigo-700 rounded-xl font-medium hover:from-violet-100 hover:to-indigo-100 transition-all duration-200 flex items-center justify-center gap-2 border border-indigo-200/60"
+              >
+                <SparklesIcon className="w-4 h-4" />
+                <span>EFL Prompt Builder</span>
+              </button>
+            )}
+
             {analysis.isDialogue && (
               <div className="pt-4 border-t border-slate-100">
                 <div className="flex items-center justify-between mb-4">
@@ -957,6 +1067,18 @@ const App: React.FC = () => {
         initialTitle={title}
         onSave={handleSaveWithTitle}
         onCancel={() => setShowSaveDialog(false)}
+      />
+
+      <PromptBuilder
+        isOpen={showPromptBuilder}
+        engine={engine}
+        onClose={() => setShowPromptBuilder(false)}
+        onApplyPrompt={(prompt, voiceAssignments) => {
+          // For now, just copy the prompt to clipboard
+          // In the future, this could be extended to apply voice assignments
+          console.log('Prompt generated:', prompt);
+          console.log('Voice assignments:', voiceAssignments);
+        }}
       />
     </div>
   );
