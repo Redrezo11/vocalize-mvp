@@ -129,13 +129,15 @@ export const AudioDetail: React.FC<AudioDetailProps> = ({
           <span className="font-medium">Back to Library</span>
         </button>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => onEdit(audio)}
-            className="flex items-center gap-2 px-4 py-2 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all duration-200"
-          >
-            <EditIcon className="w-4 h-4" />
-            <span className="text-sm font-semibold">Edit</span>
-          </button>
+          {!audio.isTranscriptOnly && (
+            <button
+              onClick={() => onEdit(audio)}
+              className="flex items-center gap-2 px-4 py-2 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all duration-200"
+            >
+              <EditIcon className="w-4 h-4" />
+              <span className="text-sm font-semibold">Edit</span>
+            </button>
+          )}
           <button
             onClick={handleDelete}
             className="flex items-center gap-2 px-4 py-2 text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200"
