@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { SavedAudio, EngineType } from '../types';
-import { PlayIcon, EditIcon, TrashIcon, PlusIcon, FileAudioIcon, FileTextIcon } from './Icons';
+import { PlayIcon, TrashIcon, PlusIcon, FileAudioIcon, FileTextIcon } from './Icons';
 
 type LibraryTab = 'audio' | 'transcripts';
 
@@ -8,7 +8,6 @@ interface AudioLibraryProps {
   savedAudios: SavedAudio[];
   isLoading: boolean;
   onPlay: (audio: SavedAudio) => void;
-  onEdit: (audio: SavedAudio) => void;
   onDelete: (audio: SavedAudio) => void;
   onCreateNew: () => void;
   onViewDetail: (audio: SavedAudio) => void;
@@ -44,7 +43,6 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
   savedAudios,
   isLoading,
   onPlay,
-  onEdit,
   onDelete,
   onCreateNew,
   onViewDetail,
@@ -198,16 +196,6 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
                       <PlayIcon className="w-4 h-4" />
                     </button>
                   )}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onEdit(audio);
-                    }}
-                    className="p-2.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all duration-200"
-                    title="Edit"
-                  >
-                    <EditIcon className="w-4 h-4" />
-                  </button>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();

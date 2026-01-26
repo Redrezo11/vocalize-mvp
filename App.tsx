@@ -330,6 +330,12 @@ const App: React.FC = () => {
   };
 
   const handleEdit = (audio: SavedAudio) => {
+    // For transcript-only entries, go to detail view (where they can create tests)
+    if (audio.isTranscriptOnly) {
+      handleViewDetail(audio);
+      return;
+    }
+    // For audio entries, go to editor
     setEditingAudioId(audio.id);
     setTitle(audio.title);
     setText(audio.transcript);
@@ -790,7 +796,6 @@ const App: React.FC = () => {
           savedAudios={audioStorage.savedAudios}
           isLoading={audioStorage.isLoading}
           onPlay={handlePlayFromLibrary}
-          onEdit={handleEdit}
           onDelete={handleDelete}
           onCreateNew={handleCreateNew}
           onViewDetail={handleViewDetail}
