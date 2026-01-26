@@ -469,7 +469,9 @@ const App: React.FC = () => {
       console.log('[handleSaveTranscript] Result:', result);
 
       if (result) {
+        console.log('[handleSaveTranscript] Setting libraryTab to transcripts');
         setLibraryTab('transcripts');
+        console.log('[handleSaveTranscript] Setting currentView to library');
         setCurrentView('library');
       } else {
         alert('Failed to save transcript. Please try again.');
@@ -597,9 +599,21 @@ const App: React.FC = () => {
             <FileTextIcon className="w-4 h-4" />
             <span className="text-sm">Text Only</span>
           </button>
-          {currentView === 'editor' || currentView === 'library' ? (
+          {currentView === 'editor' || currentView === 'library' || currentView === 'detail' ? (
             <button
-              onClick={() => setCurrentView('library')}
+              onClick={() => {
+                // When in detail view, go back to the correct tab based on entry type
+                if (currentView === 'detail' && selectedAudio) {
+                  console.log('[Nav My Library] From detail view, selectedAudio.isTranscriptOnly:', selectedAudio.isTranscriptOnly);
+                  setLibraryTab(selectedAudio.isTranscriptOnly ? 'transcripts' : 'audio');
+                } else {
+                  // From editor or library view, default to audio tab
+                  setLibraryTab('audio');
+                }
+                setSelectedAudio(null);
+                setAudioTests([]);
+                setCurrentView('library');
+              }}
               onMouseEnter={preloadLibrary}
               onTouchStart={preloadLibrary}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] ${
@@ -791,10 +805,13 @@ const App: React.FC = () => {
   );
 
   // Library view
-  const renderLibrary = () => (
+  const renderLibrary = () => {
+    console.log('[renderLibrary] libraryTab =', libraryTab);
+    return (
     <main className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
       <Suspense fallback={<InlineSpinner />}>
         <AudioLibrary
+          key={libraryTab}
           savedAudios={audioStorage.savedAudios}
           isLoading={audioStorage.isLoading}
           initialTab={libraryTab}
@@ -805,7 +822,7 @@ const App: React.FC = () => {
         />
       </Suspense>
     </main>
-  );
+  );};
 
   // Detail view
   const renderDetail = () => {
@@ -821,6 +838,11 @@ const App: React.FC = () => {
             audio={selectedAudio}
             tests={audioTests}
             onBack={() => {
+              // Go back to the correct tab based on entry type
+              console.log('[AudioDetail onBack] selectedAudio:', selectedAudio?.id, 'isTranscriptOnly:', selectedAudio?.isTranscriptOnly);
+              const targetTab = selectedAudio?.isTranscriptOnly ? 'transcripts' : 'audio';
+              console.log('[AudioDetail onBack] Setting libraryTab to:', targetTab);
+              setLibraryTab(targetTab);
               setSelectedAudio(null);
               setAudioTests([]);
               setCurrentView('library');

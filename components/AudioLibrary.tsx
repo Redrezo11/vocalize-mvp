@@ -49,10 +49,12 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
   onCreateNew,
   onViewDetail,
 }) => {
+  console.log('[AudioLibrary] Rendering with initialTab =', initialTab);
   const [activeTab, setActiveTab] = useState<LibraryTab>(initialTab);
 
   // Sync with initialTab prop when it changes
   useEffect(() => {
+    console.log('[AudioLibrary] useEffect: initialTab changed to', initialTab, '- setting activeTab');
     setActiveTab(initialTab);
   }, [initialTab]);
 
