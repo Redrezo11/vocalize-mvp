@@ -82,6 +82,27 @@ const App: React.FC = () => {
   const analysis = useMemo(() => parseDialogue(text), [text]);
   const [speakerMapping, setSpeakerMapping] = useState<SpeakerVoiceMapping>({});
 
+  // Sort ElevenLabs voices by accent (American first, then British, then others alphabetically)
+  const sortedElevenVoices = useMemo(() => {
+    if (elevenTTS.voices.length === 0) return [];
+    const accentOrder: Record<string, number> = {
+      'american': 1,
+      'british': 2,
+      'australian': 3,
+      'irish': 4,
+    };
+    return [...elevenTTS.voices].sort((a, b) => {
+      const accentA = (a.labels?.accent || 'unknown').toLowerCase();
+      const accentB = (b.labels?.accent || 'unknown').toLowerCase();
+      const orderA = accentOrder[accentA] || 99;
+      const orderB = accentOrder[accentB] || 99;
+      if (orderA !== orderB) return orderA - orderB;
+      // Same accent priority, sort by accent name then by voice name
+      if (accentA !== accentB) return accentA.localeCompare(accentB);
+      return a.name.localeCompare(b.name);
+    });
+  }, [elevenTTS.voices]);
+
   // Config States
   const [browserConfig, setBrowserConfig] = useState<BrowserVoiceConfig>({ voice: null, rate: 1, pitch: 1, volume: 1 });
   const [geminiVoice, setGeminiVoice] = useState('Puck'); // Google's default voice
@@ -891,7 +912,7 @@ const App: React.FC = () => {
                       >
                         {engine === EngineType.BROWSER && browserTTS.voices.map(v => <option key={v.name} value={v.name}>{v.name}</option>)}
                         {engine === EngineType.GEMINI && GEMINI_VOICES.map(v => <option key={v.name} value={v.name}>{v.name} [{v.gender === 'Female' ? 'F' : 'M'}] - {v.style}</option>)}
-                        {engine === EngineType.ELEVEN_LABS && elevenTTS.voices.map(v => <option key={v.voice_id} value={v.voice_id}>{v.name}</option>)}
+                        {engine === EngineType.ELEVEN_LABS && sortedElevenVoices.map(v => <option key={v.voice_id} value={v.voice_id}>{v.name} [{v.labels?.gender === 'female' ? 'F' : v.labels?.gender === 'male' ? 'M' : '?'}] - {v.labels?.accent || 'Unknown'}</option>)}
                       </select>
                     </div>
                   ))}
