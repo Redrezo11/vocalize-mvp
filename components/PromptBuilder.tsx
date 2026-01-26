@@ -312,7 +312,39 @@ Create an engaging listening dialogue for English as a Foreign Language (EFL) le
 ${engine === EngineType.ELEVEN_LABS ? `
 ### ElevenLabs Accent Selection
 
-${accentPreference === 'auto' ? `**Accent Preference: AUTO** - Use your discretion based on character nationality and setting context. Match accents to characters when it makes sense for authenticity.` : accentPreference === 'american' ? `**Accent Preference: AMERICAN** - Prefer American-accented voices for most characters. You may still use other accents when a character's nationality strongly calls for it (e.g., a British character in a UK setting), but default to American voices when neutral.` : `**Accent Preference: BRITISH** - Prefer British-accented voices for most characters. You may still use other accents when a character's nationality strongly calls for it, but default to British voices when neutral.`}
+${accentPreference === 'auto' ? `**Accent Preference: AUTO** - Use the decision tree below to select accents based on character/setting:
+
+\`\`\`
+CHARACTER/SETTING ANALYSIS
+         │
+         ▼
+┌─────────────────────────────┐
+│ Is nationality/region       │
+│ important for this char?    │
+└─────────────────────────────┘
+         │
+    ┌────┴────┐
+    ▼         ▼
+   YES        NO → Use American (default/neutral)
+    │              Rachel, Adam, Antoni, Josh, etc.
+    ▼
+┌─────────────────────────────┐
+│ What region/nationality?    │
+└─────────────────────────────┘
+    │
+    ├─► UK/British → Dorothy (F), Daniel, Dave, George (M)
+    ├─► Irish → Fin (old character voice)
+    ├─► European → Charlotte (Swedish accent)
+    └─► Default → American voices
+\`\`\`
+
+**Key Decision Points:**
+- British setting (UK, London, etc.) → Use British voices
+- Formal/News British character → Daniel (RP accent)
+- Casual/Young British → Dave (Essex accent)
+- Children's stories (classic) → Dorothy
+- Irish/Celtic character → Fin
+- No specific nationality → Default to American` : accentPreference === 'american' ? `**Accent Preference: AMERICAN** - Prefer American-accented voices for most characters. You may still use other accents when a character's nationality strongly calls for it (e.g., a British character in a UK setting), but default to American voices when neutral.` : `**Accent Preference: BRITISH** - Prefer British-accented voices for most characters. You may still use other accents when a character's nationality strongly calls for it, but default to British voices when neutral.`}
 
 **Available Accents by Tier:**
 - **American**: Most voices available - Rachel, Adam, Antoni, Josh, etc.
