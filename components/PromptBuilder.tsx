@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
-import { EngineType } from '../types';
+import React, { useState, useMemo } from 'react';
+import { EngineType, ElevenLabsVoice } from '../types';
 import { ClipboardIcon, CheckCircleIcon, SparklesIcon, XIcon } from './Icons';
 
 interface PromptBuilderProps {
   isOpen: boolean;
   engine: EngineType;
+  elevenLabsVoices?: ElevenLabsVoice[]; // Actual voices from ElevenLabs API
   onClose: () => void;
   onApplyPrompt: (prompt: string, voiceAssignments: Record<string, string>) => void;
 }
@@ -242,11 +243,74 @@ Children's animated               + Mimi + Gigi + Serena (playful variety)
 export const PromptBuilder: React.FC<PromptBuilderProps> = ({
   isOpen,
   engine,
+  elevenLabsVoices = [],
   onClose,
   onApplyPrompt,
 }) => {
   const [difficulty, setDifficulty] = useState<CEFRLevel>('B1');
   const [topic, setTopic] = useState('');
+
+  // Generate dynamic voice list from actual ElevenLabs voices
+  const dynamicElevenLabsVoiceList = useMemo(() => {
+    if (elevenLabsVoices.length === 0) return null;
+
+    const femaleVoices = elevenLabsVoices.filter(v => v.labels?.gender === 'female');
+    const maleVoices = elevenLabsVoices.filter(v => v.labels?.gender === 'male');
+    const otherVoices = elevenLabsVoices.filter(v => !v.labels?.gender || (v.labels?.gender !== 'female' && v.labels?.gender !== 'male'));
+
+    const formatVoice = (v: ElevenLabsVoice) => {
+      const accent = v.labels?.accent || 'unknown';
+      const description = v.labels?.description || v.labels?.use_case || '';
+      return `${v.name} (${accent}${description ? ', ' + description : ''})`;
+    };
+
+    let list = `### Your ElevenLabs Voices (${elevenLabsVoices.length} available)\n\n`;
+
+    if (femaleVoices.length > 0) {
+      list += `**Female Voices (${femaleVoices.length}):**\n`;
+      list += femaleVoices.map(formatVoice).join(', ') + '\n\n';
+    }
+
+    if (maleVoices.length > 0) {
+      list += `**Male Voices (${maleVoices.length}):**\n`;
+      list += maleVoices.map(formatVoice).join(', ') + '\n\n';
+    }
+
+    if (otherVoices.length > 0) {
+      list += `**Other Voices (${otherVoices.length}):**\n`;
+      list += otherVoices.map(formatVoice).join(', ') + '\n\n';
+    }
+
+    list += `**IMPORTANT:** Only use voice names from the list above. Use the exact voice name (e.g., "Sarah", "Adam", "Daniel") without any description text.\n`;
+
+    return list;
+  }, [elevenLabsVoices]);
+
+  // Get example voice names from actual available voices
+  const getVoiceExamples = useMemo(() => {
+    if (elevenLabsVoices.length === 0) {
+      // Fallback to static examples if no voices loaded
+      return {
+        femaleExamples: 'Sarah, Alice, Bella',
+        maleExamples: 'Adam, Daniel, Brian',
+        americanExamples: 'voices with American accent',
+        britishExamples: 'voices with British accent'
+      };
+    }
+
+    const females = elevenLabsVoices.filter(v => v.labels?.gender === 'female').slice(0, 3).map(v => v.name);
+    const males = elevenLabsVoices.filter(v => v.labels?.gender === 'male').slice(0, 3).map(v => v.name);
+    const american = elevenLabsVoices.filter(v => v.labels?.accent?.toLowerCase() === 'american').slice(0, 4).map(v => v.name);
+    const british = elevenLabsVoices.filter(v => v.labels?.accent?.toLowerCase() === 'british').slice(0, 4).map(v => v.name);
+
+    return {
+      femaleExamples: females.length > 0 ? females.join(', ') : 'female voices from the list',
+      maleExamples: males.length > 0 ? males.join(', ') : 'male voices from the list',
+      americanExamples: american.length > 0 ? american.join(', ') : 'American accent voices',
+      britishExamples: british.length > 0 ? british.join(', ') : 'British accent voices'
+    };
+  }, [elevenLabsVoices]);
+
   const [useRandomTopic, setUseRandomTopic] = useState(true);
   const [currentRandomTopic, setCurrentRandomTopic] = useState(() =>
     EFL_TOPICS[Math.floor(Math.random() * EFL_TOPICS.length)]
@@ -263,6 +327,10 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
     if (engine === EngineType.GEMINI) {
       return GEMINI_VOICES_PROMPT;
     } else if (engine === EngineType.ELEVEN_LABS) {
+      // Use actual voices from API if available, otherwise fall back to static list
+      if (dynamicElevenLabsVoiceList) {
+        return dynamicElevenLabsVoiceList;
+      }
       return elevenLabsTier === 'free'
         ? ELEVENLABS_FREE_VOICES_PROMPT
         : ELEVENLABS_FREE_VOICES_PROMPT + ELEVENLABS_PAID_VOICES_PROMPT;
@@ -305,10 +373,10 @@ Create an engaging listening dialogue for English as a Foreign Language (EFL) le
 
 ## Voice Selection Guidelines
 
-1. **For educational content**: Use clear, articulate voices (Charon, Erinome for Gemini; Antoni, Rachel for ElevenLabs)
+1. **For educational content**: Use clear, articulate voices ${engine === EngineType.GEMINI ? '(Charon, Erinome for Gemini)' : `(e.g., ${getVoiceExamples.femaleExamples.split(', ')[0] || 'Sarah'}, ${getVoiceExamples.maleExamples.split(', ')[0] || 'Daniel'})`}
 2. **For dialogues**: Use contrasting voices for different speakers (different genders, styles, or ages)
-3. **For young characters**: Use youthful voices (Leda, Puck for Gemini; Gigi, Josh for ElevenLabs)
-4. **For authority figures**: Use firm/professional voices (Kore, Orus for Gemini; Adam, Daniel for ElevenLabs)
+3. **For young characters**: Use youthful voices ${engine === EngineType.GEMINI ? '(Leda, Puck for Gemini)' : '(pick younger-sounding voices from the list)'}
+4. **For authority figures**: Use firm/professional voices ${engine === EngineType.GEMINI ? '(Kore, Orus for Gemini)' : `(e.g., ${getVoiceExamples.maleExamples.split(', ')[0] || 'Daniel'}, ${getVoiceExamples.maleExamples.split(', ')[1] || 'Adam'})`}
 ${engine === EngineType.ELEVEN_LABS ? `
 ### ElevenLabs Accent Selection
 
@@ -326,25 +394,21 @@ CHARACTER/SETTING ANALYSIS
     ┌────┴────┐
     ▼         ▼
    YES        NO → Use American (default/neutral)
-    │              Rachel, Adam, Antoni, Josh, etc.
+    │              ${getVoiceExamples.americanExamples}
     ▼
 ┌─────────────────────────────┐
 │ What region/nationality?    │
 └─────────────────────────────┘
     │
-    ├─► UK/British → Dorothy (F), Daniel, Dave, George (M)
-    ├─► Irish → Fin (old character voice)
-    ├─► European → Charlotte (Swedish accent)
+    ├─► UK/British → ${getVoiceExamples.britishExamples || 'British accent voices'}
+    ├─► Other accents → Check voice list for matching accents
     └─► Default → American voices
 \`\`\`
 
 **Key Decision Points:**
-- British setting (UK, London, etc.) → Use British voices
-- Formal/News British character → Daniel (RP accent)
-- Casual/Young British → Dave (Essex accent)
-- Children's stories (classic) → Dorothy
-- Irish/Celtic character → Fin
-- No specific nationality → Default to American` : accentPreference === 'american' ? `**Accent Preference: AMERICAN** - Default to American voices unless nationality strongly requires otherwise.
+- British setting (UK, London, etc.) → Use British-accented voices from the list
+- No specific nationality → Default to American
+- Check the voice list above for available accents` : accentPreference === 'american' ? `**Accent Preference: AMERICAN** - Default to American voices unless nationality strongly requires otherwise.
 
 \`\`\`
 CHARACTER ANALYSIS
@@ -358,14 +422,11 @@ CHARACTER ANALYSIS
     ┌────┴────┐
     ▼         ▼
    YES        NO → Use American voice
-    │              Rachel, Adam, Antoni, Josh, etc.
+    │              ${getVoiceExamples.americanExamples}
     ▼
 ┌─────────────────────────────┐
-│ Use matching accent:        │
-│ • UK → Dorothy, Daniel,     │
-│        Dave, George         │
-│ • Irish → Fin               │
-│ • Australian → (PAID only)  │
+│ Use matching accent from    │
+│ the available voices list   │
 └─────────────────────────────┘
 \`\`\`
 
@@ -387,13 +448,11 @@ CHARACTER ANALYSIS
     ┌────┴────┐
     ▼         ▼
    YES        NO → Use British voice
-    │              Dorothy, Daniel, Dave, George
+    │              ${getVoiceExamples.britishExamples || 'British accent voices'}
     ▼
 ┌─────────────────────────────┐
-│ Use matching accent:        │
-│ • US → Rachel, Adam, etc.   │
-│ • Irish → Fin               │
-│ • Australian → (PAID only)  │
+│ Use matching accent from    │
+│ the available voices list   │
 └─────────────────────────────┘
 \`\`\`
 
@@ -401,25 +460,9 @@ CHARACTER ANALYSIS
 - British is the DEFAULT for all neutral/unspecified characters
 - Only switch accents when nationality is EXPLICIT in the script
 - "A teacher" → British | "An American teacher" → American
-- FREE tier has limited British voices (4 total) - may need American for variety
 - When in doubt, use British`}
 
-**Available Accents by Tier:**
-- **American**: Most voices available - Rachel, Adam, Antoni, Josh, etc.
-- **British**: Dorothy (F), Dave, Daniel, George (M) on FREE; + Alice, Lily (F), Joseph (M) on PAID
-- **Irish**: Fin on FREE (old sailor character); + Jeremy on PAID (American-Irish blend)
-- **Australian**: Charlie, James on PAID only
-- **Swedish-English**: Charlotte on FREE; + Mimi on PAID
-- **Italian-English**: Giovanni on PAID only
-- **Southern American**: Grace on PAID only
-
-${accentPreference === 'american' ? `**American Voice Options (${elevenLabsTier === 'free' ? 'FREE' : 'PAID'} tier):**
-Female: Rachel (Calm), Domi (Strong), Sarah (Soft), Emily (Calm), Freya (Neutral), Gigi (Childish)${elevenLabsTier === 'paid' ? ', Glinda, Matilda, Nicole, Serena' : ''}
-Male: Adam (Deep), Antoni (Well-rounded), Arnold (Crisp), Josh (Deep), Sam (Raspy), Thomas (Calm), Clyde, Harry, Callum${elevenLabsTier === 'paid' ? ', Bill, Brian, Chris, Drew, Ethan, Liam, Michael, Patrick, Paul, Jessie' : ''}` : accentPreference === 'british' ? `**British Voice Options (${elevenLabsTier === 'free' ? 'FREE' : 'PAID'} tier):**
-Female: Dorothy (Pleasant, RP)${elevenLabsTier === 'paid' ? ', Alice (Confident), Lily (Raspy)' : ''}
-Male: Dave (Conversational, Essex), Daniel (Deep, RP/Formal), George (Raspy, RP)${elevenLabsTier === 'paid' ? ', Joseph (Professional)' : ''}
-
-Note: British voice selection is more limited. For variety, you may supplement with American voices for some characters.` : ''}
+**CRITICAL: Only use voices from the available voice list provided below. Do NOT use voice names that aren't in the list.**
 ` : ''}
 
 ${getVoiceReference()}

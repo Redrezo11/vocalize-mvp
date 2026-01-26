@@ -222,7 +222,7 @@ const App: React.FC = () => {
 
         // Map voice names to voice IDs for ElevenLabs
         if (engine === EngineType.ELEVEN_LABS && elevenTTS.voices.length > 0) {
-          console.log('[LLM Parser] Available ElevenLabs voices:', elevenTTS.voices.map(v => v.name));
+          console.log('[LLM Parser] Available ElevenLabs voices:', elevenTTS.voices.map(v => v.name).join(', '));
           const mappedAssignments: SpeakerVoiceMapping = {};
           Object.entries(parsed.voiceAssignments).forEach(([speaker, voiceName]) => {
             const searchName = voiceName.toLowerCase().trim();
@@ -285,10 +285,10 @@ const App: React.FC = () => {
     if (Object.keys(pendingVoiceAssignmentsRef.current).length === 0) return;
 
     console.log('[Voice Loader] Applying pending voice assignments:', pendingVoiceAssignmentsRef.current);
-    console.log('[Voice Loader] Available voices:', elevenTTS.voices.map(v => v.name));
+    console.log('[Voice Loader] Available voices:', elevenTTS.voices.map(v => v.name).join(', '));
 
     const mappedAssignments: SpeakerVoiceMapping = {};
-    Object.entries(pendingVoiceAssignmentsRef.current).forEach(([speaker, voiceName]) => {
+    Object.entries(pendingVoiceAssignmentsRef.current).forEach(([speaker, voiceName]: [string, string]) => {
       const searchName = voiceName.toLowerCase().trim();
       // Try exact match first, then starts-with, then includes
       let voice = elevenTTS.voices.find(v => v.name.toLowerCase() === searchName);
@@ -1148,6 +1148,7 @@ const App: React.FC = () => {
       <PromptBuilder
         isOpen={showPromptBuilder}
         engine={engine}
+        elevenLabsVoices={elevenTTS.voices}
         onClose={() => setShowPromptBuilder(false)}
         onApplyPrompt={(prompt, voiceAssignments) => {
           // For now, just copy the prompt to clipboard
