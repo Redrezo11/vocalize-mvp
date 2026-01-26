@@ -123,7 +123,7 @@ export const AudioDetail: React.FC<AudioDetailProps> = ({
       <div className="flex items-center justify-between mb-8">
         <button
           onClick={onBack}
-          className="flex items-center gap-2 text-slate-600 hover:text-slate-900 transition-colors"
+          className="flex items-center gap-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 px-3 py-2 rounded-xl transition-all duration-200"
         >
           <ArrowLeftIcon className="w-4 h-4" />
           <span className="font-medium">Back to Library</span>
@@ -131,52 +131,51 @@ export const AudioDetail: React.FC<AudioDetailProps> = ({
         <div className="flex items-center gap-2">
           <button
             onClick={() => onEdit(audio)}
-            className="flex items-center gap-2 px-3 py-2 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+            className="flex items-center gap-2 px-4 py-2 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all duration-200"
           >
             <EditIcon className="w-4 h-4" />
-            <span className="text-sm font-medium">Edit</span>
+            <span className="text-sm font-semibold">Edit</span>
           </button>
           <button
             onClick={handleDelete}
-            className="flex items-center gap-2 px-3 py-2 text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+            className="flex items-center gap-2 px-4 py-2 text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200"
           >
             <TrashIcon className="w-4 h-4" />
-            <span className="text-sm font-medium">Delete</span>
+            <span className="text-sm font-semibold">Delete</span>
           </button>
         </div>
       </div>
 
       {/* Main Content */}
-      <div className="bg-white rounded-2xl border border-slate-200/60 overflow-hidden">
+      <div className="bg-white/80 backdrop-blur-sm rounded-3xl border border-slate-200/60 overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-300">
         {/* Title Section */}
         <div className="p-6 border-b border-slate-100">
-          <h1 className="text-2xl font-bold text-slate-900">{audio.title}</h1>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-sm text-slate-500">
-            <span>Created {formatDate(audio.createdAt)}</span>
-            <span className="text-slate-300">·</span>
-            <span>Engine: {getEngineLabel(audio.engine)}</span>
-            <span className="text-slate-300">·</span>
-            <span>
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">{audio.title}</h1>
+          <div className="flex flex-wrap items-center gap-2 mt-3 text-sm">
+            <span className="px-2.5 py-1 bg-slate-100 text-slate-600 rounded-lg font-medium">Created {formatDate(audio.createdAt)}</span>
+            <span className="px-2.5 py-1 bg-indigo-50 text-indigo-600 rounded-lg font-medium">{getEngineLabel(audio.engine)}</span>
+            <span className="px-2.5 py-1 bg-slate-100 text-slate-600 rounded-lg font-medium">
               {audio.speakers.length} {audio.speakers.length === 1 ? 'speaker' : 'speakers'}
-              {audio.speakers.length > 0 && `: ${audio.speakers.join(', ')}`}
             </span>
           </div>
         </div>
 
         {/* Audio Player */}
-        <div className="p-6 bg-slate-900">
+        <div className="p-6 bg-gradient-to-br from-slate-900 via-slate-900 to-slate-800 relative overflow-hidden">
+          {/* Subtle gradient overlay */}
+          <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 via-transparent to-violet-500/5 pointer-events-none" />
           {audioUrl ? (
-            <>
+            <div className="relative">
               <audio ref={audioRef} src={audioUrl} preload="metadata" />
               <div className="flex items-center gap-4">
                 <button
                   onClick={togglePlay}
-                  className="w-12 h-12 flex items-center justify-center bg-indigo-600 text-white rounded-full hover:bg-indigo-700 transition-colors"
+                  className={`w-14 h-14 flex items-center justify-center bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-full hover:from-indigo-500 hover:to-violet-500 hover:scale-105 active:scale-95 transition-all duration-200 shadow-lg shadow-indigo-500/40 ${isPlaying ? 'ring-4 ring-indigo-500/30' : ''}`}
                 >
                   {isPlaying ? (
-                    <PauseIcon className="w-5 h-5" />
+                    <PauseIcon className="w-6 h-6" />
                   ) : (
-                    <PlayIcon className="w-5 h-5 ml-0.5" />
+                    <PlayIcon className="w-6 h-6 ml-0.5" />
                   )}
                 </button>
                 <div className="flex-1">
@@ -186,29 +185,29 @@ export const AudioDetail: React.FC<AudioDetailProps> = ({
                     max={duration || 0}
                     value={currentTime}
                     onChange={handleSeek}
-                    className="w-full h-2 bg-slate-700 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-md"
+                    className="w-full h-2 bg-slate-700 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-gradient-to-r [&::-webkit-slider-thumb]:from-indigo-400 [&::-webkit-slider-thumb]:to-violet-400 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:shadow-indigo-500/50 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white"
                   />
-                  <div className="flex justify-between mt-1 text-xs text-slate-400">
+                  <div className="flex justify-between mt-2 text-xs text-slate-400 font-medium">
                     <span>{formatTime(currentTime)}</span>
                     <span>{formatTime(duration)}</span>
                   </div>
                 </div>
               </div>
-            </>
+            </div>
           ) : (
-            <div className="text-center py-4 text-slate-400">
-              <p>No audio file available</p>
-              <p className="text-sm mt-1">Edit this entry to generate audio</p>
+            <div className="relative text-center py-6 text-slate-400">
+              <p className="font-medium">No audio file available</p>
+              <p className="text-sm mt-1 text-slate-500">Edit this entry to generate audio</p>
             </div>
           )}
         </div>
 
         {/* Transcript Section */}
         <div className="p-6">
-          <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">
+          <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4">
             Transcript
           </h2>
-          <div className="bg-slate-50 rounded-xl p-4 max-h-96 overflow-y-auto">
+          <div className="bg-gradient-to-br from-slate-50 to-slate-100/50 rounded-2xl p-5 max-h-96 overflow-y-auto border border-slate-100">
             <pre className="whitespace-pre-wrap font-sans text-slate-700 text-sm leading-relaxed">
               {audio.transcript}
             </pre>
@@ -218,16 +217,16 @@ export const AudioDetail: React.FC<AudioDetailProps> = ({
         {/* Speaker Mapping Section */}
         {audio.speakers.length > 0 && Object.keys(audio.speakerMapping).length > 0 && (
           <div className="p-6 pt-0">
-            <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">
+            <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4">
               Voice Assignments
             </h2>
             <div className="flex flex-wrap gap-2">
               {audio.speakers.map((speaker) => (
                 <div
                   key={speaker}
-                  className="px-3 py-1.5 bg-slate-100 rounded-lg text-sm"
+                  className="px-3 py-2 bg-gradient-to-r from-slate-100 to-slate-50 rounded-xl text-sm border border-slate-200/60"
                 >
-                  <span className="font-medium text-slate-700">{speaker}:</span>{' '}
+                  <span className="font-semibold text-slate-700">{speaker}:</span>{' '}
                   <span className="text-slate-500">{audio.speakerMapping[speaker] || 'Not assigned'}</span>
                 </div>
               ))}
@@ -238,12 +237,12 @@ export const AudioDetail: React.FC<AudioDetailProps> = ({
         {/* Tests Section */}
         <div className="p-6 pt-0">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+            <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
               Listening Tests ({tests.length})
             </h2>
             <button
               onClick={() => onCreateTest(audio)}
-              className="flex items-center gap-2 px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+              className="flex items-center gap-2 px-4 py-2 text-sm bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-xl font-semibold hover:from-indigo-500 hover:to-violet-500 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 shadow-md shadow-indigo-500/25"
             >
               <ClipboardIcon className="w-4 h-4" />
               Create Test
@@ -251,26 +250,28 @@ export const AudioDetail: React.FC<AudioDetailProps> = ({
           </div>
 
           {tests.length === 0 ? (
-            <div className="bg-slate-50 rounded-xl p-6 text-center">
-              <ClipboardIcon className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-              <p className="text-slate-500 text-sm">No tests created yet</p>
-              <p className="text-slate-400 text-xs mt-1">Create a listening test to practice with this audio</p>
+            <div className="bg-gradient-to-br from-slate-50 to-slate-100/50 rounded-2xl p-8 text-center border border-slate-100">
+              <div className="w-12 h-12 bg-slate-200/80 rounded-xl flex items-center justify-center mx-auto mb-3">
+                <ClipboardIcon className="w-6 h-6 text-slate-400" />
+              </div>
+              <p className="text-slate-600 font-medium">No tests created yet</p>
+              <p className="text-slate-400 text-sm mt-1">Create a listening test to practice with this audio</p>
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-3">
               {tests.map((test) => {
                 const badge = getTestTypeBadge(test.type);
                 return (
                   <div
                     key={test.id}
-                    className="flex items-center justify-between p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors"
+                    className="flex items-center justify-between p-4 bg-gradient-to-r from-slate-50 to-slate-50/50 rounded-2xl hover:from-slate-100 hover:to-slate-50 border border-slate-100 hover:border-slate-200 transition-all duration-200"
                   >
                     <div className="flex items-start gap-3">
-                      <span className={`px-2 py-1 text-xs font-medium rounded-md ${badge.color}`}>
+                      <span className={`px-2.5 py-1 text-xs font-semibold rounded-lg ${badge.color}`}>
                         {badge.label}
                       </span>
                       <div>
-                        <p className="font-medium text-slate-900">{test.title}</p>
+                        <p className="font-semibold text-slate-900">{test.title}</p>
                         <p className="text-sm text-slate-500">
                           {test.questions.length} question{test.questions.length !== 1 ? 's' : ''}
                         </p>
@@ -279,7 +280,7 @@ export const AudioDetail: React.FC<AudioDetailProps> = ({
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => onEditTest(test)}
-                        className="p-2 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                        className="p-2.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all duration-200"
                         title="Edit test"
                       >
                         <EditIcon className="w-4 h-4" />
@@ -290,14 +291,14 @@ export const AudioDetail: React.FC<AudioDetailProps> = ({
                             onDeleteTest(test);
                           }
                         }}
-                        className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        className="p-2.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200"
                         title="Delete test"
                       >
                         <TrashIcon className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => onTakeTest(test)}
-                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                        className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-xl font-semibold hover:from-indigo-500 hover:to-violet-500 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 shadow-md shadow-indigo-500/25"
                       >
                         <CheckCircleIcon className="w-4 h-4" />
                         Take Test

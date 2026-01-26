@@ -279,32 +279,44 @@ export const SaveDialog: React.FC<SaveDialogProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        className="absolute inset-0 bg-slate-900/60 backdrop-blur-md"
         onClick={onCancel}
       />
 
       {/* Dialog */}
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
-        <div className="p-6">
-          <h2 className="text-xl font-bold text-slate-900 mb-1">Save to Library</h2>
-          <p className="text-sm text-slate-500 mb-6">Choose how to title your audio</p>
+      <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden ring-1 ring-slate-200/50">
+        <div className="p-6 pb-4">
+          <div className="flex items-center gap-3 mb-1">
+            <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-violet-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/30">
+              <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+              </svg>
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-slate-900">Save to Library</h2>
+              <p className="text-sm text-slate-500">Choose how to title your audio</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="px-6 pb-6">
 
           {/* Title Mode Selection */}
           <div className="space-y-3 mb-6">
             {/* Quota exhausted notice with GPT fallback option */}
             {hasAIKey && !canUseAI && (
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl">
-                <p className="text-sm text-amber-700">
+              <div className="p-4 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/60 rounded-2xl">
+                <p className="text-sm text-amber-700 font-medium">
                   Gemini AI quota reached for today.
                 </p>
                 {canUseGPTFallback && !usingGPT && !aiTitle && (
                   <button
                     onClick={handleGenerateGPTTitle}
                     disabled={isGeneratingAI}
-                    className="mt-2 w-full py-2 px-3 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                    className="mt-3 w-full py-2.5 px-3 bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-sm font-semibold rounded-xl hover:from-emerald-600 hover:to-teal-600 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 disabled:opacity-50 shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2"
                   >
                     {isGeneratingAI ? (
                       <>
@@ -320,7 +332,7 @@ export const SaveDialog: React.FC<SaveDialogProps> = ({
                   </button>
                 )}
                 {!canUseGPTFallback && !hasOpenAIKey && (
-                  <p className="mt-1 text-xs text-amber-600">
+                  <p className="mt-2 text-xs text-amber-600">
                     Add VITE_OPENAI_API_KEY to enable GPT fallback.
                   </p>
                 )}
@@ -382,12 +394,17 @@ export const SaveDialog: React.FC<SaveDialogProps> = ({
             {/* AI Title Option - only show if quota available */}
             {canUseAI && (
               <label
-                className={`flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                className={`flex items-start gap-3 p-4 rounded-2xl border-2 cursor-pointer transition-all duration-200 ${
                   titleMode === 'ai'
-                    ? 'border-indigo-500 bg-indigo-50'
-                    : 'border-slate-200 hover:border-slate-300'
+                    ? 'border-indigo-500 bg-gradient-to-r from-indigo-50 to-violet-50 shadow-sm'
+                    : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/50'
                 }`}
               >
+                <div className={`mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all duration-200 ${
+                  titleMode === 'ai' ? 'border-indigo-500 bg-indigo-500' : 'border-slate-300'
+                }`}>
+                  {titleMode === 'ai' && <div className="w-2 h-2 bg-white rounded-full" />}
+                </div>
                 <input
                   type="radio"
                   name="titleMode"
@@ -399,7 +416,7 @@ export const SaveDialog: React.FC<SaveDialogProps> = ({
                       handleGenerateAITitle();
                     }
                   }}
-                  className="mt-1 text-indigo-600 focus:ring-indigo-500"
+                  className="sr-only"
                 />
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
@@ -445,24 +462,29 @@ export const SaveDialog: React.FC<SaveDialogProps> = ({
 
             {/* Auto Title Option */}
             <label
-              className={`flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${
+              className={`flex items-start gap-3 p-4 rounded-2xl border-2 cursor-pointer transition-all duration-200 ${
                 titleMode === 'auto'
-                  ? 'border-indigo-500 bg-indigo-50'
-                  : 'border-slate-200 hover:border-slate-300'
+                  ? 'border-indigo-500 bg-gradient-to-r from-indigo-50 to-violet-50 shadow-sm'
+                  : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/50'
               }`}
             >
+              <div className={`mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all duration-200 ${
+                titleMode === 'auto' ? 'border-indigo-500 bg-indigo-500' : 'border-slate-300'
+              }`}>
+                {titleMode === 'auto' && <div className="w-2 h-2 bg-white rounded-full" />}
+              </div>
               <input
                 type="radio"
                 name="titleMode"
                 checked={titleMode === 'auto'}
                 onChange={() => setTitleMode('auto')}
-                className="mt-1 text-indigo-600 focus:ring-indigo-500"
+                className="sr-only"
               />
               <div className="flex-1">
-                <span className="font-medium text-slate-900">Use first line</span>
+                <span className="font-semibold text-slate-900">Use first line</span>
                 <p className="text-sm text-slate-500 mt-1">First words of your transcript</p>
                 {titleMode === 'auto' && (
-                  <div className="mt-3 p-3 bg-white rounded-lg border border-slate-200">
+                  <div className="mt-3 p-3 bg-white rounded-xl border border-slate-200 shadow-sm">
                     <p className="text-sm font-medium text-slate-700">{autoTitle}</p>
                   </div>
                 )}
@@ -471,21 +493,26 @@ export const SaveDialog: React.FC<SaveDialogProps> = ({
 
             {/* Manual Title Option */}
             <label
-              className={`flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${
+              className={`flex items-start gap-3 p-4 rounded-2xl border-2 cursor-pointer transition-all duration-200 ${
                 titleMode === 'manual'
-                  ? 'border-indigo-500 bg-indigo-50'
-                  : 'border-slate-200 hover:border-slate-300'
+                  ? 'border-indigo-500 bg-gradient-to-r from-indigo-50 to-violet-50 shadow-sm'
+                  : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/50'
               }`}
             >
+              <div className={`mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all duration-200 ${
+                titleMode === 'manual' ? 'border-indigo-500 bg-indigo-500' : 'border-slate-300'
+              }`}>
+                {titleMode === 'manual' && <div className="w-2 h-2 bg-white rounded-full" />}
+              </div>
               <input
                 type="radio"
                 name="titleMode"
                 checked={titleMode === 'manual'}
                 onChange={() => setTitleMode('manual')}
-                className="mt-1 text-indigo-600 focus:ring-indigo-500"
+                className="sr-only"
               />
               <div className="flex-1">
-                <span className="font-medium text-slate-900">Enter title manually</span>
+                <span className="font-semibold text-slate-900">Enter title manually</span>
                 <p className="text-sm text-slate-500 mt-1">Type your own custom title</p>
                 {titleMode === 'manual' && (
                   <input
@@ -493,7 +520,7 @@ export const SaveDialog: React.FC<SaveDialogProps> = ({
                     value={manualTitle}
                     onChange={(e) => setManualTitle(e.target.value)}
                     placeholder="Enter title..."
-                    className="mt-3 w-full p-3 bg-white rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                    className="mt-3 w-full p-3 bg-white rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-300 transition-all duration-200 shadow-sm"
                     autoFocus
                     autoComplete="off"
                   />
@@ -504,16 +531,16 @@ export const SaveDialog: React.FC<SaveDialogProps> = ({
         </div>
 
         {/* Actions */}
-        <div className="flex gap-3 p-4 bg-slate-50 border-t border-slate-100">
+        <div className="flex gap-3 p-4 bg-gradient-to-r from-slate-50 to-slate-100/80 border-t border-slate-200/60">
           <button
             onClick={onCancel}
-            className="flex-1 py-3 px-4 text-slate-700 font-medium rounded-xl hover:bg-slate-200 transition-colors"
+            className="flex-1 py-3 px-4 text-slate-600 font-semibold rounded-xl hover:bg-white hover:text-slate-900 hover:shadow-sm transition-all duration-200"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
-            className="flex-1 py-3 px-4 bg-indigo-600 text-white font-medium rounded-xl hover:bg-indigo-700 transition-colors"
+            className="flex-1 py-3 px-4 bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-semibold rounded-xl hover:from-indigo-500 hover:to-violet-500 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 shadow-lg shadow-indigo-500/30"
           >
             Save
           </button>

@@ -547,25 +547,25 @@ const App: React.FC = () => {
 
   // Navigation header
   const renderNav = () => (
-    <nav className="sticky top-0 z-30 bg-[#FAFAFA]/80 backdrop-blur-md border-b border-slate-200/60 px-6 py-4">
+    <nav className="sticky top-0 z-30 bg-white/70 backdrop-blur-xl border-b border-slate-200/50 shadow-sm shadow-slate-200/50 px-6 py-3">
       <div className="max-w-7xl mx-auto flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="h-8 w-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white shadow-md shadow-indigo-200">
+        <div className="flex items-center gap-3 group cursor-pointer" onClick={() => setCurrentView('editor')}>
+          <div className="h-9 w-9 bg-gradient-to-br from-indigo-500 to-violet-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-500/30 group-hover:shadow-indigo-500/50 group-hover:scale-105 transition-all duration-200">
             <Volume2Icon className="w-5 h-5" />
           </div>
-          <span className="font-bold text-xl tracking-tight text-slate-900">Vocalize</span>
+          <span className="font-bold text-xl tracking-tight bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">Vocalize</span>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           {currentView === 'editor' && analysis.isDialogue && (
-            <span className="px-3 py-1 bg-indigo-50 text-indigo-700 text-xs font-bold rounded-full border border-indigo-100 uppercase">
-              {analysis.speakers.length} Speakers Detected
+            <span className="px-3 py-1.5 bg-gradient-to-r from-indigo-50 to-violet-50 text-indigo-700 text-xs font-semibold rounded-full border border-indigo-100/80 shadow-sm">
+              {analysis.speakers.length} Speakers
             </span>
           )}
           <button
             onClick={handleEnterClassroom}
             onMouseEnter={preloadClassroom}
             onTouchStart={preloadClassroom}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-800 text-white rounded-xl font-medium hover:bg-slate-700 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl font-medium hover:bg-slate-800 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 shadow-sm"
             title="Enter Classroom Mode"
           >
             <PresentationIcon className="w-4 h-4" />
@@ -573,10 +573,10 @@ const App: React.FC = () => {
           </button>
           <button
             onClick={() => setCurrentView('transcript')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium transition-colors ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] ${
               currentView === 'transcript'
-                ? 'bg-emerald-600 text-white'
-                : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg shadow-emerald-500/30'
+                : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/50'
             }`}
             title="Text-only mode - create tests without storing audio"
           >
@@ -588,7 +588,7 @@ const App: React.FC = () => {
               onClick={() => setCurrentView('library')}
               onMouseEnter={preloadLibrary}
               onTouchStart={preloadLibrary}
-              className="flex items-center gap-2 px-4 py-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors"
+              className="flex items-center gap-2 px-4 py-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
             >
               <FolderIcon className="w-4 h-4" />
               <span className="text-sm font-medium">My Library</span>
@@ -596,7 +596,7 @@ const App: React.FC = () => {
           ) : (
             <button
               onClick={handleCreateNew}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-xl font-medium hover:from-indigo-500 hover:to-violet-500 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 shadow-lg shadow-indigo-500/30"
             >
               <PlusIcon className="w-4 h-4" />
               <span className="text-sm">New Audio</span>
@@ -611,17 +611,17 @@ const App: React.FC = () => {
   const renderEditor = () => (
     <main className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
       <div className="lg:col-span-7 flex flex-col order-2 lg:order-1">
-        <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200/60 p-6 flex flex-col">
+        <div className="flex-1 bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm hover:shadow-md transition-shadow duration-300 border border-slate-200/60 p-6 flex flex-col">
           <input
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Enter title..."
-            className="text-xl font-bold text-slate-900 bg-transparent border-0 border-b border-slate-200 pb-3 mb-4 focus:outline-none focus:border-indigo-500 transition-colors"
+            className="text-xl font-bold text-slate-900 bg-transparent border-0 border-b-2 border-slate-200 pb-3 mb-4 focus:outline-none focus:border-indigo-500 transition-all duration-200 placeholder:text-slate-400"
             autoComplete="off"
           />
           <textarea
-            className="w-full min-h-[450px] resize-none text-lg leading-8 text-slate-700 bg-transparent border-0 focus:ring-0 p-0 font-medium"
+            className="w-full min-h-[450px] resize-none text-lg leading-8 text-slate-700 bg-transparent border-0 focus:ring-0 p-0 font-medium placeholder:text-slate-400"
             placeholder="Type or paste your script..."
             value={text}
             onChange={(e) => setText(e.target.value)}
@@ -630,11 +630,13 @@ const App: React.FC = () => {
       </div>
 
       <div className="lg:col-span-5 order-1 lg:order-2 space-y-6">
-        <div className="sticky top-28 space-y-6">
-          <div className="bg-slate-900 rounded-2xl p-6 shadow-xl relative group">
-            <div className="h-24 flex items-center justify-center">
+        <div className="sticky top-24 space-y-6">
+          <div className={`bg-gradient-to-br from-slate-900 via-slate-900 to-slate-800 rounded-2xl p-6 shadow-2xl relative overflow-hidden transition-all duration-300 ${isPlaying ? 'shadow-indigo-500/20 ring-1 ring-indigo-500/30' : ''}`}>
+            {/* Subtle gradient overlay */}
+            <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 via-transparent to-violet-500/5 pointer-events-none" />
+            <div className="relative h-24 flex items-center justify-center">
               {isLoading ? (
-                <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+                <div className="w-8 h-8 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin"></div>
               ) : (
                 <Suspense fallback={<VisualizerFallback />}>
                   <Visualizer isPlaying={isPlaying} />
@@ -643,49 +645,52 @@ const App: React.FC = () => {
             </div>
             {/* Quota exceeded warning */}
             {engine === EngineType.GEMINI && geminiTTS.quotaExceeded && (
-              <div className="mb-3 p-2 bg-amber-500/20 border border-amber-500/30 rounded-lg">
-                <p className="text-xs text-amber-200 text-center">Gemini quota exceeded. Try again later or use a different engine.</p>
+              <div className="relative mb-3 p-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl backdrop-blur-sm">
+                <p className="text-xs text-amber-300 text-center font-medium">Gemini quota exceeded. Try again later or use a different engine.</p>
               </div>
             )}
-            <div className="mt-4 flex items-center gap-3">
+            <div className="relative mt-4 flex items-center gap-3">
               <button
                 onClick={handlePlay}
                 disabled={isLoading || !text || (engine === EngineType.GEMINI && geminiTTS.quotaExceeded)}
-                className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 transition-all disabled:opacity-50"
+                className="flex-1 py-3.5 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-xl font-semibold hover:from-indigo-500 hover:to-violet-500 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 disabled:opacity-50 disabled:hover:scale-100 shadow-lg shadow-indigo-500/30"
                 title={engine === EngineType.GEMINI && geminiTTS.quotaExceeded ? 'Gemini quota exceeded' : ''}
               >
                 <PlayIcon className="w-5 h-5 mx-auto" />
               </button>
-              <button onClick={handleStop} className="p-3 bg-slate-800 text-slate-300 rounded-xl hover:bg-slate-700">
+              <button
+                onClick={handleStop}
+                className="p-3.5 bg-slate-800/80 text-slate-300 rounded-xl hover:bg-slate-700 hover:text-white hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 border border-slate-700/50"
+              >
                 <StopIcon className="w-5 h-5" />
               </button>
             </div>
             <button
               onClick={handleSaveClick}
               disabled={!text.trim() || (engine === EngineType.GEMINI && geminiTTS.quotaExceeded) || isLoading}
-              className="w-full mt-3 py-3 bg-slate-800 text-slate-300 rounded-xl font-medium hover:bg-slate-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+              className="relative w-full mt-3 py-3 bg-gradient-to-r from-slate-800 to-slate-700 text-slate-200 rounded-xl font-medium hover:from-slate-700 hover:to-slate-600 hover:text-white hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 disabled:opacity-50 disabled:hover:scale-100 flex items-center justify-center gap-2 border border-slate-600/30"
               title={engine === EngineType.GEMINI && geminiTTS.quotaExceeded ? 'Gemini quota exceeded' : 'Generates audio and saves to library'}
             >
               <SaveIcon className="w-4 h-4" />
               <span>{editingAudioId ? 'Update' : 'Quick Save'}</span>
               {engine === EngineType.ELEVEN_LABS && lastGeneratedBlob && (
-                <span className="ml-1 w-2 h-2 bg-green-500 rounded-full animate-pulse" title="Audio cached - faster save" />
+                <span className="ml-1 w-2 h-2 bg-emerald-400 rounded-full animate-pulse shadow-sm shadow-emerald-400/50" title="Audio cached - faster save" />
               )}
               {engine === EngineType.GEMINI && geminiPlaybackSuccess && (
-                <span className="ml-1 w-2 h-2 bg-blue-500 rounded-full animate-pulse" title="Audio verified" />
+                <span className="ml-1 w-2 h-2 bg-blue-400 rounded-full animate-pulse shadow-sm shadow-blue-400/50" title="Audio verified" />
               )}
             </button>
           </div>
 
-          <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-6 space-y-6">
+          <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/60 shadow-sm hover:shadow-md transition-shadow duration-300 p-6 space-y-6">
             <div>
-              <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 block">Engine</label>
-              <div className="bg-slate-100 p-1 rounded-xl flex gap-1">
+              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 block">Engine</label>
+              <div className="bg-slate-100/80 p-1.5 rounded-xl flex gap-1">
                 {[EngineType.BROWSER, EngineType.GEMINI, EngineType.ELEVEN_LABS].map(type => (
                   <button
                     key={type}
                     onClick={() => { handleStop(); setEngine(type); }}
-                    className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${engine === type ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                    className={`flex-1 py-2.5 text-xs font-bold rounded-lg transition-all duration-200 ${engine === type ? 'bg-white text-slate-900 shadow-md' : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'}`}
                   >
                     {type.replace('_', ' ')}
                   </button>
@@ -694,12 +699,12 @@ const App: React.FC = () => {
             </div>
 
             {engine === EngineType.ELEVEN_LABS && (
-              <div className="space-y-4 animate-in fade-in duration-300">
+              <div className="space-y-4">
                 {!elevenTTS.hasEnvKey && (
                   <input
                     type="password"
                     placeholder="ElevenLabs API Key"
-                    className="w-full bg-slate-50 border border-slate-200 text-sm rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500/20"
+                    className="w-full bg-slate-50/80 border border-slate-200 text-sm rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-300 transition-all duration-200"
                     value={elevenLabsKey}
                     onChange={(e) => setElevenLabsKey(e.target.value)}
                     onBlur={() => elevenTTS.fetchVoices(elevenLabsKey)}
@@ -708,10 +713,16 @@ const App: React.FC = () => {
                   />
                 )}
                 {elevenTTS.voices.length > 0 && (
-                  <p className="text-xs text-green-600 font-medium">{elevenTTS.voices.length} voices loaded</p>
+                  <p className="text-xs text-emerald-600 font-semibold flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
+                    {elevenTTS.voices.length} voices loaded
+                  </p>
                 )}
                 {elevenTTS.hasEnvKey && elevenTTS.voices.length === 0 && (
-                  <p className="text-xs text-slate-500">Loading voices...</p>
+                  <p className="text-xs text-slate-500 flex items-center gap-2">
+                    <span className="w-3 h-3 border border-slate-400 border-t-transparent rounded-full animate-spin"></span>
+                    Loading voices...
+                  </p>
                 )}
               </div>
             )}
@@ -719,15 +730,20 @@ const App: React.FC = () => {
             {analysis.isDialogue && (
               <div className="pt-4 border-t border-slate-100">
                 <div className="flex items-center justify-between mb-4">
-                  <label className="text-xs font-bold text-slate-400 uppercase">Cast Characters</label>
-                  <button onClick={() => setSpeakerMapping(performSmartCast(analysis.speakers, {}, true))} className="text-xs font-bold text-indigo-600 hover:text-indigo-700">Magic Cast</button>
+                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Cast Characters</label>
+                  <button
+                    onClick={() => setSpeakerMapping(performSmartCast(analysis.speakers, {}, true))}
+                    className="text-xs font-bold text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 px-2 py-1 rounded-md transition-all duration-200"
+                  >
+                    ✨ Magic Cast
+                  </button>
                 </div>
-                <div className="space-y-3">
+                <div className="space-y-2">
                   {analysis.speakers.map((speaker) => (
-                    <div key={speaker} className="flex items-center gap-3 p-2 bg-slate-50 rounded-lg border border-slate-100">
-                      <span className="text-xs font-bold text-slate-700 w-16 truncate">{speaker}</span>
+                    <div key={speaker} className="flex items-center gap-3 p-2.5 bg-gradient-to-r from-slate-50 to-slate-50/50 rounded-xl border border-slate-100 hover:border-slate-200 transition-colors duration-200">
+                      <span className="text-xs font-bold text-slate-700 w-20 truncate">{speaker}</span>
                       <select
-                        className="flex-1 text-xs p-1.5 bg-white border border-slate-200 rounded-md"
+                        className="flex-1 text-xs p-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-300 transition-all duration-200 cursor-pointer"
                         value={speakerMapping[speaker] || ''}
                         onChange={(e) => setSpeakerMapping(prev => ({ ...prev, [speaker]: e.target.value }))}
                       >
@@ -745,7 +761,7 @@ const App: React.FC = () => {
           {editingAudioId && (
             <button
               onClick={handleCreateNew}
-              className="w-full py-2 text-sm text-slate-500 hover:text-slate-700 transition-colors flex items-center justify-center gap-2"
+              className="w-full py-2.5 text-sm text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
             >
               <ArrowLeftIcon className="w-4 h-4" />
               Cancel editing and create new
