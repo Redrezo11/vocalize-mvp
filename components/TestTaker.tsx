@@ -28,9 +28,9 @@ export const TestTaker: React.FC<TestTakerProps> = ({ test, audio, onComplete, o
 
   const handleRestart = () => {
     if (!audioRef.current) return;
+    audioRef.current.pause();
     audioRef.current.currentTime = 0;
-    audioRef.current.play();
-    setIsPlaying(true);
+    setIsPlaying(false);
   };
 
   const updateAnswer = (questionId: string, answer: string) => {

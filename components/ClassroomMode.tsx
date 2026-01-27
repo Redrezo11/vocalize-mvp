@@ -107,8 +107,9 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntrie
 
   const handleRestart = () => {
     if (!audioRef.current) return;
+    audioRef.current.pause();
     audioRef.current.currentTime = 0;
-    audioRef.current.play();
+    setCurrentTime(0);
   };
 
   const handleResetCounter = () => {
@@ -368,13 +369,14 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntrie
               <button
                 onClick={handlePlayPause}
                 className="w-14 h-14 flex items-center justify-center bg-indigo-600 text-white rounded-full hover:bg-indigo-500 transition-colors shadow-lg"
+                title={isPlaying ? "Pause (Space)" : "Play (Space)"}
               >
                 {isPlaying ? <PauseIcon className="w-7 h-7" /> : <PlayIcon className="w-7 h-7 ml-1" />}
               </button>
               <button
                 onClick={handleRestart}
                 className="w-10 h-10 flex items-center justify-center bg-slate-700 text-slate-300 rounded-full hover:bg-slate-600 transition-colors"
-                title="Restart audio"
+                title="Reset to start (R)"
               >
                 <RefreshIcon className="w-5 h-5" />
               </button>
