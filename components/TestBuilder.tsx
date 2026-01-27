@@ -1,11 +1,13 @@
 import React, { useState, useMemo } from 'react';
-import { SavedAudio, TestType, TestQuestion, ListeningTest } from '../types';
-import { ArrowLeftIcon, PlusIcon, TrashIcon, SparklesIcon, CopyIcon, DownloadIcon } from './Icons';
+import { SavedAudio, TestType, TestQuestion, ListeningTest, LexisItem } from '../types';
+import { ArrowLeftIcon, PlusIcon, TrashIcon, SparklesIcon, CopyIcon, DownloadIcon, BookOpenIcon } from './Icons';
 import { parseDialogue } from '../utils/parser';
+import { CEFRLevel } from './Settings';
 
 interface TestBuilderProps {
   audio: SavedAudio;
   existingTest?: ListeningTest;
+  defaultDifficulty?: CEFRLevel;
   onSave: (test: Omit<ListeningTest, 'id' | 'createdAt' | 'updatedAt'>) => void;
   onCancel: () => void;
 }
@@ -22,21 +24,19 @@ const extractWords = (transcript: string): string[] => {
     .map(word => word.replace(/[.,!?;:'"]/g, '').toLowerCase());
 };
 
-// CEFR difficulty levels
-type CEFRLevel = 'beginner' | 'A1' | 'A2' | 'B1' | 'B2';
-
+// CEFR difficulty level descriptions
 const getCEFRDescription = (level: CEFRLevel): string => {
   switch (level) {
-    case 'beginner':
-      return 'Pre-A1/Beginner: Use very simple vocabulary and short sentences. Focus on basic comprehension of familiar words and phrases.';
     case 'A1':
-      return 'A1 (Elementary): Use simple, everyday vocabulary. Questions should focus on basic facts, familiar topics, and simple sentence structures.';
+      return 'A1 (Beginner): Use very simple vocabulary and short sentences. Focus on basic comprehension of familiar words and phrases.';
     case 'A2':
-      return 'A2 (Pre-Intermediate): Use common vocabulary and straightforward questions. Focus on routine matters and direct exchange of information.';
+      return 'A2 (Elementary): Use common vocabulary and straightforward questions. Focus on routine matters and direct exchange of information.';
     case 'B1':
       return 'B1 (Intermediate): Use moderately complex language. Questions can involve main points, opinions, and some inference from context.';
     case 'B2':
       return 'B2 (Upper-Intermediate): Use more sophisticated vocabulary and complex structures. Questions can involve nuance, implied meaning, and detailed comprehension.';
+    case 'C1':
+      return 'C1 (Advanced): Use complex language and abstract concepts. Questions can involve subtle meaning, inference, and critical analysis.';
   }
 };
 
@@ -141,6 +141,62 @@ RULES:
   }
 };
 
+// Calculate suggested lexis count based on word count
+const getSuggestedLexisCount = (transcript: string): number => {
+  const wordCount = transcript.split(/\s+/).filter(w => w.length > 0).length;
+  // Roughly 1 vocab item per 15-20 words, min 5, max 15
+  const suggested = Math.round(wordCount / 17);
+  return Math.min(Math.max(suggested, 5), 15);
+};
+
+// LLM Template for lexis generation
+const getLexisLLMTemplate = (
+  transcript: string,
+  customPrompt: string,
+  lexisCount: number,
+  difficultyLevel: CEFRLevel
+): string => {
+  const levelDescription = getCEFRDescription(difficultyLevel);
+
+  return `Extract key vocabulary (lexis) from the following listening transcript for EFL learners.
+
+TARGET LEARNER LEVEL: ${difficultyLevel.toUpperCase()}
+${levelDescription}
+
+TRANSCRIPT:
+---
+${transcript}
+---
+
+${customPrompt ? `ADDITIONAL INSTRUCTIONS:\n${customPrompt}\n\n` : ''}Generate ${lexisCount} vocabulary items that are important for understanding this listening passage.
+
+IMPORTANT: Return ONLY a valid JSON array. Do not include any other text, markdown, or explanation.
+
+JSON FORMAT (return exactly this structure):
+[
+  {
+    "term": "vocabulary word or phrase",
+    "definition": "Clear English definition appropriate for ${difficultyLevel} level",
+    "definitionArabic": "التعريف بالعربية",
+    "example": "Example sentence using the term (preferably from or related to the transcript)",
+    "partOfSpeech": "noun/verb/adjective/adverb/phrase/idiom"
+  }
+]
+
+RULES:
+- term: The vocabulary word or phrase from the transcript
+- definition: Clear, simple English definition appropriate for ${difficultyLevel} learners
+- definitionArabic: Arabic translation or definition (العربية)
+- example: A contextual example sentence (can be from the transcript or created)
+- partOfSpeech: Grammatical category (noun, verb, adjective, adverb, phrase, idiom, etc.)
+
+Focus on:
+- Words that are essential for understanding the main ideas
+- Vocabulary that ${difficultyLevel} learners might not know
+- Useful phrases and expressions from the dialogue
+- Academic or topic-specific vocabulary`;
+};
+
 // Get a readable label for test type
 const getTestTypeLabel = (type: TestType): string => {
   switch (type) {
@@ -164,7 +220,7 @@ const generateDefaultTitle = (audioTitle: string, testType: TestType): string =>
   return `${audioTitle} - ${typeLabel} (${dateStr}, ${timeStr})`;
 };
 
-export const TestBuilder: React.FC<TestBuilderProps> = ({ audio, existingTest, onSave, onCancel }) => {
+export const TestBuilder: React.FC<TestBuilderProps> = ({ audio, existingTest, defaultDifficulty = 'B1', onSave, onCancel }) => {
   const [testType, setTestType] = useState<TestType>(existingTest?.type || 'listening-comprehension');
   const [testTitle, setTestTitle] = useState(existingTest?.title || generateDefaultTitle(audio.title, existingTest?.type || 'listening-comprehension'));
   const [questions, setQuestions] = useState<TestQuestion[]>(existingTest?.questions || []);
@@ -180,7 +236,7 @@ export const TestBuilder: React.FC<TestBuilderProps> = ({ audio, existingTest, o
   const [explanationStyle, setExplanationStyle] = useState('');
   const [questionCount, setQuestionCount] = useState<number>(5);
   const [explanationLanguage, setExplanationLanguage] = useState<'english' | 'arabic' | 'both'>('both');
-  const [difficultyLevel, setDifficultyLevel] = useState<CEFRLevel>('A2');
+  const [difficultyLevel, setDifficultyLevel] = useState<CEFRLevel>(defaultDifficulty);
 
   // Update explanations modal state
   const [showUpdateExplanationsModal, setShowUpdateExplanationsModal] = useState(false);
@@ -190,7 +246,24 @@ export const TestBuilder: React.FC<TestBuilderProps> = ({ audio, existingTest, o
   const [updateExplanationPaste, setUpdateExplanationPaste] = useState('');
   const [showImportSection, setShowImportSection] = useState(false);
 
+  // Lexis (vocabulary) state
+  const [lexis, setLexis] = useState<LexisItem[]>(() => {
+    console.log('[TestBuilder] Initializing lexis state');
+    console.log('[TestBuilder] existingTest:', existingTest);
+    console.log('[TestBuilder] existingTest?.lexis:', existingTest?.lexis);
+    return existingTest?.lexis || [];
+  });
+  const [showLexisModal, setShowLexisModal] = useState(false);
+  const [lexisCustomPrompt, setLexisCustomPrompt] = useState('');
+  const [lexisPasteContent, setLexisPasteContent] = useState('');
+  const [showLexisImportSection, setShowLexisImportSection] = useState(false);
+  const [isGeneratingLexis, setIsGeneratingLexis] = useState(false);
+  const [lexisCount, setLexisCount] = useState<number>(8);
+
   const isEditMode = !!existingTest;
+
+  // Track if there are unsaved changes
+  const [isDirty, setIsDirty] = useState(false);
 
   const analysis = useMemo(() => parseDialogue(audio.transcript), [audio.transcript]);
   const words = useMemo<string[]>(() => extractWords(audio.transcript), [audio.transcript]);
@@ -334,6 +407,7 @@ JSON FORMAT (return exactly this structure):
       });
 
       setQuestions(updatedQuestions);
+      setIsDirty(true);
       setShowUpdateExplanationsModal(false);
       setUpdateExplanationPaste('');
       setShowImportSection(false);
@@ -350,6 +424,125 @@ JSON FORMAT (return exactly this structure):
       console.error('Failed to parse JSON:', error);
       alert('Failed to parse JSON. Please check the format and try again.');
     }
+  };
+
+  // Copy lexis LLM template
+  const handleCopyLexisTemplate = () => {
+    const template = getLexisLLMTemplate(audio.transcript, lexisCustomPrompt, lexisCount, difficultyLevel);
+    copyToClipboard(template, 'Lexis template copied!');
+    setShowLexisImportSection(true);
+  };
+
+  // Import lexis from LLM response
+  const handleImportLexis = () => {
+    try {
+      const jsonMatch = lexisPasteContent.match(/\[[\s\S]*\]/);
+      if (!jsonMatch) {
+        alert('Could not find a valid JSON array in the pasted content.');
+        return;
+      }
+
+      const parsed = JSON.parse(jsonMatch[0]) as Partial<LexisItem>[];
+
+      if (!Array.isArray(parsed) || parsed.length === 0) {
+        alert('The JSON array is empty or invalid.');
+        return;
+      }
+
+      const newLexis: LexisItem[] = parsed.map(item => ({
+        id: generateId(),
+        term: item.term || '',
+        definition: item.definition || '',
+        definitionArabic: item.definitionArabic,
+        example: item.example,
+        partOfSpeech: item.partOfSpeech,
+      }));
+
+      console.log('[TestBuilder] handleImportLexis - setting lexis:', newLexis);
+      setLexis(newLexis);
+      setIsDirty(true);
+      setShowLexisModal(false);
+      setLexisPasteContent('');
+      setShowLexisImportSection(false);
+      setCopyFeedback(`Imported ${newLexis.length} vocabulary items!`);
+      setTimeout(() => setCopyFeedback(null), 2000);
+    } catch (error) {
+      console.error('Failed to parse lexis JSON:', error);
+      alert('Failed to parse JSON. Please check the format and try again.');
+    }
+  };
+
+  // AI generate lexis using Gemini
+  const generateLexis = async () => {
+    setIsGeneratingLexis(true);
+    try {
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (!apiKey || apiKey === 'PLACEHOLDER_API_KEY') {
+        alert('Gemini API key not configured. Please use the LLM Template option instead.');
+        setIsGeneratingLexis(false);
+        return;
+      }
+
+      const { GoogleGenAI } = await import('@google/genai');
+      const ai = new GoogleGenAI({ apiKey });
+
+      const prompt = getLexisLLMTemplate(audio.transcript.slice(0, 3000), lexisCustomPrompt, lexisCount, difficultyLevel);
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.0-flash',
+        contents: prompt,
+      });
+
+      const text = response.text || '';
+      const jsonMatch = text.match(/\[[\s\S]*\]/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]) as Partial<LexisItem>[];
+        const newLexis: LexisItem[] = parsed.map(item => ({
+          id: generateId(),
+          term: item.term || '',
+          definition: item.definition || '',
+          definitionArabic: item.definitionArabic,
+          example: item.example,
+          partOfSpeech: item.partOfSpeech,
+        }));
+        console.log('[TestBuilder] generateLexis - setting lexis:', newLexis);
+        setLexis(newLexis);
+        setIsDirty(true);
+        setShowLexisModal(false);
+        setCopyFeedback(`Generated ${newLexis.length} vocabulary items!`);
+        setTimeout(() => setCopyFeedback(null), 2000);
+      } else {
+        alert('Could not parse AI response. Please try using the LLM Template option.');
+      }
+    } catch (error) {
+      console.error('Failed to generate lexis:', error);
+      alert('Failed to generate vocabulary. Please try using the LLM Template option.');
+    } finally {
+      setIsGeneratingLexis(false);
+    }
+  };
+
+  // Update a lexis item
+  const updateLexisItem = (id: string, updates: Partial<LexisItem>) => {
+    setLexis(lexis.map(item => item.id === id ? { ...item, ...updates } : item));
+    setIsDirty(true);
+  };
+
+  // Remove a lexis item
+  const removeLexisItem = (id: string) => {
+    setLexis(lexis.filter(item => item.id !== id));
+    setIsDirty(true);
+  };
+
+  // Add a new empty lexis item
+  const addLexisItem = () => {
+    const newItem: LexisItem = {
+      id: generateId(),
+      term: '',
+      definition: '',
+    };
+    setLexis([...lexis, newItem]);
+    setIsDirty(true);
   };
 
   // Parse pasted JSON from LLM
@@ -379,6 +572,7 @@ JSON FORMAT (return exactly this structure):
       }));
 
       setQuestions(newQuestions);
+      setIsDirty(true);
       setShowPasteModal(false);
       setPasteContent('');
     } catch (error) {
@@ -391,6 +585,7 @@ JSON FORMAT (return exactly this structure):
   const handleTestTypeChange = (newType: TestType) => {
     setTestType(newType);
     setQuestions([]);
+    setIsDirty(true);
     // Update title if it hasn't been manually changed from the default pattern
     if (!isEditMode) {
       const currentDefault = generateDefaultTitle(audio.title, testType);
@@ -409,11 +604,13 @@ JSON FORMAT (return exactly this structure):
       correctAnswer: '',
     };
     setQuestions([...questions, newQuestion]);
+    setIsDirty(true);
   };
 
   // Update a question
   const updateQuestion = (id: string, updates: Partial<TestQuestion>) => {
     setQuestions(questions.map(q => q.id === id ? { ...q, ...updates } : q));
+    setIsDirty(true);
   };
 
   // Update an option for a question
@@ -424,11 +621,13 @@ JSON FORMAT (return exactly this structure):
       newOptions[optionIndex] = value;
       return { ...q, options: newOptions };
     }));
+    setIsDirty(true);
   };
 
   // Remove a question
   const removeQuestion = (id: string) => {
     setQuestions(questions.filter(q => q.id !== id));
+    setIsDirty(true);
   };
 
   // Auto-generate questions using AI (Gemini)
@@ -464,6 +663,7 @@ JSON FORMAT (return exactly this structure):
           explanationArabic: q.explanationArabic || undefined,
         }));
         setQuestions(newQuestions);
+        setIsDirty(true);
       } else {
         generateSimpleQuestions();
       }
@@ -501,6 +701,7 @@ JSON FORMAT (return exactly this structure):
         });
       }
       setQuestions(newQuestions);
+      setIsDirty(true);
     } else if (testType === 'fill-in-blank') {
       const uniqueWords = Array.from(new Set<string>(words)).slice(0, 5);
       const newQuestions: TestQuestion[] = uniqueWords.map((word: string) => ({
@@ -509,16 +710,22 @@ JSON FORMAT (return exactly this structure):
         correctAnswer: word,
       }));
       setQuestions(newQuestions);
+      setIsDirty(true);
     } else if (testType === 'dictation') {
       setQuestions([{
         id: generateId(),
         questionText: 'Listen and write what you hear',
         correctAnswer: audio.transcript.slice(0, 200),
       }]);
+      setIsDirty(true);
     }
   };
 
   const handleSave = () => {
+    console.log('[TestBuilder] handleSave called');
+    console.log('[TestBuilder] lexis state:', lexis);
+    console.log('[TestBuilder] lexis.length:', lexis.length);
+
     if (questions.length === 0) {
       alert('Please add at least one question');
       return;
@@ -529,16 +736,18 @@ JSON FORMAT (return exactly this structure):
       title: testTitle,
       type: testType,
       questions,
+      lexis: lexis.length > 0 ? lexis : undefined,
     };
 
+    console.log('[TestBuilder] Saving test with lexis:', test.lexis);
     onSave(test);
   };
 
   return (
     <div className="max-w-4xl mx-auto">
-      {/* Copy Feedback Toast */}
+      {/* Copy Feedback Toast - Bottom center to avoid nav obstruction */}
       {copyFeedback && (
-        <div className="fixed top-4 right-4 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg z-50 animate-in fade-in duration-200">
+        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-5 py-2.5 rounded-full shadow-lg z-50 animate-in fade-in slide-in-from-bottom-4 duration-200">
           {copyFeedback}
         </div>
       )}
@@ -553,13 +762,24 @@ JSON FORMAT (return exactly this structure):
           <span className="font-medium">Back</span>
         </button>
         <h1 className="text-2xl font-bold text-slate-900">{isEditMode ? 'Edit Test' : 'Create Test'}</h1>
+        <div className="w-20" /> {/* Spacer for centering */}
+      </div>
+
+      {/* Floating Save Button - Bottom Right Corner */}
+      {/* Show in create mode when there are questions, or in edit mode only when dirty */}
+      {questions.length > 0 && (!isEditMode || isDirty) && (
         <button
           onClick={handleSave}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 transition-colors"
+          className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-full font-semibold shadow-lg shadow-emerald-500/30 hover:shadow-xl hover:shadow-emerald-500/40 hover:scale-105 transition-all duration-200"
         >
-          {isEditMode ? 'Update Test' : 'Save Test'}
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+            <polyline points="17 21 17 13 7 13 7 21" />
+            <polyline points="7 3 7 8 15 8" />
+          </svg>
+          {isEditMode ? 'Update' : 'Save'} ({questions.length})
         </button>
-      </div>
+      )}
 
       {/* Audio Reference with Copy Button */}
       <div className="bg-slate-100 rounded-xl p-4 mb-6">
@@ -592,7 +812,7 @@ JSON FORMAT (return exactly this structure):
             <input
               type="text"
               value={testTitle}
-              onChange={(e) => setTestTitle(e.target.value)}
+              onChange={(e) => { setTestTitle(e.target.value); setIsDirty(true); }}
               className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
               placeholder="Enter test title..."
             />
@@ -625,6 +845,107 @@ JSON FORMAT (return exactly this structure):
           </div>
         </div>
       </div>
+
+      {/* Lexis Section - Before questions */}
+      <div className="bg-white rounded-2xl border border-slate-200/60 p-6 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <BookOpenIcon className="w-5 h-5 text-amber-600" />
+              <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                Vocabulary / Lexis ({lexis.length})
+              </label>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowLexisModal(true)}
+                className="flex items-center gap-2 px-3 py-1.5 text-sm bg-amber-100 text-amber-800 rounded-lg hover:bg-amber-200 transition-colors"
+                title="Generate vocabulary from transcript"
+              >
+                <BookOpenIcon className="w-4 h-4" />
+                Generate Lexis
+              </button>
+              <button
+                onClick={addLexisItem}
+                className="flex items-center gap-2 px-3 py-1.5 text-sm bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors"
+              >
+                <PlusIcon className="w-4 h-4" />
+                Add Item
+              </button>
+            </div>
+          </div>
+
+          {lexis.length === 0 ? (
+            <div className="text-center py-8 text-slate-400">
+              <BookOpenIcon className="w-8 h-8 mx-auto mb-2 opacity-50" />
+              <p className="mb-1">No vocabulary items yet.</p>
+              <p className="text-sm">Generate lexis to help students understand key terms from the transcript.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {lexis.map((item, index) => (
+                <div key={item.id} className="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                  <div className="flex items-start gap-3">
+                    <span className="flex-shrink-0 w-6 h-6 bg-amber-100 text-amber-700 rounded-md flex items-center justify-center font-bold text-xs">
+                      {index + 1}
+                    </span>
+                    <div className="flex-1 space-y-2">
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={item.term}
+                          onChange={(e) => updateLexisItem(item.id, { term: e.target.value })}
+                          placeholder="Term or phrase"
+                          className="flex-1 p-2 bg-white border border-slate-200 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                        />
+                        <select
+                          value={item.partOfSpeech || ''}
+                          onChange={(e) => updateLexisItem(item.id, { partOfSpeech: e.target.value || undefined })}
+                          className="w-28 p-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-600 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                        >
+                          <option value="">Type</option>
+                          <option value="noun">noun</option>
+                          <option value="verb">verb</option>
+                          <option value="adjective">adjective</option>
+                          <option value="adverb">adverb</option>
+                          <option value="phrase">phrase</option>
+                          <option value="idiom">idiom</option>
+                        </select>
+                        <button
+                          onClick={() => removeLexisItem(item.id)}
+                          className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                        >
+                          <TrashIcon className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <input
+                        type="text"
+                        value={item.definition}
+                        onChange={(e) => updateLexisItem(item.id, { definition: e.target.value })}
+                        placeholder="English definition"
+                        className="w-full p-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                      />
+                      <input
+                        type="text"
+                        dir="rtl"
+                        value={item.definitionArabic || ''}
+                        onChange={(e) => updateLexisItem(item.id, { definitionArabic: e.target.value || undefined })}
+                        placeholder="التعريف بالعربية"
+                        className="w-full p-2 bg-white border border-slate-200 rounded-lg text-sm text-right focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                      />
+                      <input
+                        type="text"
+                        value={item.example || ''}
+                        onChange={(e) => updateLexisItem(item.id, { example: e.target.value || undefined })}
+                        placeholder="Example sentence (optional)"
+                        className="w-full p-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-600 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
       {/* Questions Section */}
       <div className="bg-white rounded-2xl border border-slate-200/60 p-6">
@@ -773,23 +1094,179 @@ JSON FORMAT (return exactly this structure):
           </div>
         )}
 
-        {/* Bottom Action Buttons */}
-        <div className="flex justify-between mt-6 pt-6 border-t border-slate-200">
-          <button
-            onClick={onCancel}
-            className="px-6 py-3 text-slate-600 font-medium hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={questions.length === 0}
-            className="px-6 py-3 bg-indigo-600 text-white font-medium rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isEditMode ? 'Update Test' : 'Save Test'} ({questions.length} questions)
-          </button>
-        </div>
+        {/* Bottom spacer for floating button */}
+        <div className="h-16" />
       </div>
+
+      {/* Lexis Generation Modal */}
+      {showLexisModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-slate-200">
+              <h2 className="text-xl font-bold text-slate-900">Generate Vocabulary</h2>
+              <p className="text-sm text-slate-500 mt-1">
+                Extract key vocabulary from the transcript to help students understand the listening passage.
+              </p>
+            </div>
+
+            <div className="p-6 space-y-4 overflow-y-auto flex-1">
+              {/* Vocabulary Count */}
+              <div>
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">
+                  Number of Vocabulary Items
+                </label>
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="range"
+                    min="5"
+                    max="15"
+                    value={lexisCount}
+                    onChange={(e) => setLexisCount(Number(e.target.value))}
+                    className="flex-1"
+                  />
+                  <span className="w-8 text-center font-medium text-slate-700">{lexisCount}</span>
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  Suggested: {getSuggestedLexisCount(audio.transcript)} items based on transcript length (~{audio.transcript.split(/\s+/).length} words)
+                </p>
+              </div>
+
+              {/* Difficulty Level - uses same as questions */}
+              <div>
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">
+                  Learner Level (CEFR)
+                </label>
+                <div className="flex gap-2 flex-wrap">
+                  {(['A1', 'A2', 'B1', 'B2', 'C1'] as CEFRLevel[]).map((level) => (
+                    <button
+                      key={level}
+                      onClick={() => setDifficultyLevel(level)}
+                      className={`py-2 px-4 rounded-lg font-medium text-sm transition-all ${
+                        difficultyLevel === level
+                          ? 'bg-amber-600 text-white'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                      }`}
+                    >
+                      {level}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Custom Instructions */}
+              <div>
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">
+                  Custom Instructions (optional)
+                </label>
+                <textarea
+                  value={lexisCustomPrompt}
+                  onChange={(e) => setLexisCustomPrompt(e.target.value)}
+                  placeholder="Add specific instructions for vocabulary extraction...&#10;&#10;Examples:&#10;- Focus on business vocabulary&#10;- Include phrasal verbs&#10;- Prioritize academic words"
+                  className="w-full h-20 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+                />
+              </div>
+
+              {/* Preview - Only show when not in import mode */}
+              {!showLexisImportSection && (
+                <div>
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">
+                    Generated Template Preview
+                  </label>
+                  <pre className="bg-slate-100 p-4 rounded-xl text-xs whitespace-pre-wrap font-mono text-slate-700 max-h-40 overflow-y-auto">
+                    {getLexisLLMTemplate(audio.transcript, lexisCustomPrompt, lexisCount, difficultyLevel)}
+                  </pre>
+                </div>
+              )}
+
+              {/* Import Section */}
+              {showLexisImportSection && (
+                <div className="p-4 bg-amber-50 rounded-xl border-2 border-amber-200">
+                  <div className="flex items-center justify-between mb-3">
+                    <label className="text-xs font-bold text-amber-700 uppercase tracking-wider">
+                      Step 2: Import LLM Response
+                    </label>
+                    <button
+                      onClick={() => setShowLexisImportSection(false)}
+                      className="text-xs text-slate-500 hover:text-slate-700"
+                    >
+                      Back to template
+                    </button>
+                  </div>
+                  <p className="text-sm text-amber-700 mb-3">
+                    Paste the LLM response below to import vocabulary items.
+                  </p>
+                  <textarea
+                    value={lexisPasteContent}
+                    onChange={(e) => setLexisPasteContent(e.target.value)}
+                    placeholder='Paste the LLM response here... It should contain a JSON array:
+[
+  {
+    "term": "vocabulary word",
+    "definition": "English definition",
+    "definitionArabic": "التعريف بالعربية",
+    "example": "Example sentence",
+    "partOfSpeech": "noun"
+  }
+]'
+                    className="w-full h-48 p-4 bg-white border border-amber-300 rounded-xl font-mono text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 border-t border-slate-200 flex justify-between">
+              <button
+                onClick={() => {
+                  setShowLexisModal(false);
+                  setLexisCustomPrompt('');
+                  setLexisPasteContent('');
+                  setShowLexisImportSection(false);
+                }}
+                className="px-4 py-2 text-slate-600 hover:text-slate-900 transition-colors"
+              >
+                Cancel
+              </button>
+              <div className="flex gap-3">
+                {!showLexisImportSection ? (
+                  <>
+                    <button
+                      onClick={() => setShowLexisImportSection(true)}
+                      className="flex items-center gap-2 px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors"
+                    >
+                      <DownloadIcon className="w-4 h-4" />
+                      Import Response
+                    </button>
+                    <button
+                      onClick={handleCopyLexisTemplate}
+                      className="flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200 transition-colors"
+                    >
+                      <CopyIcon className="w-4 h-4" />
+                      Copy Template
+                    </button>
+                    <button
+                      onClick={generateLexis}
+                      disabled={isGeneratingLexis}
+                      className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
+                    >
+                      <SparklesIcon className="w-4 h-4" />
+                      {isGeneratingLexis ? 'Generating...' : 'AI Generate'}
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={handleImportLexis}
+                    disabled={!lexisPasteContent.trim()}
+                    className="flex items-center gap-2 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors disabled:opacity-50"
+                  >
+                    <DownloadIcon className="w-4 h-4" />
+                    Import Vocabulary
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* LLM Template Modal */}
       {showTemplateModal && (
@@ -831,7 +1308,7 @@ JSON FORMAT (return exactly this structure):
                   Learner Level (CEFR)
                 </label>
                 <div className="flex gap-2 flex-wrap">
-                  {(['beginner', 'A1', 'A2', 'B1', 'B2'] as CEFRLevel[]).map((level) => (
+                  {(['A1', 'A2', 'B1', 'B2', 'C1'] as CEFRLevel[]).map((level) => (
                     <button
                       key={level}
                       onClick={() => setDifficultyLevel(level)}
@@ -841,7 +1318,7 @@ JSON FORMAT (return exactly this structure):
                           : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                       }`}
                     >
-                      {level === 'beginner' ? 'Beginner' : level}
+                      {level}
                     </button>
                   ))}
                 </div>

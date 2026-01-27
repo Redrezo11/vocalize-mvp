@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { EngineType, ElevenLabsVoice } from '../types';
 import { ClipboardIcon, CheckCircleIcon, SparklesIcon, XIcon } from './Icons';
+import { ContentMode } from './Settings';
 
 type CEFRLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1';
 
@@ -9,7 +10,7 @@ interface PromptBuilderProps {
   engine: EngineType;
   elevenLabsVoices?: ElevenLabsVoice[]; // Actual voices from ElevenLabs API
   defaultDifficulty?: CEFRLevel; // Default difficulty from app settings
-  halalMode?: boolean; // Whether to enforce halal content guidelines
+  contentMode?: ContentMode; // Content filtering mode: standard, halal, or elsd
   onClose: () => void;
   onApplyPrompt: (prompt: string, voiceAssignments: Record<string, string>) => void;
 }
@@ -247,7 +248,7 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
   engine,
   elevenLabsVoices = [],
   defaultDifficulty = 'B1',
-  halalMode = false,
+  contentMode = 'standard',
   onClose,
   onApplyPrompt,
 }) => {
@@ -536,26 +537,24 @@ ${difficulty === 'A1' ? `
 - Implied meanings and subtext
 - Sophisticated discourse markers
 `}
-${halalMode ? `
-## IMPORTANT: Halal Content Guidelines
+${contentMode === 'halal' ? `
+## IMPORTANT: Halal Content Guidelines (Casual Mode)
 
-**This content MUST follow Islamic guidelines. Strictly avoid:**
+**This content follows Islamic guidelines suitable for Muslims in diverse contexts.**
 
-### Forbidden Topics:
+### Topics to Avoid:
 - **Alcohol**: No bars, pubs, wine, beer, cocktails, drinking, or any alcohol references
 - **Pork**: No bacon, ham, pork, or non-halal meat references
 - **Gambling**: No casinos, betting, lottery, or gambling references
 - **Dating/Romance**: No boyfriend/girlfriend relationships, dating, or romantic situations outside of marriage
 - **Inappropriate relationships**: No cohabitation outside marriage, no flirting
-- **Music/Dancing**: Avoid nightclubs, concerts, dancing events as main topics
-- **Interest/Usury**: Avoid promoting interest-based banking or loans
 
-### Acceptable Alternatives:
-- **Food scenes**: Use halal restaurants, cafes serving tea/coffee/juice, family meals
+### Acceptable Content:
+- **Food scenes**: Halal restaurants, cafes serving tea/coffee/juice, family meals
 - **Social gatherings**: Family events, community gatherings, educational settings, sports
 - **Relationships**: Family relationships, friendships, professional relationships, married couples
-- **Entertainment**: Museums, parks, libraries, sports events, educational activities
-- **Business**: Halal business practices, ethical trading, community service
+- **Entertainment**: Museums, parks, libraries, sports events, movies, music mentions in passing
+- **Western cultural contexts**: General entertainment references are acceptable
 
 ### Character Guidelines:
 - Characters should demonstrate good moral values
@@ -564,6 +563,104 @@ ${halalMode ? `
 - Professional and educational settings are ideal
 
 **Apply these guidelines while keeping the dialogue natural and educational.**
+` : contentMode === 'elsd' ? `
+## CRITICAL: ELSD Strict Content Guidelines (KSU University Standards)
+
+**This content MUST strictly follow King Saud University ELSD department guidelines.**
+
+### TOPICS TO COMPLETELY AVOID:
+
+**Family & Relationships:**
+- Adopted children or adoption references
+- Dating, boyfriends/girlfriends, romantic relationships outside marriage
+- Living together before marriage, moving in with partners
+- Moving out at 18 or living independently before marriage
+- Divorce discussions or separated parents as main themes
+
+**Religion & Holidays:**
+- Christmas, Halloween, Easter, Valentine's Day, Thanksgiving
+- Any non-Islamic religious celebrations or traditions
+- Magic, witchcraft, supernatural elements, horoscopes
+- Religious debates or comparative religion
+
+**Entertainment & Media:**
+- Music, singing, musical instruments, concerts, bands
+- Celebrities, famous actors, pop stars, influencers
+- Dancing, nightclubs, parties with dancing
+- Film-making or acting as career aspirations
+
+**Food & Substances:**
+- Alcohol in any form (wine, beer, cocktails, bars, pubs)
+- Pork, bacon, ham, non-halal meat
+- Gambling, betting, lottery, casinos
+
+**Social Topics:**
+- Mixed-gender casual socializing (hanging out, coffee dates)
+- Fashion focus, modeling, beauty pageants
+- Political topics or controversial current events
+
+### TOPICS REQUIRING CAREFUL HANDLING:
+
+**Use with caution - keep brief and appropriate:**
+- Birthdays: Keep simple, no extravagant parties
+- Movies: Mention going to movies briefly, don't focus on specific films/actors
+- Fashion: Practical clothing discussions only, not fashion-focused
+- Social media: Educational use only, not influencer culture
+
+### SAFE AND ENCOURAGED TOPICS:
+
+**Celebrations & Traditions:**
+- Eid al-Fitr and Eid al-Adha celebrations
+- Saudi National Day
+- Graduation ceremonies
+- Family gatherings and meals
+- Wedding celebrations (gender-appropriate contexts)
+
+**Activities & Hobbies:**
+- Sports (football, basketball, swimming, hiking)
+- Reading, libraries, book clubs
+- Educational activities, studying, tutoring
+- Cooking and baking (halal foods)
+- Travel and tourism (appropriate destinations)
+- Nature, parks, outdoor activities
+- Art (drawing, calligraphy, crafts)
+- Technology and science interests
+- Volunteering and community service
+
+**Settings & Scenarios:**
+- University/school settings
+- Professional workplaces (gender-appropriate)
+- Family homes and gatherings
+- Restaurants and cafes (no bars/alcohol)
+- Shopping (practical, not fashion-focused)
+- Medical appointments
+- Government services
+- Travel and airports
+
+### DIALOGUE SETTING GUIDELINES:
+
+**Acceptable Mixed-Gender Scenarios (Professional/Educational ONLY):**
+- Teacher and student
+- Doctor and patient
+- Customer and service provider
+- Colleagues in professional workplace context
+- University group project (academic focus)
+
+**Preferred Same-Gender Scenarios:**
+- Friends planning activities
+- Family members (same gender conversations)
+- Study groups
+- Sports teammates
+
+### CHARACTER GUIDELINES:
+- Characters live with family until marriage
+- Strong family values and respect for elders
+- Professional demeanor in mixed-gender interactions
+- No casual dating or romantic subplots
+- Career aspirations should be practical (doctor, engineer, teacher, business)
+- Avoid entertainment industry careers
+
+**Apply these guidelines strictly while maintaining natural, educational dialogue.**
 ` : ''}
 ## Additional Requirements
 

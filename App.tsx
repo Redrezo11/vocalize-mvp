@@ -8,7 +8,8 @@ import { BrowserVoiceConfig, EngineType, GEMINI_VOICES, SpeakerVoiceMapping, App
 import { PlayIcon, StopIcon, FolderIcon, PlusIcon, SaveIcon, ArrowLeftIcon, PresentationIcon, FileTextIcon, SparklesIcon, SettingsIcon } from './components/Icons';
 import { SaveDialog } from './components/SaveDialog';
 import { PromptBuilder } from './components/PromptBuilder';
-import { Settings, AppSettings, loadSettings, saveSettings, DEFAULT_SETTINGS } from './components/Settings';
+import { Settings, AppSettings, DEFAULT_SETTINGS } from './components/Settings';
+import { useSettings } from './hooks/useSettings';
 
 // Lazy load components for better initial load
 const Visualizer = lazy(() => import('./components/Visualizer'));
@@ -79,7 +80,7 @@ const App: React.FC = () => {
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [showPromptBuilder, setShowPromptBuilder] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [appSettings, setAppSettings] = useState<AppSettings>(() => loadSettings());
+  const settingsHook = useSettings();
 
   // Analysis State
   const analysis = useMemo(() => parseDialogue(text), [text]);
@@ -544,10 +545,11 @@ const App: React.FC = () => {
       const response = await fetch(`${API_BASE}/audio-entries/${audio.id}/tests`);
       if (response.ok) {
         const tests = await response.json();
-        setAudioTests(tests.map((t: { _id: string; audioId: string; title: string; type: string; questions: Array<{ _id?: string; questionText: string; options?: string[]; correctAnswer: string }>; created_at: string; updated_at: string }) => ({
+        setAudioTests(tests.map((t: { _id: string; audioId: string; title: string; type: string; questions: Array<{ _id?: string; questionText: string; options?: string[]; correctAnswer: string }>; lexis?: Array<{ _id?: string; term: string; definition: string; definitionArabic?: string; example?: string; partOfSpeech?: string }>; created_at: string; updated_at: string }) => ({
           ...t,
           id: t._id,
-          questions: t.questions.map((q: { _id?: string; questionText: string; options?: string[]; correctAnswer: string }) => ({ ...q, id: q._id || Math.random().toString(36).substring(2, 11) }))
+          questions: t.questions.map((q: { _id?: string; questionText: string; options?: string[]; correctAnswer: string }) => ({ ...q, id: q._id || Math.random().toString(36).substring(2, 11) })),
+          lexis: t.lexis?.map((l: { _id?: string; term: string; definition: string; definitionArabic?: string; example?: string; partOfSpeech?: string }) => ({ ...l, id: l._id || Math.random().toString(36).substring(2, 11) }))
         })));
       }
     } catch (error) {
@@ -592,10 +594,13 @@ const App: React.FC = () => {
   };
 
   const handleSaveTest = async (testData: Omit<ListeningTest, 'id' | 'createdAt' | 'updatedAt'>) => {
+    console.log('[App] handleSaveTest called with testData:', testData);
+    console.log('[App] handleSaveTest - testData.lexis:', testData.lexis);
     try {
       let response;
       if (editingTest) {
         // Update existing test
+        console.log('[App] Updating existing test:', editingTest.id);
         response = await fetch(`${API_BASE}/tests/${editingTest.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -603,6 +608,7 @@ const App: React.FC = () => {
         });
       } else {
         // Create new test
+        console.log('[App] Creating new test');
         response = await fetch(`${API_BASE}/tests`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -610,7 +616,14 @@ const App: React.FC = () => {
         });
       }
 
-      if (!response.ok) throw new Error('Failed to save test');
+      const responseData = await response.json();
+      console.log('[App] Server response:', responseData);
+      console.log('[App] Server response lexis:', responseData.lexis);
+
+      if (!response.ok) {
+        console.error('[App] Server error:', responseData);
+        throw new Error('Failed to save test');
+      }
 
       alert(editingTest ? 'Test updated successfully!' : 'Test created successfully!');
       setEditingTest(null);
@@ -673,10 +686,11 @@ const App: React.FC = () => {
       const response = await fetch(`${API_BASE}/tests`);
       if (response.ok) {
         const tests = await response.json();
-        setAllTests(tests.map((t: { _id: string; audioId: string; title: string; type: string; questions: Array<{ _id?: string; questionText: string; options?: string[]; correctAnswer: string; explanation?: string }>; created_at: string; updated_at: string }) => ({
+        setAllTests(tests.map((t: { _id: string; audioId: string; title: string; type: string; questions: Array<{ _id?: string; questionText: string; options?: string[]; correctAnswer: string; explanation?: string }>; lexis?: Array<{ _id?: string; term: string; definition: string; definitionArabic?: string; example?: string; partOfSpeech?: string }>; created_at: string; updated_at: string }) => ({
           ...t,
           id: t._id,
-          questions: t.questions.map((q: { _id?: string; questionText: string; options?: string[]; correctAnswer: string; explanation?: string }) => ({ ...q, id: q._id || Math.random().toString(36).substring(2, 11) }))
+          questions: t.questions.map((q: { _id?: string; questionText: string; options?: string[]; correctAnswer: string; explanation?: string }) => ({ ...q, id: q._id || Math.random().toString(36).substring(2, 11) })),
+          lexis: t.lexis?.map((l: { _id?: string; term: string; definition: string; definitionArabic?: string; example?: string; partOfSpeech?: string }) => ({ ...l, id: l._id || Math.random().toString(36).substring(2, 11) }))
         })));
       }
     } catch (error) {
@@ -691,9 +705,11 @@ const App: React.FC = () => {
   };
 
   // Settings handlers
-  const handleSaveSettings = (newSettings: AppSettings) => {
-    setAppSettings(newSettings);
-    saveSettings(newSettings);
+  const handleSaveSettings = async (newSettings: AppSettings) => {
+    const success = await settingsHook.saveSettings(newSettings);
+    if (!success) {
+      alert('Failed to save settings. Please try again.');
+    }
   };
 
   // Load test for student view
@@ -1074,6 +1090,7 @@ const App: React.FC = () => {
           <TestBuilder
             audio={selectedAudio}
             existingTest={editingTest || undefined}
+            defaultDifficulty={settingsHook.settings.difficultyLevel}
             onSave={handleSaveTest}
             onCancel={() => {
               setEditingTest(null);
@@ -1115,6 +1132,7 @@ const App: React.FC = () => {
       <Suspense fallback={<LoadingSpinner />}>
         <StudentTest
           test={studentTest}
+          theme={settingsHook.settings.classroomTheme}
           isPreview={isPreviewMode}
           onExitPreview={handleExitPreview}
         />
@@ -1129,8 +1147,27 @@ const App: React.FC = () => {
         <ClassroomMode
           tests={allTests}
           audioEntries={audioStorage.savedAudios}
+          theme={settingsHook.settings.classroomTheme}
           onExit={() => setCurrentView('library')}
           onPreviewStudent={handlePreviewStudentView}
+          onEditTest={(test) => {
+            setEditingTest(test);
+            setCurrentView('test-builder');
+          }}
+          onDeleteTest={async (test) => {
+            try {
+              const response = await fetch(`${API_BASE}/tests/${test.id}`, {
+                method: 'DELETE',
+              });
+              if (!response.ok) throw new Error('Failed to delete test');
+              // Update both local state lists
+              setAllTests(prev => prev.filter(t => t.id !== test.id));
+              setAudioTests(prev => prev.filter(t => t.id !== test.id));
+            } catch (error) {
+              console.error('Failed to delete test:', error);
+              alert('Failed to delete test. Please try again.');
+            }
+          }}
         />
       </Suspense>
     );
@@ -1166,8 +1203,8 @@ const App: React.FC = () => {
         isOpen={showPromptBuilder}
         engine={engine}
         elevenLabsVoices={elevenTTS.voices}
-        defaultDifficulty={appSettings.difficultyLevel}
-        halalMode={appSettings.halalMode}
+        defaultDifficulty={settingsHook.settings.difficultyLevel}
+        contentMode={settingsHook.settings.contentMode}
         onClose={() => setShowPromptBuilder(false)}
         onApplyPrompt={(prompt, voiceAssignments) => {
           // For now, just copy the prompt to clipboard
@@ -1179,7 +1216,7 @@ const App: React.FC = () => {
 
       <Settings
         isOpen={showSettings}
-        settings={appSettings}
+        settings={settingsHook.settings}
         onClose={() => setShowSettings(false)}
         onSave={handleSaveSettings}
       />

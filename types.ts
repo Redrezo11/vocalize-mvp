@@ -129,12 +129,23 @@ export interface TestQuestion {
   blankIndex?: number;       // For fill-in-blank (which word is blanked)
 }
 
+// Lexis (vocabulary) item for test
+export interface LexisItem {
+  id: string;
+  term: string;                    // The vocabulary word or phrase
+  definition: string;              // English definition
+  definitionArabic?: string;       // Arabic translation/definition
+  example?: string;                // Example sentence from transcript or context
+  partOfSpeech?: string;           // noun, verb, adjective, etc.
+}
+
 export interface ListeningTest {
   id: string;
   audioId: string;
   title: string;
   type: TestType;
   questions: TestQuestion[];
+  lexis?: LexisItem[];             // Optional vocabulary items
   createdAt: string;
   updatedAt: string;
 }

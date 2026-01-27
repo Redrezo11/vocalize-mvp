@@ -41,17 +41,38 @@ const testQuestionSchema = new mongoose.Schema({
   blankIndex: { type: Number }
 });
 
+// Lexis Item Schema
+const lexisItemSchema = new mongoose.Schema({
+  term: { type: String, required: true },
+  definition: { type: String, required: true },
+  definitionArabic: { type: String },
+  example: { type: String },
+  partOfSpeech: { type: String }
+});
+
 // Listening Test Schema
 const listeningTestSchema = new mongoose.Schema({
   audioId: { type: mongoose.Schema.Types.ObjectId, ref: 'AudioEntry', required: false, default: null },  // null for transcript-only tests
   title: { type: String, required: true },
   type: { type: String, enum: ['listening-comprehension', 'fill-in-blank', 'dictation'], required: true },
   questions: [testQuestionSchema],
+  lexis: [lexisItemSchema],  // Vocabulary items for the test
   created_at: { type: Date, default: Date.now },
   updated_at: { type: Date, default: Date.now }
 });
 
 const ListeningTest = mongoose.model('ListeningTest', listeningTestSchema);
+
+// App Settings Schema (singleton - one document per app instance)
+const appSettingsSchema = new mongoose.Schema({
+  _id: { type: String, default: 'default' }, // Single settings document
+  difficulty_level: { type: String, enum: ['A1', 'A2', 'B1', 'B2', 'C1'], default: 'B1' },
+  content_mode: { type: String, enum: ['standard', 'halal', 'elsd'], default: 'standard' },
+  classroom_theme: { type: String, enum: ['light', 'dark'], default: 'light' },
+  updated_at: { type: Date, default: Date.now }
+});
+
+const AppSettings = mongoose.model('AppSettings', appSettingsSchema);
 
 // API Routes
 
@@ -204,7 +225,7 @@ app.get('/api/tests/:id', async (req, res) => {
 // Create test
 app.post('/api/tests', async (req, res) => {
   try {
-    const { audioId, title, type, questions } = req.body;
+    const { audioId, title, type, questions, lexis } = req.body;
 
     // Skip audio verification for transcript-only tests (audioId starts with "transcript-")
     const isTranscriptOnly = audioId && audioId.startsWith('transcript-');
@@ -221,7 +242,8 @@ app.post('/api/tests', async (req, res) => {
       audioId: isTranscriptOnly ? null : audioId,  // Don't store fake IDs
       title,
       type,
-      questions
+      questions,
+      lexis: lexis || []
     });
 
     await test.save();
@@ -235,16 +257,23 @@ app.post('/api/tests', async (req, res) => {
 // Update test
 app.put('/api/tests/:id', async (req, res) => {
   try {
-    const { title, type, questions } = req.body;
+    const { title, type, questions, lexis } = req.body;
+
+    const updateData = {
+      title,
+      type,
+      questions,
+      updated_at: new Date()
+    };
+
+    // Only update lexis if provided
+    if (lexis !== undefined) {
+      updateData.lexis = lexis;
+    }
 
     const test = await ListeningTest.findByIdAndUpdate(
       req.params.id,
-      {
-        title,
-        type,
-        questions,
-        updated_at: new Date()
-      },
+      updateData,
       { new: true }
     );
 
@@ -268,6 +297,64 @@ app.delete('/api/tests/:id', async (req, res) => {
     }
     res.json({ message: 'Test deleted' });
   } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ==================== SETTINGS ROUTES ====================
+
+// Get app settings
+app.get('/api/settings', async (req, res) => {
+  try {
+    let settings = await AppSettings.findById('default');
+
+    // Create default settings if none exist
+    if (!settings) {
+      settings = new AppSettings({
+        _id: 'default',
+        difficulty_level: 'B1',
+        content_mode: 'standard',
+        classroom_theme: 'light'
+      });
+      await settings.save();
+    }
+
+    res.json({
+      difficultyLevel: settings.difficulty_level,
+      contentMode: settings.content_mode,
+      classroomTheme: settings.classroom_theme || 'light'
+    });
+  } catch (error) {
+    console.error('Get settings error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update app settings
+app.put('/api/settings', async (req, res) => {
+  try {
+    const { difficultyLevel, contentMode, classroomTheme } = req.body;
+
+    const settings = await AppSettings.findByIdAndUpdate(
+      'default',
+      {
+        $set: {
+          difficulty_level: difficultyLevel,
+          content_mode: contentMode,
+          classroom_theme: classroomTheme,
+          updated_at: new Date()
+        }
+      },
+      { new: true, upsert: true }
+    );
+
+    res.json({
+      difficultyLevel: settings.difficulty_level,
+      contentMode: settings.content_mode,
+      classroomTheme: settings.classroom_theme
+    });
+  } catch (error) {
+    console.error('Update settings error:', error);
     res.status(500).json({ error: error.message });
   }
 });

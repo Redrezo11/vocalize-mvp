@@ -1,14 +1,17 @@
 import React, { useState } from 'react';
 import { ListeningTest } from '../types';
 import { CheckCircleIcon } from './Icons';
+import { ClassroomTheme } from './Settings';
 
 interface StudentTestProps {
   test: ListeningTest;
+  theme?: ClassroomTheme;
   isPreview?: boolean;
   onExitPreview?: () => void;
 }
 
-export const StudentTest: React.FC<StudentTestProps> = ({ test, isPreview = false, onExitPreview }) => {
+export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light', isPreview = false, onExitPreview }) => {
+  const isDark = theme === 'dark';
   const [answers, setAnswers] = useState<{ [questionId: string]: string }>({});
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
@@ -63,7 +66,7 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, isPreview = fals
   const progressPercent = (answeredCount / totalQuestions) * 100;
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
+    <div className={`min-h-screen flex flex-col ${isDark ? 'bg-slate-900' : 'bg-slate-50'}`}>
       {/* Preview Banner */}
       {isPreview && (
         <div className="bg-amber-500 text-white px-3 py-2 text-center flex-shrink-0">
@@ -80,9 +83,9 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, isPreview = fals
       )}
 
       {/* Compact Header */}
-      <div className="sticky top-0 z-20 bg-white border-b border-slate-200 shadow-sm flex-shrink-0">
+      <div className={`sticky top-0 z-20 shadow-sm flex-shrink-0 ${isDark ? 'bg-slate-800 border-b border-slate-700' : 'bg-white border-b border-slate-200'}`}>
         {/* Progress Bar */}
-        <div className="h-1 bg-slate-100">
+        <div className={`h-1 ${isDark ? 'bg-slate-700' : 'bg-slate-100'}`}>
           <div
             className="h-full bg-indigo-500 transition-all duration-300"
             style={{ width: `${progressPercent}%` }}
@@ -91,11 +94,11 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, isPreview = fals
 
         <div className="px-4 py-2 flex items-center justify-between">
           <div className="min-w-0 flex-1">
-            <h1 className="font-semibold text-slate-900 text-sm truncate">{test.title}</h1>
+            <h1 className={`font-semibold text-sm truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>{test.title}</h1>
           </div>
           <div className="flex items-center gap-3 ml-3">
-            <span className="text-xs text-slate-500">
-              <span className="font-medium text-indigo-600">{answeredCount}</span>/{totalQuestions}
+            <span className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+              <span className="font-medium text-indigo-400">{answeredCount}</span>/{totalQuestions}
             </span>
             {!isSubmitted && (
               <button
@@ -141,10 +144,10 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, isPreview = fals
                 key={question.id}
                 className={`rounded-xl border transition-colors ${
                   status === 'correct'
-                    ? 'border-green-300 bg-green-50'
+                    ? isDark ? 'border-green-600 bg-green-900/30' : 'border-green-300 bg-green-50'
                     : status === 'incorrect'
-                    ? 'border-red-300 bg-red-50'
-                    : 'border-slate-200 bg-white'
+                    ? isDark ? 'border-red-600 bg-red-900/30' : 'border-red-300 bg-red-50'
+                    : isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-white'
                 }`}
               >
                 {/* Question Header - Compact */}
@@ -154,11 +157,11 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, isPreview = fals
                       ? 'bg-green-500 text-white'
                       : status === 'incorrect'
                       ? 'bg-red-500 text-white'
-                      : 'bg-slate-800 text-white'
+                      : isDark ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-white'
                   }`}>
                     {index + 1}
                   </span>
-                  <p className="text-sm text-slate-800 leading-snug pt-0.5">{question.questionText}</p>
+                  <p className={`text-sm leading-snug pt-0.5 ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>{question.questionText}</p>
                 </div>
 
                 {/* Multiple Choice - Compact Grid */}
@@ -177,13 +180,13 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, isPreview = fals
                           className={`flex items-center gap-2 px-2.5 py-2 rounded-lg border text-left text-sm transition-all ${
                             isSubmitted
                               ? isCorrectAnswer
-                                ? 'border-green-400 bg-green-100'
+                                ? isDark ? 'border-green-600 bg-green-900/40' : 'border-green-400 bg-green-100'
                                 : isSelected
-                                ? 'border-red-400 bg-red-100'
-                                : 'border-slate-200 bg-slate-50 opacity-50'
+                                ? isDark ? 'border-red-600 bg-red-900/40' : 'border-red-400 bg-red-100'
+                                : isDark ? 'border-slate-600 bg-slate-700 opacity-50' : 'border-slate-200 bg-slate-50 opacity-50'
                               : isSelected
-                              ? 'border-indigo-500 bg-indigo-50'
-                              : 'border-slate-200 bg-slate-50 hover:border-slate-300 active:bg-slate-100'
+                              ? isDark ? 'border-indigo-500 bg-indigo-900/40' : 'border-indigo-500 bg-indigo-50'
+                              : isDark ? 'border-slate-600 bg-slate-700 hover:border-slate-500' : 'border-slate-200 bg-slate-50 hover:border-slate-300 active:bg-slate-100'
                           } ${isSubmitted ? 'cursor-default' : 'cursor-pointer'}`}
                         >
                           <span className={`flex-shrink-0 w-5 h-5 rounded text-xs font-bold flex items-center justify-center ${
@@ -192,14 +195,14 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, isPreview = fals
                                 ? 'bg-green-500 text-white'
                                 : isSelected
                                 ? 'bg-red-500 text-white'
-                                : 'bg-slate-300 text-slate-600'
+                                : isDark ? 'bg-slate-600 text-slate-400' : 'bg-slate-300 text-slate-600'
                               : isSelected
                               ? 'bg-indigo-500 text-white'
-                              : 'bg-slate-200 text-slate-600'
+                              : isDark ? 'bg-slate-600 text-slate-300' : 'bg-slate-200 text-slate-600'
                           }`}>
                             {letter}
                           </span>
-                          <span className="flex-1 text-slate-700 text-sm leading-tight truncate">{option}</span>
+                          <span className={`flex-1 text-sm leading-tight truncate ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>{option}</span>
                           {isSubmitted && isCorrectAnswer && (
                             <CheckCircleIcon className="w-4 h-4 text-green-500 flex-shrink-0" />
                           )}
@@ -221,9 +224,9 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, isPreview = fals
                       className={`w-full px-3 py-2 rounded-lg border text-sm ${
                         isSubmitted
                           ? status === 'correct'
-                            ? 'bg-green-100 border-green-400'
-                            : 'bg-red-100 border-red-400'
-                          : 'bg-slate-50 border-slate-200 focus:border-indigo-500 focus:outline-none'
+                            ? isDark ? 'bg-green-900/40 border-green-600 text-white' : 'bg-green-100 border-green-400'
+                            : isDark ? 'bg-red-900/40 border-red-600 text-white' : 'bg-red-100 border-red-400'
+                          : isDark ? 'bg-slate-700 border-slate-600 text-white focus:border-indigo-500 focus:outline-none' : 'bg-slate-50 border-slate-200 focus:border-indigo-500 focus:outline-none'
                       }`}
                     />
                     {isSubmitted && status === 'incorrect' && (

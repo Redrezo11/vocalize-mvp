@@ -1,18 +1,23 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { SavedAudio, ListeningTest } from '../types';
 import { ArrowLeftIcon, PlayIcon, PauseIcon, RefreshIcon, ChevronRightIcon } from './Icons';
+import { ClassroomTheme } from './Settings';
 import QRCode from 'qrcode';
 
 interface ClassroomModeProps {
   tests: ListeningTest[];
   audioEntries: SavedAudio[];
+  theme?: ClassroomTheme;
   onExit: () => void;
   onPreviewStudent: (test: ListeningTest) => void;
+  onEditTest?: (test: ListeningTest) => void;
+  onDeleteTest?: (test: ListeningTest) => void;
 }
 
 type ClassroomView = 'select' | 'present';
 
-export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntries, onExit, onPreviewStudent }) => {
+export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntries, theme = 'light', onExit, onPreviewStudent, onEditTest, onDeleteTest }) => {
+  const isDark = theme === 'dark';
   const [view, setView] = useState<ClassroomView>('select');
   const [selectedTest, setSelectedTest] = useState<ListeningTest | null>(null);
   const [selectedAudio, setSelectedAudio] = useState<SavedAudio | null>(null);
@@ -24,6 +29,8 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntrie
   const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
   const [studentUrl, setStudentUrl] = useState<string>('');
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [testToDelete, setTestToDelete] = useState<ListeningTest | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
 
   const SPEED_OPTIONS = [0.5, 0.75, 1] as const;
@@ -227,14 +234,51 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntrie
     </svg>
   );
 
+  // Edit Icon (Pencil)
+  const EditIcon = ({ className }: { className?: string }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+    </svg>
+  );
+
+  // Trash Icon
+  const TrashIcon = ({ className }: { className?: string }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <polyline points="3 6 5 6 21 6" />
+      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      <line x1="10" y1="11" x2="10" y2="17" />
+      <line x1="14" y1="11" x2="14" y2="17" />
+    </svg>
+  );
+
+  // Handle delete confirmation
+  const handleDeleteClick = (test: ListeningTest) => {
+    setTestToDelete(test);
+    setShowDeleteConfirm(true);
+  };
+
+  const handleConfirmDelete = () => {
+    if (testToDelete && onDeleteTest) {
+      onDeleteTest(testToDelete);
+    }
+    setShowDeleteConfirm(false);
+    setTestToDelete(null);
+  };
+
+  const handleCancelDelete = () => {
+    setShowDeleteConfirm(false);
+    setTestToDelete(null);
+  };
+
   // Render test selection view
   const renderSelectView = () => (
-    <div className="min-h-screen bg-slate-900 text-white p-8">
+    <div className={`min-h-screen p-8 ${isDark ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-900'}`}>
       {/* Header */}
       <div className="flex items-center justify-between mb-12">
         <button
           onClick={onExit}
-          className="flex items-center gap-3 text-slate-400 hover:text-white transition-colors text-lg"
+          className={`flex items-center gap-3 transition-colors text-lg ${isDark ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'}`}
         >
           <ArrowLeftIcon className="w-6 h-6" />
           <span className="font-medium">Exit Classroom Mode</span>
@@ -246,19 +290,19 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntrie
       {/* Test List */}
       {tests.length === 0 ? (
         <div className="text-center py-24">
-          <p className="text-2xl text-slate-400 mb-4">No tests available</p>
-          <p className="text-slate-500">Create tests from your audio library first</p>
+          <p className={`text-2xl mb-4 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>No tests available</p>
+          <p className={isDark ? 'text-slate-500' : 'text-slate-400'}>Create tests from your audio library first</p>
         </div>
       ) : (
         <div className="max-w-4xl mx-auto">
-          <h2 className="text-xl text-slate-400 mb-6">Select a test to present:</h2>
+          <h2 className={`text-xl mb-6 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Select a test to present:</h2>
           <div className="space-y-4">
             {tests.map(test => {
               const audio = getAudioForTest(test);
               return (
                 <div
                   key={test.id}
-                  className="p-6 bg-slate-800 rounded-2xl border border-slate-700"
+                  className={`p-6 rounded-2xl border ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200 shadow-sm'}`}
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
@@ -266,35 +310,61 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntrie
                         <span className={`px-3 py-1 text-sm font-medium rounded-lg ${getTestTypeBadge(test.type)}`}>
                           {getTestTypeLabel(test.type)}
                         </span>
-                        <span className="text-slate-500 text-sm">
+                        <span className={`text-sm ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
                           {test.questions.length} question{test.questions.length !== 1 ? 's' : ''}
                         </span>
                       </div>
-                      <h3 className="text-xl font-semibold text-white mb-1">{test.title}</h3>
+                      <h3 className={`text-xl font-semibold mb-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>{test.title}</h3>
                       {audio && (
-                        <p className="text-slate-400">Audio: {audio.title}</p>
+                        <p className={isDark ? 'text-slate-400' : 'text-slate-500'}>Audio: {audio.title}</p>
                       )}
                       {!audio && (
                         <p className="text-red-400 text-sm">Audio not found</p>
                       )}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => onPreviewStudent(test)}
-                        className="flex items-center gap-2 px-4 py-2 bg-slate-700 text-slate-300 rounded-xl hover:bg-slate-600 transition-colors"
-                        title="Preview student view"
-                      >
-                        <EyeIcon className="w-4 h-4" />
-                        <span className="text-sm">Preview</span>
-                      </button>
-                      <button
-                        onClick={() => handleStartPresentation(test)}
-                        disabled={!audio}
-                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <span className="text-sm">Present</span>
-                        <ChevronRightIcon className="w-4 h-4" />
-                      </button>
+                    <div className="flex flex-col items-end gap-2">
+                      {/* Primary actions */}
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => onPreviewStudent(test)}
+                          className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-colors ${isDark ? 'bg-slate-700 text-slate-300 hover:bg-slate-600' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}
+                          title="Preview student view"
+                        >
+                          <EyeIcon className="w-4 h-4" />
+                          <span className="text-sm">Preview</span>
+                        </button>
+                        <button
+                          onClick={() => handleStartPresentation(test)}
+                          disabled={!audio}
+                          className="flex items-center gap-2 px-5 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                        >
+                          <span className="text-sm">Present</span>
+                          <ChevronRightIcon className="w-4 h-4" />
+                        </button>
+                      </div>
+                      {/* Secondary actions - subtle icon buttons */}
+                      {(onEditTest || onDeleteTest) && (
+                        <div className="flex items-center gap-1">
+                          {onEditTest && (
+                            <button
+                              onClick={() => onEditTest(test)}
+                              className={`p-1.5 rounded-lg transition-colors ${isDark ? 'text-slate-500 hover:text-slate-300 hover:bg-slate-700' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'}`}
+                              title="Edit test"
+                            >
+                              <EditIcon className="w-4 h-4" />
+                            </button>
+                          )}
+                          {onDeleteTest && (
+                            <button
+                              onClick={() => handleDeleteClick(test)}
+                              className={`p-1.5 rounded-lg transition-colors ${isDark ? 'text-slate-500 hover:text-red-400 hover:bg-slate-700' : 'text-slate-400 hover:text-red-500 hover:bg-red-50'}`}
+                              title="Delete test"
+                            >
+                              <TrashIcon className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -305,9 +375,46 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntrie
       )}
 
       {/* Instructions */}
-      <div className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-slate-800/80 backdrop-blur px-6 py-3 rounded-full">
-        <p className="text-slate-400 text-sm">Click "Present" to begin or "Preview" to see student view</p>
+      <div className={`fixed bottom-8 left-1/2 -translate-x-1/2 backdrop-blur px-6 py-3 rounded-full ${isDark ? 'bg-slate-800/80' : 'bg-white/90 shadow-lg border border-slate-200'}`}>
+        <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Click "Present" to begin or "Preview" to see student view</p>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && testToDelete && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className={`rounded-2xl max-w-md w-full p-6 ${isDark ? 'bg-slate-800' : 'bg-white'}`}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
+                <TrashIcon className="w-6 h-6 text-red-600" />
+              </div>
+              <div>
+                <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>Delete Test</h2>
+                <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>This action cannot be undone</p>
+              </div>
+            </div>
+
+            <p className={`mb-6 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+              Are you sure you want to delete "<span className="font-semibold">{testToDelete.title}</span>"?
+              This will permanently remove the test and all its questions.
+            </p>
+
+            <div className="flex gap-3">
+              <button
+                onClick={handleCancelDelete}
+                className={`flex-1 px-4 py-3 rounded-xl font-medium transition-colors ${isDark ? 'bg-slate-700 text-slate-300 hover:bg-slate-600' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                className="flex-1 px-4 py-3 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 transition-colors"
+              >
+                Delete Test
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -316,9 +423,9 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntrie
     if (!selectedTest || !selectedAudio) return null;
 
     return (
-      <div className="min-h-screen bg-white text-slate-900">
+      <div className={`min-h-screen ${isDark ? 'bg-slate-900 text-white' : 'bg-white text-slate-900'}`}>
         {/* Top Bar - Fixed */}
-        <div className="sticky top-0 z-10 bg-slate-900 text-white shadow-lg">
+        <div className={`sticky top-0 z-10 shadow-lg ${isDark ? 'bg-slate-800 text-white' : 'bg-slate-900 text-white'}`}>
           <div className="max-w-6xl mx-auto px-6 py-4">
             <div className="flex items-center justify-between mb-4">
               <button
@@ -441,24 +548,24 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntrie
 
         {/* Questions List - Traditional Test Format */}
         <div className="max-w-4xl mx-auto px-6 py-8">
-          <div className="mb-6 pb-4 border-b-2 border-slate-200">
-            <h2 className="text-2xl font-bold text-slate-900">
+          <div className={`mb-6 pb-4 border-b-2 ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
+            <h2 className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
               {getTestTypeLabel(selectedTest.type)} Test
             </h2>
-            <p className="text-slate-500 mt-1">
+            <p className={`mt-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
               {selectedTest.questions.length} question{selectedTest.questions.length !== 1 ? 's' : ''}
             </p>
           </div>
 
           <div className="space-y-8">
             {selectedTest.questions.map((question, index) => (
-              <div key={question.id} className="pb-6 border-b border-slate-100 last:border-b-0">
+              <div key={question.id} className={`pb-6 border-b last:border-b-0 ${isDark ? 'border-slate-700' : 'border-slate-100'}`}>
                 {/* Question Number and Text */}
                 <div className="flex gap-4 mb-4">
-                  <span className="flex-shrink-0 w-10 h-10 bg-slate-900 text-white rounded-full flex items-center justify-center font-bold text-lg">
+                  <span className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${isDark ? 'bg-indigo-600 text-white' : 'bg-slate-900 text-white'}`}>
                     {index + 1}
                   </span>
-                  <p className="text-xl font-medium text-slate-900 pt-1.5 leading-relaxed">
+                  <p className={`text-xl font-medium pt-1.5 leading-relaxed ${isDark ? 'text-white' : 'text-slate-900'}`}>
                     {question.questionText}
                   </p>
                 </div>
@@ -471,12 +578,12 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntrie
                       return (
                         <div
                           key={optIndex}
-                          className="flex items-center gap-4 p-4 bg-slate-50 rounded-xl border-2 border-slate-200"
+                          className={`flex items-center gap-4 p-4 rounded-xl border-2 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'}`}
                         >
-                          <span className="flex-shrink-0 w-8 h-8 bg-slate-200 text-slate-700 rounded-lg flex items-center justify-center font-bold text-sm">
+                          <span className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm ${isDark ? 'bg-slate-700 text-slate-300' : 'bg-slate-200 text-slate-700'}`}>
                             {letter}
                           </span>
-                          <span className="text-lg text-slate-700">{option}</span>
+                          <span className={`text-lg ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>{option}</span>
                         </div>
                       );
                     })}
@@ -486,12 +593,12 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntrie
                 {/* Fill in Blank / Dictation - Answer Line */}
                 {(selectedTest.type === 'fill-in-blank' || selectedTest.type === 'dictation') && (
                   <div className="ml-14">
-                    <div className="p-4 bg-slate-50 rounded-xl border-2 border-dashed border-slate-300">
-                      <div className="h-8 border-b-2 border-slate-400"></div>
+                    <div className={`p-4 rounded-xl border-2 border-dashed ${isDark ? 'bg-slate-800 border-slate-600' : 'bg-slate-50 border-slate-300'}`}>
+                      <div className={`h-8 border-b-2 ${isDark ? 'border-slate-500' : 'border-slate-400'}`}></div>
                       {selectedTest.type === 'dictation' && (
                         <>
-                          <div className="h-8 border-b-2 border-slate-300 mt-2"></div>
-                          <div className="h-8 border-b-2 border-slate-300 mt-2"></div>
+                          <div className={`h-8 border-b-2 mt-2 ${isDark ? 'border-slate-600' : 'border-slate-300'}`}></div>
+                          <div className={`h-8 border-b-2 mt-2 ${isDark ? 'border-slate-600' : 'border-slate-300'}`}></div>
                         </>
                       )}
                     </div>
@@ -503,11 +610,11 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntrie
         </div>
 
         {/* Keyboard Hints - Fixed Bottom */}
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-6 bg-slate-900/90 backdrop-blur text-white px-6 py-3 rounded-full text-sm">
-          <span><kbd className="px-2 py-1 bg-slate-700 rounded">Space</kbd> Play/Pause</span>
-          <span><kbd className="px-2 py-1 bg-slate-700 rounded">R</kbd> Restart</span>
-          <span><kbd className="px-2 py-1 bg-slate-700 rounded">Q</kbd> QR Code</span>
-          <span><kbd className="px-2 py-1 bg-slate-700 rounded">Esc</kbd> Exit</span>
+        <div className={`fixed bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-6 backdrop-blur px-6 py-3 rounded-full text-sm ${isDark ? 'bg-slate-800/90 text-white' : 'bg-slate-900/90 text-white'}`}>
+          <span><kbd className={`px-2 py-1 rounded ${isDark ? 'bg-slate-700' : 'bg-slate-700'}`}>Space</kbd> Play/Pause</span>
+          <span><kbd className={`px-2 py-1 rounded ${isDark ? 'bg-slate-700' : 'bg-slate-700'}`}>R</kbd> Restart</span>
+          <span><kbd className={`px-2 py-1 rounded ${isDark ? 'bg-slate-700' : 'bg-slate-700'}`}>Q</kbd> QR Code</span>
+          <span><kbd className={`px-2 py-1 rounded ${isDark ? 'bg-slate-700' : 'bg-slate-700'}`}>Esc</kbd> Exit</span>
         </div>
 
         {/* QR Code Modal */}
