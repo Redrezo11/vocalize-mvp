@@ -23,7 +23,10 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntrie
   const [showQRModal, setShowQRModal] = useState(false);
   const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
   const [studentUrl, setStudentUrl] = useState<string>('');
+  const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const audioRef = useRef<HTMLAudioElement>(null);
+
+  const SPEED_OPTIONS = [0.5, 0.75, 1] as const;
 
   // Get audio for a test
   const getAudioForTest = (test: ListeningTest): SavedAudio | undefined => {
@@ -69,7 +72,10 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntrie
     if (!audioEl) return;
 
     const handleTimeUpdate = () => setCurrentTime(audioEl.currentTime);
-    const handleLoadedMetadata = () => setDuration(audioEl.duration);
+    const handleLoadedMetadata = () => {
+      setDuration(audioEl.duration);
+      audioEl.playbackRate = playbackSpeed; // Apply current speed when audio loads
+    };
     const handleEnded = () => setIsPlaying(false);
     const handlePlay = () => {
       setIsPlaying(true);
@@ -93,7 +99,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntrie
       audioEl.removeEventListener('play', handlePlay);
       audioEl.removeEventListener('pause', handlePause);
     };
-  }, [selectedAudio]);
+  }, [selectedAudio, playbackSpeed]);
 
   // Audio controls
   const handlePlayPause = () => {
@@ -121,6 +127,13 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntrie
     const time = parseFloat(e.target.value);
     audioRef.current.currentTime = time;
     setCurrentTime(time);
+  };
+
+  const handleSpeedChange = (speed: number) => {
+    setPlaybackSpeed(speed);
+    if (audioRef.current) {
+      audioRef.current.playbackRate = speed;
+    }
   };
 
   const formatTime = (seconds: number): string => {
@@ -380,6 +393,24 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntrie
               >
                 <RefreshIcon className="w-5 h-5" />
               </button>
+
+              {/* Speed Controls */}
+              <div className="flex items-center bg-slate-800 rounded-lg p-1 gap-1">
+                {SPEED_OPTIONS.map((speed) => (
+                  <button
+                    key={speed}
+                    onClick={() => handleSpeedChange(speed)}
+                    className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                      playbackSpeed === speed
+                        ? 'bg-indigo-600 text-white'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-700'
+                    }`}
+                    title={`${speed}x speed`}
+                  >
+                    {speed}x
+                  </button>
+                ))}
+              </div>
 
               <div className="flex-1">
                 <input

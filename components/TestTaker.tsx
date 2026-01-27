@@ -9,11 +9,14 @@ interface TestTakerProps {
   onBack: () => void;
 }
 
+const SPEED_OPTIONS = [0.5, 0.75, 1] as const;
+
 export const TestTaker: React.FC<TestTakerProps> = ({ test, audio, onComplete, onBack }) => {
   const [answers, setAnswers] = useState<{ [questionId: string]: string }>({});
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [score, setScore] = useState<number | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const audioRef = useRef<HTMLAudioElement>(null);
 
   const handlePlayPause = () => {
@@ -31,6 +34,13 @@ export const TestTaker: React.FC<TestTakerProps> = ({ test, audio, onComplete, o
     audioRef.current.pause();
     audioRef.current.currentTime = 0;
     setIsPlaying(false);
+  };
+
+  const handleSpeedChange = (speed: number) => {
+    setPlaybackSpeed(speed);
+    if (audioRef.current) {
+      audioRef.current.playbackRate = speed;
+    }
   };
 
   const updateAnswer = (questionId: string, answer: string) => {
@@ -102,7 +112,7 @@ export const TestTaker: React.FC<TestTakerProps> = ({ test, audio, onComplete, o
             <p className="text-slate-400 text-sm mb-1">Listen to the audio:</p>
             <p className="text-white font-medium">{audio.title}</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
             <button
               onClick={handlePlayPause}
               className="p-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors"
@@ -115,6 +125,22 @@ export const TestTaker: React.FC<TestTakerProps> = ({ test, audio, onComplete, o
             >
               <RefreshIcon className="w-5 h-5" />
             </button>
+            {/* Speed Controls */}
+            <div className="flex items-center bg-slate-800 rounded-xl p-1 gap-1 ml-2">
+              {SPEED_OPTIONS.map((speed) => (
+                <button
+                  key={speed}
+                  onClick={() => handleSpeedChange(speed)}
+                  className={`px-2 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                    playbackSpeed === speed
+                      ? 'bg-indigo-600 text-white'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-700'
+                  }`}
+                >
+                  {speed}x
+                </button>
+              ))}
+            </div>
           </div>
         </div>
         {audio.audioUrl && (
@@ -124,6 +150,11 @@ export const TestTaker: React.FC<TestTakerProps> = ({ test, audio, onComplete, o
             onEnded={() => setIsPlaying(false)}
             onPause={() => setIsPlaying(false)}
             onPlay={() => setIsPlaying(true)}
+            onLoadedMetadata={() => {
+              if (audioRef.current) {
+                audioRef.current.playbackRate = playbackSpeed;
+              }
+            }}
             className="hidden"
           />
         )}
