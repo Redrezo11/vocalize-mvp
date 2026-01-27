@@ -5,10 +5,12 @@ export type CEFRLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1';
 
 export interface AppSettings {
   difficultyLevel: CEFRLevel;
+  halalMode: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
   difficultyLevel: 'B1',
+  halalMode: false,
 };
 
 const CEFR_LEVELS: { value: CEFRLevel; label: string; description: string }[] = [
@@ -107,6 +109,47 @@ export const Settings: React.FC<SettingsProps> = ({
                 </label>
               ))}
             </div>
+          </div>
+
+          {/* Divider */}
+          <div className="border-t border-slate-200 my-5"></div>
+
+          {/* Halal Mode */}
+          <div>
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <label className="block text-sm font-semibold text-slate-700">
+                  Halal Mode
+                </label>
+                <p className="text-xs text-slate-500 mt-1">
+                  Ensures generated content follows Islamic guidelines - avoids alcohol, pork, gambling, inappropriate relationships, and other non-halal topics
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={localSettings.halalMode}
+                onClick={() =>
+                  setLocalSettings({ ...localSettings, halalMode: !localSettings.halalMode })
+                }
+                className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${
+                  localSettings.halalMode ? 'bg-green-600' : 'bg-slate-200'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                    localSettings.halalMode ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+            {localSettings.halalMode && (
+              <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-xl">
+                <p className="text-xs text-green-800">
+                  Content will automatically avoid: alcohol, pork, gambling, dating/romantic relationships outside marriage, music/dancing references, and other non-halal elements.
+                </p>
+              </div>
+            )}
           </div>
         </div>
 

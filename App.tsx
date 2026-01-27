@@ -1167,6 +1167,7 @@ const App: React.FC = () => {
         engine={engine}
         elevenLabsVoices={elevenTTS.voices}
         defaultDifficulty={appSettings.difficultyLevel}
+        halalMode={appSettings.halalMode}
         onClose={() => setShowPromptBuilder(false)}
         onApplyPrompt={(prompt, voiceAssignments) => {
           // For now, just copy the prompt to clipboard

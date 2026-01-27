@@ -9,6 +9,7 @@ interface PromptBuilderProps {
   engine: EngineType;
   elevenLabsVoices?: ElevenLabsVoice[]; // Actual voices from ElevenLabs API
   defaultDifficulty?: CEFRLevel; // Default difficulty from app settings
+  halalMode?: boolean; // Whether to enforce halal content guidelines
   onClose: () => void;
   onApplyPrompt: (prompt: string, voiceAssignments: Record<string, string>) => void;
 }
@@ -246,6 +247,7 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
   engine,
   elevenLabsVoices = [],
   defaultDifficulty = 'B1',
+  halalMode = false,
   onClose,
   onApplyPrompt,
 }) => {
@@ -534,7 +536,35 @@ ${difficulty === 'A1' ? `
 - Implied meanings and subtext
 - Sophisticated discourse markers
 `}
+${halalMode ? `
+## IMPORTANT: Halal Content Guidelines
 
+**This content MUST follow Islamic guidelines. Strictly avoid:**
+
+### Forbidden Topics:
+- **Alcohol**: No bars, pubs, wine, beer, cocktails, drinking, or any alcohol references
+- **Pork**: No bacon, ham, pork, or non-halal meat references
+- **Gambling**: No casinos, betting, lottery, or gambling references
+- **Dating/Romance**: No boyfriend/girlfriend relationships, dating, or romantic situations outside of marriage
+- **Inappropriate relationships**: No cohabitation outside marriage, no flirting
+- **Music/Dancing**: Avoid nightclubs, concerts, dancing events as main topics
+- **Interest/Usury**: Avoid promoting interest-based banking or loans
+
+### Acceptable Alternatives:
+- **Food scenes**: Use halal restaurants, cafes serving tea/coffee/juice, family meals
+- **Social gatherings**: Family events, community gatherings, educational settings, sports
+- **Relationships**: Family relationships, friendships, professional relationships, married couples
+- **Entertainment**: Museums, parks, libraries, sports events, educational activities
+- **Business**: Halal business practices, ethical trading, community service
+
+### Character Guidelines:
+- Characters should demonstrate good moral values
+- Include respectful interactions between genders
+- Family relationships and responsibilities are encouraged
+- Professional and educational settings are ideal
+
+**Apply these guidelines while keeping the dialogue natural and educational.**
+` : ''}
 ## Additional Requirements
 
 1. Make the dialogue natural and engaging
