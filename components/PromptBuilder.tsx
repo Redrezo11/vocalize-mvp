@@ -2,15 +2,16 @@ import React, { useState, useMemo } from 'react';
 import { EngineType, ElevenLabsVoice } from '../types';
 import { ClipboardIcon, CheckCircleIcon, SparklesIcon, XIcon } from './Icons';
 
+type CEFRLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1';
+
 interface PromptBuilderProps {
   isOpen: boolean;
   engine: EngineType;
   elevenLabsVoices?: ElevenLabsVoice[]; // Actual voices from ElevenLabs API
+  defaultDifficulty?: CEFRLevel; // Default difficulty from app settings
   onClose: () => void;
   onApplyPrompt: (prompt: string, voiceAssignments: Record<string, string>) => void;
 }
-
-type CEFRLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1';
 
 const CEFR_DESCRIPTIONS: Record<CEFRLevel, string> = {
   'A1': 'Beginner - Basic phrases, simple present tense, very common vocabulary',
@@ -244,11 +245,17 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
   isOpen,
   engine,
   elevenLabsVoices = [],
+  defaultDifficulty = 'B1',
   onClose,
   onApplyPrompt,
 }) => {
-  const [difficulty, setDifficulty] = useState<CEFRLevel>('B1');
+  const [difficulty, setDifficulty] = useState<CEFRLevel>(defaultDifficulty);
   const [topic, setTopic] = useState('');
+
+  // Update difficulty when defaultDifficulty changes (from settings)
+  React.useEffect(() => {
+    setDifficulty(defaultDifficulty);
+  }, [defaultDifficulty]);
 
   // Generate dynamic voice list from actual ElevenLabs voices
   const dynamicElevenLabsVoiceList = useMemo(() => {

@@ -5,9 +5,10 @@ import { useElevenLabsTTS } from './hooks/useElevenLabsTTS';
 import { useMongoStorage } from './hooks/useMongoStorage';
 import { parseDialogue, parseLLMTranscript, guessGender } from './utils/parser';
 import { BrowserVoiceConfig, EngineType, GEMINI_VOICES, SpeakerVoiceMapping, AppView, SavedAudio, ListeningTest, TestAttempt } from './types';
-import { PlayIcon, StopIcon, FolderIcon, PlusIcon, SaveIcon, ArrowLeftIcon, PresentationIcon, FileTextIcon, SparklesIcon } from './components/Icons';
+import { PlayIcon, StopIcon, FolderIcon, PlusIcon, SaveIcon, ArrowLeftIcon, PresentationIcon, FileTextIcon, SparklesIcon, SettingsIcon } from './components/Icons';
 import { SaveDialog } from './components/SaveDialog';
 import { PromptBuilder } from './components/PromptBuilder';
+import { Settings, AppSettings, loadSettings, saveSettings, DEFAULT_SETTINGS } from './components/Settings';
 
 // Lazy load components for better initial load
 const Visualizer = lazy(() => import('./components/Visualizer'));
@@ -77,6 +78,8 @@ const App: React.FC = () => {
   const [geminiPlaybackSuccess, setGeminiPlaybackSuccess] = useState(false);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [showPromptBuilder, setShowPromptBuilder] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [appSettings, setAppSettings] = useState<AppSettings>(() => loadSettings());
 
   // Analysis State
   const analysis = useMemo(() => parseDialogue(text), [text]);
@@ -687,6 +690,12 @@ const App: React.FC = () => {
     setCurrentView('classroom');
   };
 
+  // Settings handlers
+  const handleSaveSettings = (newSettings: AppSettings) => {
+    setAppSettings(newSettings);
+    saveSettings(newSettings);
+  };
+
   // Load test for student view
   const loadStudentTest = async (testId: string) => {
     try {
@@ -809,6 +818,14 @@ const App: React.FC = () => {
               <span className="text-sm">New Audio</span>
             </button>
           )}
+          {/* Settings Button */}
+          <button
+            onClick={() => setShowSettings(true)}
+            className="p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
+            title="Settings"
+          >
+            <SettingsIcon className="w-5 h-5" />
+          </button>
         </div>
       </div>
     </nav>
@@ -1149,6 +1166,7 @@ const App: React.FC = () => {
         isOpen={showPromptBuilder}
         engine={engine}
         elevenLabsVoices={elevenTTS.voices}
+        defaultDifficulty={appSettings.difficultyLevel}
         onClose={() => setShowPromptBuilder(false)}
         onApplyPrompt={(prompt, voiceAssignments) => {
           // For now, just copy the prompt to clipboard
@@ -1156,6 +1174,13 @@ const App: React.FC = () => {
           console.log('Prompt generated:', prompt);
           console.log('Voice assignments:', voiceAssignments);
         }}
+      />
+
+      <Settings
+        isOpen={showSettings}
+        settings={appSettings}
+        onClose={() => setShowSettings(false)}
+        onSave={handleSaveSettings}
       />
     </div>
   );
