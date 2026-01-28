@@ -724,8 +724,8 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntrie
                     </h3>
                   </div>
                   {item.partOfSpeech && (
-                    <p className={`text-sm font-medium italic mb-1 ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`}>
-                      ({item.partOfSpeech})
+                    <p className={`text-lg font-bold uppercase tracking-wide mb-1 ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`}>
+                      {item.partOfSpeech}
                     </p>
                   )}
                   {item.definitionArabic && (
@@ -763,8 +763,8 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntrie
                 {selectedTest.lexis[focusedLexisIndex].term}
               </h3>
               {selectedTest.lexis[focusedLexisIndex].partOfSpeech && (
-                <p className={`text-2xl font-medium italic mb-6 ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`}>
-                  ({selectedTest.lexis[focusedLexisIndex].partOfSpeech})
+                <p className={`text-4xl font-bold uppercase tracking-wide mb-8 ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`}>
+                  {selectedTest.lexis[focusedLexisIndex].partOfSpeech}
                 </p>
               )}
 
