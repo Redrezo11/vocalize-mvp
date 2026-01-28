@@ -510,6 +510,18 @@ const App: React.FC = () => {
     setCurrentView('editor');
   };
 
+  // Handle create transcript-only entry
+  const handleCreateTranscript = () => {
+    setCurrentView('transcript');
+  };
+
+  // Handle import completion (placeholder for now)
+  const handleImportComplete = (data: any) => {
+    console.log('[App] Import completed with data:', data);
+    // TODO: Implement actual import logic
+    alert(`Import completed!\n\nTitle: ${data.title}\nQuestions: ${data.parsedQuestionCount}\nVocabulary: ${data.parsedLexisCount}\nAudio: ${data.audioOption === 'external' ? 'External' : data.audioFile?.name || 'None'}`);
+  };
+
   const handleEdit = (audio: SavedAudio) => {
     // For transcript-only entries, go to detail view (where they can create tests)
     if (audio.isTranscriptOnly) {
@@ -1043,6 +1055,8 @@ const App: React.FC = () => {
           onPlay={handlePlayFromLibrary}
           onDelete={handleDelete}
           onCreateNew={handleCreateNew}
+          onCreateTranscript={handleCreateTranscript}
+          onImportComplete={handleImportComplete}
           onViewDetail={handleViewDetail}
         />
       </Suspense>

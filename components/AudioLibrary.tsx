@@ -1,6 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { SavedAudio, EngineType } from '../types';
 import { PlayIcon, TrashIcon, PlusIcon, FileAudioIcon, FileTextIcon } from './Icons';
+import { CreationMethodSelector, CreationMethod } from './CreationMethodSelector';
+import { ImportWizard, ImportData } from './ImportWizard';
 
 type LibraryTab = 'audio' | 'transcripts';
 
@@ -11,6 +13,8 @@ interface AudioLibraryProps {
   onPlay: (audio: SavedAudio) => void;
   onDelete: (audio: SavedAudio) => void;
   onCreateNew: () => void;
+  onCreateTranscript: () => void;
+  onImportComplete: (data: ImportData) => void;
   onViewDetail: (audio: SavedAudio) => void;
 }
 
@@ -47,10 +51,34 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
   onPlay,
   onDelete,
   onCreateNew,
+  onCreateTranscript,
+  onImportComplete,
   onViewDetail,
 }) => {
   console.log('[AudioLibrary] Rendering with initialTab =', initialTab);
   const [activeTab, setActiveTab] = useState<LibraryTab>(initialTab);
+  const [showMethodSelector, setShowMethodSelector] = useState(false);
+  const [showImportWizard, setShowImportWizard] = useState(false);
+
+  const handleMethodSelect = (method: CreationMethod) => {
+    setShowMethodSelector(false);
+    switch (method) {
+      case 'audio':
+        onCreateNew();
+        break;
+      case 'transcript':
+        onCreateTranscript();
+        break;
+      case 'import':
+        setShowImportWizard(true);
+        break;
+    }
+  };
+
+  const handleImportComplete = (data: ImportData) => {
+    setShowImportWizard(false);
+    onImportComplete(data);
+  };
 
   // Sync with initialTab prop when it changes
   useEffect(() => {
@@ -88,11 +116,11 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
           </p>
         </div>
         <button
-          onClick={onCreateNew}
+          onClick={() => setShowMethodSelector(true)}
           className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-xl font-semibold hover:from-indigo-500 hover:to-violet-500 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 shadow-lg shadow-indigo-500/30"
         >
           <PlusIcon className="w-4 h-4" />
-          New Audio
+          Create New
         </button>
       </div>
 
@@ -223,6 +251,20 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
           ))}
         </div>
       )}
+
+      {/* Creation Method Selector Modal */}
+      <CreationMethodSelector
+        isOpen={showMethodSelector}
+        onClose={() => setShowMethodSelector(false)}
+        onSelect={handleMethodSelect}
+      />
+
+      {/* Import Wizard Modal */}
+      <ImportWizard
+        isOpen={showImportWizard}
+        onClose={() => setShowImportWizard(false)}
+        onComplete={handleImportComplete}
+      />
     </div>
   );
 };
