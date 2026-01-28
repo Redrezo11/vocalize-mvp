@@ -3,20 +3,20 @@ import { GoogleGenAI, Modality } from "@google/genai";
 
 // Build the script for TTS
 export function buildLexisScript(lexis: LexisItem[]): string {
-  const intro = "For this listening, the key vocabulary words are:\n\n";
+  const intro = "The key vocabulary words are:\n\n";
 
   const words = lexis.map((item, index) => {
-    const number = `Number ${index + 1}:`;
+    const number = index + 1;
     const english = item.term;
     // Use Arabic definition as the Arabic word/phrase
     const arabic = item.definitionArabic || '';
 
-    // Format: "Number 1: [English] ... [Arabic]"
-    return `${number} ${english}. ... ${arabic}.`;
+    // Clear explicit format - avoid "..." which AI might interpret as omission
+    return `Word number ${number}. ${english}. In Arabic: ${arabic}.`;
   }).join('\n\n');
 
-  // Add ending to ensure last word is fully spoken
-  const ending = "\n\n... End of vocabulary.";
+  // Add clear ending
+  const ending = "\n\nThat is all the vocabulary for today.";
 
   return intro + words + ending;
 }
@@ -208,18 +208,12 @@ async function generateWithOpenAI(script: string): Promise<string | null> {
 
   try {
     console.log('[LexisTTS] Using OpenAI TTS with gpt-4o-mini-tts model');
+    console.log('[LexisTTS] Script length:', script.length, 'characters');
+    console.log('[LexisTTS] Full script being sent:\n', script);
 
-    // Instructions for proper pacing and pronunciation
-    const instructions = `You are a vocabulary teacher helping EFL students learn English words.
-Speak clearly and at a measured pace suitable for language learners.
-For each vocabulary item:
-- Say the number clearly (e.g., "Number one", "Number two")
-- Pause briefly after the number
-- Say the English word clearly and slowly
-- Pause for 2 seconds to let students process
-- Then say the Arabic translation clearly
-- Pause for 2 seconds before moving to the next word
-Maintain consistent pacing throughout. Do not rush through the later items.`;
+    // Simple instructions - just voice style, not content interpretation
+    // Note: Detailed instructions can cause gpt-4o-mini-tts to skip/modify content
+    const instructions = `Speak slowly and clearly like a patient teacher. Read every single word exactly as written. Do not skip any items. Pause at each "..." in the text.`;
 
     const response = await fetch('https://api.openai.com/v1/audio/speech', {
       method: 'POST',
