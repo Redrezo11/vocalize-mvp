@@ -142,7 +142,7 @@ export interface LexisItem {
 export interface LexisAudio {
   url: string;                     // Audio URL (base64 data URL or cloudinary)
   generatedAt: string;
-  engine: 'gemini' | 'elevenlabs';
+  engine: 'gemini' | 'elevenlabs' | 'openai';
 }
 
 export interface ListeningTest {

@@ -195,6 +195,55 @@ async function generateWithElevenLabs(script: string): Promise<string | null> {
   }
 }
 
+// Generate audio using OpenAI TTS
+async function generateWithOpenAI(script: string): Promise<string | null> {
+  const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
+  if (!apiKey || apiKey === 'PLACEHOLDER_API_KEY') {
+    console.log('[LexisTTS] No OpenAI API key configured');
+    return null;
+  }
+
+  try {
+    console.log('[LexisTTS] Using OpenAI TTS with tts-1 model');
+
+    const response = await fetch('https://api.openai.com/v1/audio/speech', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'tts-1',
+        input: script,
+        voice: 'onyx', // Deep male voice, good for teaching
+        response_format: 'mp3'
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      console.error('[LexisTTS] OpenAI TTS error:', error);
+
+      if (response.status === 429) {
+        console.log('[LexisTTS] OpenAI quota exceeded');
+      }
+      return null;
+    }
+
+    // Get audio as blob and convert to base64
+    const audioBlob = await response.blob();
+    const arrayBuffer = await audioBlob.arrayBuffer();
+    const base64 = btoa(
+      new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
+    );
+
+    return `data:audio/mpeg;base64,${base64}`;
+  } catch (error) {
+    console.error('[LexisTTS] OpenAI TTS failed:', error);
+    return null;
+  }
+}
+
 export interface GenerateLexisAudioResult {
   success: boolean;
   audio?: LexisAudio;
@@ -240,9 +289,24 @@ export async function generateLexisAudio(lexis: LexisItem[]): Promise<GenerateLe
     };
   }
 
-  // Both failed
+  // Fallback to OpenAI
+  console.log('[LexisTTS] ElevenLabs failed, trying OpenAI...');
+  audioUrl = await generateWithOpenAI(script);
+
+  if (audioUrl) {
+    return {
+      success: true,
+      audio: {
+        url: audioUrl,
+        generatedAt: new Date().toISOString(),
+        engine: 'openai'
+      }
+    };
+  }
+
+  // All failed
   return {
     success: false,
-    error: 'TTS quota exceeded for both Gemini and ElevenLabs. Please try again later.'
+    error: 'TTS quota exceeded for Gemini, ElevenLabs, and OpenAI. Please try again later.'
   };
 }
