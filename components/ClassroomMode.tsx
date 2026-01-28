@@ -3,7 +3,7 @@ import { SavedAudio, ListeningTest, LexisAudio } from '../types';
 import { ArrowLeftIcon, PlayIcon, PauseIcon, RefreshIcon, ChevronRightIcon } from './Icons';
 import { ClassroomTheme } from './Settings';
 import QRCode from 'qrcode';
-import { generateLexisAudio } from '../utils/lexisTTS';
+import { generateLexisAudio, LexisTTSEngine } from '../utils/lexisTTS';
 
 interface ClassroomModeProps {
   tests: ListeningTest[];
@@ -42,6 +42,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntrie
   const [isGeneratingLexisAudio, setIsGeneratingLexisAudio] = useState(false);
   const [lexisAudioError, setLexisAudioError] = useState<string | null>(null);
   const [isPlayingLexisAudio, setIsPlayingLexisAudio] = useState(false);
+  const [lexisTTSEngine, setLexisTTSEngine] = useState<LexisTTSEngine>('gemini');
   const lexisAudioRef = useRef<HTMLAudioElement>(null);
 
   const SPEED_OPTIONS = [0.5, 0.75, 1] as const;
@@ -59,7 +60,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntrie
     setLexisAudioError(null);
 
     try {
-      const result = await generateLexisAudio(selectedTest.lexis);
+      const result = await generateLexisAudio(selectedTest.lexis, lexisTTSEngine);
 
       if (result.success && result.audio) {
         // Update the test with the generated audio
@@ -849,11 +850,46 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntrie
                 This will generate audio teaching the vocabulary words to students. The audio will include:
               </p>
 
-              <ul className={`mb-6 space-y-2 text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+              <ul className={`mb-4 space-y-2 text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                 <li>- Introduction: "The key vocabulary words are..."</li>
                 <li>- Each word with its Arabic translation</li>
                 <li>- Pauses for comprehension</li>
               </ul>
+
+              {/* TTS Engine Selector */}
+              <div className="mb-6">
+                <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                  Voice Engine
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setLexisTTSEngine('gemini')}
+                    disabled={isGeneratingLexisAudio}
+                    className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
+                      lexisTTSEngine === 'gemini'
+                        ? 'bg-blue-600 text-white'
+                        : isDark
+                          ? 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    } disabled:opacity-50`}
+                  >
+                    Gemini
+                  </button>
+                  <button
+                    onClick={() => setLexisTTSEngine('openai')}
+                    disabled={isGeneratingLexisAudio}
+                    className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
+                      lexisTTSEngine === 'openai'
+                        ? 'bg-blue-600 text-white'
+                        : isDark
+                          ? 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    } disabled:opacity-50`}
+                  >
+                    GPT-4o mini
+                  </button>
+                </div>
+              </div>
 
               {lexisAudioError && (
                 <div className="mb-4 p-3 bg-red-100 border border-red-200 rounded-lg text-red-700 text-sm">

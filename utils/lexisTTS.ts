@@ -263,8 +263,12 @@ export interface GenerateLexisAudioResult {
   error?: string;
 }
 
+export type LexisTTSEngine = 'gemini' | 'openai';
+
 // Main function to generate lexis audio
-export async function generateLexisAudio(lexis: LexisItem[]): Promise<GenerateLexisAudioResult> {
+// If engine is specified, only use that engine (no fallback)
+// If engine is not specified, use fallback chain: Gemini -> ElevenLabs -> OpenAI
+export async function generateLexisAudio(lexis: LexisItem[], engine?: LexisTTSEngine): Promise<GenerateLexisAudioResult> {
   if (!lexis || lexis.length === 0) {
     return { success: false, error: 'No vocabulary items to generate audio for' };
   }
@@ -272,7 +276,35 @@ export async function generateLexisAudio(lexis: LexisItem[]): Promise<GenerateLe
   const script = buildLexisScript(lexis);
   console.log('[LexisTTS] Generated script:', script);
 
-  // Try Gemini first
+  // If specific engine is requested, only use that one
+  if (engine) {
+    console.log(`[LexisTTS] Using specified engine: ${engine}`);
+    let audioUrl: string | null = null;
+
+    if (engine === 'gemini') {
+      audioUrl = await generateWithGemini(script);
+    } else if (engine === 'openai') {
+      audioUrl = await generateWithOpenAI(script);
+    }
+
+    if (audioUrl) {
+      return {
+        success: true,
+        audio: {
+          url: audioUrl,
+          generatedAt: new Date().toISOString(),
+          engine: engine
+        }
+      };
+    }
+
+    return {
+      success: false,
+      error: `Failed to generate audio with ${engine === 'gemini' ? 'Gemini' : 'GPT-4o mini'}. Please try another engine or try again later.`
+    };
+  }
+
+  // Fallback chain: Gemini -> ElevenLabs -> OpenAI
   console.log('[LexisTTS] Trying Gemini TTS...');
   let audioUrl = await generateWithGemini(script);
 
