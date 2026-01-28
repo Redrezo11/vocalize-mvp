@@ -114,7 +114,7 @@ export interface AudioEntryRow {
   updated_at: string;
 }
 
-export type AppView = 'editor' | 'library' | 'detail' | 'test-builder' | 'test-take' | 'classroom' | 'student-test' | 'transcript';
+export type AppView = 'home' | 'editor' | 'library' | 'detail' | 'test-builder' | 'test-take' | 'classroom' | 'student-test' | 'transcript';
 
 // Test/Exercise Types
 export type TestType = 'listening-comprehension' | 'fill-in-blank' | 'dictation';

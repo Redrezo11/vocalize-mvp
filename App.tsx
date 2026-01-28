@@ -10,7 +10,7 @@ import { SaveDialog } from './components/SaveDialog';
 import { PromptBuilder } from './components/PromptBuilder';
 import { Settings, AppSettings, DEFAULT_SETTINGS } from './components/Settings';
 import { useSettings } from './hooks/useSettings';
-import { CreationMethodSelector, CreationMethod } from './components/CreationMethodSelector';
+import { HomePage, CreationMethod } from './components/HomePage';
 import { ImportWizard, ImportData } from './components/ImportWizard';
 
 // Lazy load components for better initial load
@@ -57,7 +57,7 @@ const API_BASE = '/api';
 
 const App: React.FC = () => {
   // Navigation state
-  const [currentView, setCurrentView] = useState<AppView>('editor');
+  const [currentView, setCurrentView] = useState<AppView>('home');
   const [libraryTab, setLibraryTab] = useState<'audio' | 'transcripts'>('audio');
   const [selectedAudio, setSelectedAudio] = useState<SavedAudio | null>(null);
   const [editingAudioId, setEditingAudioId] = useState<string | null>(null);
@@ -83,7 +83,6 @@ const App: React.FC = () => {
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [showPromptBuilder, setShowPromptBuilder] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [showCreationSelector, setShowCreationSelector] = useState(false);
   const [showImportWizard, setShowImportWizard] = useState(false);
   const settingsHook = useSettings();
 
@@ -503,13 +502,7 @@ const App: React.FC = () => {
     }
   };
 
-  // Show the creation method selector
   const handleCreateNew = () => {
-    setShowCreationSelector(true);
-  };
-
-  // Go directly to the audio editor
-  const handleCreateAudio = () => {
     setEditingAudioId(null);
     setTitle('Untitled Audio');
     setText("Narrator: Welcome to DialogueForge.\n\nJane: This tool can automatically detect different speakers in your text.\n\nJohn: That is correct. Just type a name followed by a colon, and assign us a voice!");
@@ -520,12 +513,16 @@ const App: React.FC = () => {
     setCurrentView('editor');
   };
 
-  // Handle creation method selection
-  const handleMethodSelect = (method: CreationMethod) => {
-    setShowCreationSelector(false);
+  // Handle create transcript-only entry
+  const handleCreateTranscript = () => {
+    setCurrentView('transcript');
+  };
+
+  // Handle home page method selection
+  const handleHomeMethodSelect = (method: CreationMethod) => {
     switch (method) {
       case 'audio':
-        handleCreateAudio();
+        handleCreateNew();
         break;
       case 'transcript':
         setCurrentView('transcript');
@@ -887,6 +884,15 @@ const App: React.FC = () => {
     </nav>
   );
 
+  // Home page view - creation method selector
+  const renderHome = () => (
+    <HomePage
+      onSelect={handleHomeMethodSelect}
+      onViewLibrary={() => setCurrentView('library')}
+      libraryCount={audioStorage.savedAudios.length}
+    />
+  );
+
   // Editor view
   const renderEditor = () => (
     <main className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
@@ -1077,6 +1083,8 @@ const App: React.FC = () => {
           onPlay={handlePlayFromLibrary}
           onDelete={handleDelete}
           onCreateNew={handleCreateNew}
+          onCreateTranscript={handleCreateTranscript}
+          onImportComplete={handleImportComplete}
           onViewDetail={handleViewDetail}
         />
       </Suspense>
@@ -1237,6 +1245,7 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen text-slate-900 selection:bg-indigo-500/20">
       {renderNav()}
+      {currentView === 'home' && renderHome()}
       {currentView === 'editor' && renderEditor()}
       {currentView === 'library' && renderLibrary()}
       {currentView === 'detail' && renderDetail()}
@@ -1280,13 +1289,6 @@ const App: React.FC = () => {
         settings={settingsHook.settings}
         onClose={() => setShowSettings(false)}
         onSave={handleSaveSettings}
-      />
-
-      {/* Creation Method Selector Modal */}
-      <CreationMethodSelector
-        isOpen={showCreationSelector}
-        onClose={() => setShowCreationSelector(false)}
-        onSelect={handleMethodSelect}
       />
 
       {/* Import Wizard Modal */}
