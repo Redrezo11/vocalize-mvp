@@ -195,7 +195,7 @@ async function generateWithElevenLabs(script: string): Promise<string | null> {
   }
 }
 
-// Generate audio using OpenAI TTS
+// Generate audio using OpenAI TTS (gpt-4o-mini-tts with instructions)
 async function generateWithOpenAI(script: string): Promise<string | null> {
   const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
   if (!apiKey || apiKey === 'PLACEHOLDER_API_KEY') {
@@ -204,7 +204,19 @@ async function generateWithOpenAI(script: string): Promise<string | null> {
   }
 
   try {
-    console.log('[LexisTTS] Using OpenAI TTS with tts-1 model');
+    console.log('[LexisTTS] Using OpenAI TTS with gpt-4o-mini-tts model');
+
+    // Instructions for proper pacing and pronunciation
+    const instructions = `You are a vocabulary teacher helping EFL students learn English words.
+Speak clearly and at a measured pace suitable for language learners.
+For each vocabulary item:
+- Say the number clearly (e.g., "Number one", "Number two")
+- Pause briefly after the number
+- Say the English word clearly and slowly
+- Pause for 2 seconds to let students process
+- Then say the Arabic translation clearly
+- Pause for 2 seconds before moving to the next word
+Maintain consistent pacing throughout. Do not rush through the later items.`;
 
     const response = await fetch('https://api.openai.com/v1/audio/speech', {
       method: 'POST',
@@ -213,9 +225,10 @@ async function generateWithOpenAI(script: string): Promise<string | null> {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'tts-1',
+        model: 'gpt-4o-mini-tts',
         input: script,
         voice: 'onyx', // Deep male voice, good for teaching
+        instructions: instructions,
         response_format: 'mp3'
       })
     });
