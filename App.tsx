@@ -10,6 +10,8 @@ import { SaveDialog } from './components/SaveDialog';
 import { PromptBuilder } from './components/PromptBuilder';
 import { Settings, AppSettings, DEFAULT_SETTINGS } from './components/Settings';
 import { useSettings } from './hooks/useSettings';
+import { CreationMethodSelector, CreationMethod } from './components/CreationMethodSelector';
+import { ImportWizard, ImportData } from './components/ImportWizard';
 
 // Lazy load components for better initial load
 const Visualizer = lazy(() => import('./components/Visualizer'));
@@ -81,6 +83,8 @@ const App: React.FC = () => {
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [showPromptBuilder, setShowPromptBuilder] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showCreationSelector, setShowCreationSelector] = useState(false);
+  const [showImportWizard, setShowImportWizard] = useState(false);
   const settingsHook = useSettings();
 
   // Analysis State
@@ -499,7 +503,13 @@ const App: React.FC = () => {
     }
   };
 
+  // Show the creation method selector
   const handleCreateNew = () => {
+    setShowCreationSelector(true);
+  };
+
+  // Go directly to the audio editor
+  const handleCreateAudio = () => {
     setEditingAudioId(null);
     setTitle('Untitled Audio');
     setText("Narrator: Welcome to DialogueForge.\n\nJane: This tool can automatically detect different speakers in your text.\n\nJohn: That is correct. Just type a name followed by a colon, and assign us a voice!");
@@ -510,13 +520,25 @@ const App: React.FC = () => {
     setCurrentView('editor');
   };
 
-  // Handle create transcript-only entry
-  const handleCreateTranscript = () => {
-    setCurrentView('transcript');
+  // Handle creation method selection
+  const handleMethodSelect = (method: CreationMethod) => {
+    setShowCreationSelector(false);
+    switch (method) {
+      case 'audio':
+        handleCreateAudio();
+        break;
+      case 'transcript':
+        setCurrentView('transcript');
+        break;
+      case 'import':
+        setShowImportWizard(true);
+        break;
+    }
   };
 
   // Handle import completion (placeholder for now)
-  const handleImportComplete = (data: any) => {
+  const handleImportComplete = (data: ImportData) => {
+    setShowImportWizard(false);
     console.log('[App] Import completed with data:', data);
     // TODO: Implement actual import logic
     alert(`Import completed!\n\nTitle: ${data.title}\nQuestions: ${data.parsedQuestionCount}\nVocabulary: ${data.parsedLexisCount}\nAudio: ${data.audioOption === 'external' ? 'External' : data.audioFile?.name || 'None'}`);
@@ -1055,8 +1077,6 @@ const App: React.FC = () => {
           onPlay={handlePlayFromLibrary}
           onDelete={handleDelete}
           onCreateNew={handleCreateNew}
-          onCreateTranscript={handleCreateTranscript}
-          onImportComplete={handleImportComplete}
           onViewDetail={handleViewDetail}
         />
       </Suspense>
@@ -1260,6 +1280,20 @@ const App: React.FC = () => {
         settings={settingsHook.settings}
         onClose={() => setShowSettings(false)}
         onSave={handleSaveSettings}
+      />
+
+      {/* Creation Method Selector Modal */}
+      <CreationMethodSelector
+        isOpen={showCreationSelector}
+        onClose={() => setShowCreationSelector(false)}
+        onSelect={handleMethodSelect}
+      />
+
+      {/* Import Wizard Modal */}
+      <ImportWizard
+        isOpen={showImportWizard}
+        onClose={() => setShowImportWizard(false)}
+        onComplete={handleImportComplete}
       />
     </div>
   );
