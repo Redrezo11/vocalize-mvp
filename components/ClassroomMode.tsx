@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { SavedAudio, ListeningTest } from '../types';
+import { SavedAudio, ListeningTest, LexisAudio } from '../types';
 import { ArrowLeftIcon, PlayIcon, PauseIcon, RefreshIcon, ChevronRightIcon } from './Icons';
 import { ClassroomTheme } from './Settings';
 import QRCode from 'qrcode';
+import { generateLexisAudio } from '../utils/lexisTTS';
 
 interface ClassroomModeProps {
   tests: ListeningTest[];
@@ -12,11 +13,12 @@ interface ClassroomModeProps {
   onPreviewStudent: (test: ListeningTest) => void;
   onEditTest?: (test: ListeningTest) => void;
   onDeleteTest?: (test: ListeningTest) => void;
+  onUpdateTest?: (test: ListeningTest) => void;  // To save lexisAudio
 }
 
 type ClassroomView = 'select' | 'present';
 
-export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntries, theme = 'light', onExit, onPreviewStudent, onEditTest, onDeleteTest }) => {
+export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntries, theme = 'light', onExit, onPreviewStudent, onEditTest, onDeleteTest, onUpdateTest }) => {
   const isDark = theme === 'dark';
   const [view, setView] = useState<ClassroomView>('select');
   const [selectedTest, setSelectedTest] = useState<ListeningTest | null>(null);
@@ -31,7 +33,16 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntrie
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [testToDelete, setTestToDelete] = useState<ListeningTest | null>(null);
+  const [lexisViewMode, setLexisViewMode] = useState<'overview' | 'focus'>('overview');
+  const [focusedLexisIndex, setFocusedLexisIndex] = useState(0);
   const audioRef = useRef<HTMLAudioElement>(null);
+
+  // Lexis audio state
+  const [showLexisAudioConfirm, setShowLexisAudioConfirm] = useState(false);
+  const [isGeneratingLexisAudio, setIsGeneratingLexisAudio] = useState(false);
+  const [lexisAudioError, setLexisAudioError] = useState<string | null>(null);
+  const [isPlayingLexisAudio, setIsPlayingLexisAudio] = useState(false);
+  const lexisAudioRef = useRef<HTMLAudioElement>(null);
 
   const SPEED_OPTIONS = [0.5, 0.75, 1] as const;
 
@@ -39,6 +50,74 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntrie
   const getAudioForTest = (test: ListeningTest): SavedAudio | undefined => {
     return audioEntries.find(a => a.id === test.audioId);
   };
+
+  // Lexis audio generation handler
+  const handleGenerateLexisAudio = async () => {
+    if (!selectedTest?.lexis || selectedTest.lexis.length === 0) return;
+
+    setIsGeneratingLexisAudio(true);
+    setLexisAudioError(null);
+
+    try {
+      const result = await generateLexisAudio(selectedTest.lexis);
+
+      if (result.success && result.audio) {
+        // Update the test with the generated audio
+        const updatedTest: ListeningTest = {
+          ...selectedTest,
+          lexisAudio: result.audio
+        };
+        setSelectedTest(updatedTest);
+
+        // Save to database
+        if (onUpdateTest) {
+          onUpdateTest(updatedTest);
+        }
+
+        // Close modal on success
+        setShowLexisAudioConfirm(false);
+      } else {
+        // Keep modal open and show error
+        setLexisAudioError(result.error || 'Failed to generate audio');
+      }
+    } catch (error) {
+      console.error('[ClassroomMode] Lexis audio generation error:', error);
+      setLexisAudioError('An unexpected error occurred');
+    } finally {
+      setIsGeneratingLexisAudio(false);
+    }
+  };
+
+  // Lexis audio playback handlers
+  const handlePlayLexisAudio = () => {
+    if (lexisAudioRef.current) {
+      if (isPlayingLexisAudio) {
+        lexisAudioRef.current.pause();
+      } else {
+        lexisAudioRef.current.play();
+      }
+    }
+  };
+
+  // Lexis audio element event handlers
+  useEffect(() => {
+    const audioEl = lexisAudioRef.current;
+    if (!audioEl) return;
+
+    const handlePlay = () => setIsPlayingLexisAudio(true);
+    const handlePause = () => setIsPlayingLexisAudio(false);
+    const handleEnded = () => setIsPlayingLexisAudio(false);
+
+    audioEl.addEventListener('play', handlePlay);
+    audioEl.addEventListener('pause', handlePause);
+    audioEl.addEventListener('ended', handleEnded);
+
+    return () => {
+      audioEl.removeEventListener('play', handlePlay);
+      audioEl.removeEventListener('pause', handlePause);
+      audioEl.removeEventListener('ended', handleEnded);
+    };
+  }, [selectedTest?.lexisAudio]);
 
   // Generate QR code for student access
   const generateQRCode = async (test: ListeningTest) => {
@@ -178,6 +257,23 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntrie
         case 'Q':
           if (selectedTest) generateQRCode(selectedTest);
           break;
+        case 'v':
+        case 'V':
+          setLexisViewMode(prev => prev === 'overview' ? 'focus' : 'overview');
+          setFocusedLexisIndex(0);
+          break;
+        case 'ArrowLeft':
+          if (lexisViewMode === 'focus' && selectedTest?.lexis) {
+            e.preventDefault();
+            setFocusedLexisIndex(prev => prev > 0 ? prev - 1 : selectedTest.lexis!.length - 1);
+          }
+          break;
+        case 'ArrowRight':
+          if (lexisViewMode === 'focus' && selectedTest?.lexis) {
+            e.preventDefault();
+            setFocusedLexisIndex(prev => prev < selectedTest.lexis!.length - 1 ? prev + 1 : 0);
+          }
+          break;
         case 'Escape':
           setView('select');
           setSelectedTest(null);
@@ -191,7 +287,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntrie
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [view, isPlaying, showQRModal, selectedTest]);
+  }, [view, isPlaying, showQRModal, selectedTest, lexisViewMode]);
 
   // Get test type label
   const getTestTypeLabel = (type: string): string => {
@@ -249,6 +345,22 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntrie
       <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
       <line x1="10" y1="11" x2="10" y2="17" />
       <line x1="14" y1="11" x2="14" y2="17" />
+    </svg>
+  );
+
+  // Speaker Icon for lexis audio
+  const SpeakerIcon = ({ className }: { className?: string }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+      <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+      <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+    </svg>
+  );
+
+  // Spinner Icon for loading
+  const SpinnerIcon = ({ className }: { className?: string }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`animate-spin ${className}`}>
+      <path d="M21 12a9 9 0 1 1-6.219-8.56" />
     </svg>
   );
 
@@ -469,6 +581,42 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntrie
                   <span className="text-sm">QR Code</span>
                 </button>
 
+                {/* Lexis Audio Button */}
+                {selectedTest.lexis && selectedTest.lexis.length > 0 && (
+                  selectedTest.lexisAudio ? (
+                    <button
+                      onClick={handlePlayLexisAudio}
+                      className={`flex items-center gap-2 h-[34px] px-3 rounded-lg transition-colors ${
+                        isPlayingLexisAudio
+                          ? 'bg-green-600 text-white hover:bg-green-500'
+                          : 'bg-emerald-600 text-white hover:bg-emerald-500'
+                      }`}
+                      title={isPlayingLexisAudio ? "Pause vocabulary audio" : "Play vocabulary audio"}
+                    >
+                      {isPlayingLexisAudio ? (
+                        <PauseIcon className="w-4 h-4" />
+                      ) : (
+                        <SpeakerIcon className="w-4 h-4" />
+                      )}
+                      <span className="text-sm">Vocab</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setShowLexisAudioConfirm(true)}
+                      disabled={isGeneratingLexisAudio}
+                      className="flex items-center gap-2 h-[34px] px-3 bg-amber-600 text-white rounded-lg hover:bg-amber-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Generate vocabulary audio"
+                    >
+                      {isGeneratingLexisAudio ? (
+                        <SpinnerIcon className="w-4 h-4" />
+                      ) : (
+                        <SpeakerIcon className="w-4 h-4" />
+                      )}
+                      <span className="text-sm">{isGeneratingLexisAudio ? 'Generating' : 'Vocab'}</span>
+                    </button>
+                  )
+                )}
+
                 {/* Play Counter */}
                 <div className="flex items-center gap-2 bg-slate-800 px-4 py-2 rounded-lg">
                   <span className="text-slate-400 text-sm">Plays:</span>
@@ -547,73 +695,105 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntrie
         </div>
 
         {/* Vocabulary / Lexis Section */}
-        <div className="max-w-4xl mx-auto px-6 py-8">
-          <div className={`mb-6 pb-4 border-b-2 ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
-            <h2 className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-              Key Vocabulary
-            </h2>
-            <p className={`mt-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-              {selectedTest.lexis?.length || 0} word{(selectedTest.lexis?.length || 0) !== 1 ? 's' : ''}
-            </p>
-          </div>
-
-          {(!selectedTest.lexis || selectedTest.lexis.length === 0) ? (
+        {(!selectedTest.lexis || selectedTest.lexis.length === 0) ? (
+          <div className="max-w-4xl mx-auto px-6 py-8">
             <div className={`text-center py-12 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
               <p className="text-lg">No vocabulary items for this test</p>
               <p className="text-sm mt-2">Add vocabulary in the test builder</p>
             </div>
-          ) : (
-            <div className="space-y-6">
+          </div>
+        ) : lexisViewMode === 'overview' ? (
+          /* Overview Mode - All words fit on screen */
+          <div className="px-6 py-4 h-[calc(100vh-180px)] overflow-hidden">
+            <div className={`grid gap-3 h-full`} style={{
+              gridTemplateColumns: `repeat(${Math.min(4, Math.ceil(Math.sqrt(selectedTest.lexis.length)))}, 1fr)`,
+              gridTemplateRows: `repeat(${Math.ceil(selectedTest.lexis.length / Math.min(4, Math.ceil(Math.sqrt(selectedTest.lexis.length))))}, 1fr)`
+            }}>
               {selectedTest.lexis.map((item, index) => (
-                <div key={item.id} className={`p-6 rounded-2xl border-2 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
-                  <div className="flex items-start gap-4">
-                    <span className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${isDark ? 'bg-indigo-600 text-white' : 'bg-slate-900 text-white'}`}>
+                <div
+                  key={item.id}
+                  onClick={() => { setLexisViewMode('focus'); setFocusedLexisIndex(index); }}
+                  className={`p-4 rounded-xl border-2 cursor-pointer transition-transform hover:scale-[1.02] flex flex-col justify-center ${isDark ? 'bg-slate-800 border-slate-700 hover:border-indigo-500' : 'bg-slate-50 border-slate-200 hover:border-indigo-400'}`}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${isDark ? 'bg-indigo-600 text-white' : 'bg-slate-900 text-white'}`}>
                       {index + 1}
                     </span>
-                    <div className="flex-1">
-                      {/* Term and Part of Speech */}
-                      <div className="flex items-center gap-3 mb-2">
-                        <h3 className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                          {item.term}
-                        </h3>
-                        {item.partOfSpeech && (
-                          <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${isDark ? 'bg-slate-700 text-slate-400' : 'bg-slate-200 text-slate-600'}`}>
-                            {item.partOfSpeech}
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Definition */}
-                      <p className={`text-lg mb-2 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                        {item.definition}
-                      </p>
-
-                      {/* Arabic Definition */}
-                      {item.definitionArabic && (
-                        <p className={`text-lg mb-2 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} dir="rtl">
-                          {item.definitionArabic}
-                        </p>
-                      )}
-
-                      {/* Example */}
-                      {item.example && (
-                        <p className={`text-base italic mt-3 pl-4 border-l-4 ${isDark ? 'text-slate-400 border-indigo-500' : 'text-slate-500 border-indigo-400'}`}>
-                          "{item.example}"
-                        </p>
-                      )}
-                    </div>
+                    <h3 className={`text-xl font-bold truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                      {item.term}
+                    </h3>
+                    {item.partOfSpeech && (
+                      <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${isDark ? 'bg-slate-700 text-slate-400' : 'bg-slate-200 text-slate-600'}`}>
+                        {item.partOfSpeech}
+                      </span>
+                    )}
                   </div>
+                  {item.definitionArabic && (
+                    <p className={`text-lg leading-snug line-clamp-2 ${isDark ? 'text-slate-300' : 'text-slate-700'}`} dir="rtl">
+                      {item.definitionArabic}
+                    </p>
+                  )}
                 </div>
               ))}
             </div>
-          )}
-        </div>
+          </div>
+        ) : (
+          /* Focus Mode - One word at a time, large for accessibility */
+          <div className="flex items-center justify-center h-[calc(100vh-180px)] px-8">
+            <button
+              onClick={() => setFocusedLexisIndex(prev => prev > 0 ? prev - 1 : selectedTest.lexis!.length - 1)}
+              className={`p-4 rounded-full transition-colors ${isDark ? 'text-slate-400 hover:text-white hover:bg-slate-800' : 'text-slate-400 hover:text-slate-900 hover:bg-slate-100'}`}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 18 9 12 15 6" />
+              </svg>
+            </button>
+
+            <div className={`flex-1 max-w-4xl mx-8 p-12 rounded-3xl border-2 text-center ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
+              <div className="flex items-center justify-center gap-4 mb-6">
+                <span className={`w-16 h-16 rounded-full flex items-center justify-center font-bold text-2xl ${isDark ? 'bg-indigo-600 text-white' : 'bg-slate-900 text-white'}`}>
+                  {focusedLexisIndex + 1}
+                </span>
+                <span className={`text-sm ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                  of {selectedTest.lexis.length}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-center gap-4 mb-8">
+                <h3 className={`text-6xl font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                  {selectedTest.lexis[focusedLexisIndex].term}
+                </h3>
+                {selectedTest.lexis[focusedLexisIndex].partOfSpeech && (
+                  <span className={`px-4 py-2 text-lg font-medium rounded-full ${isDark ? 'bg-slate-700 text-slate-400' : 'bg-slate-200 text-slate-600'}`}>
+                    {selectedTest.lexis[focusedLexisIndex].partOfSpeech}
+                  </span>
+                )}
+              </div>
+
+              {selectedTest.lexis[focusedLexisIndex].definitionArabic && (
+                <p className={`text-5xl leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-700'}`} dir="rtl">
+                  {selectedTest.lexis[focusedLexisIndex].definitionArabic}
+                </p>
+              )}
+            </div>
+
+            <button
+              onClick={() => setFocusedLexisIndex(prev => prev < selectedTest.lexis!.length - 1 ? prev + 1 : 0)}
+              className={`p-4 rounded-full transition-colors ${isDark ? 'text-slate-400 hover:text-white hover:bg-slate-800' : 'text-slate-400 hover:text-slate-900 hover:bg-slate-100'}`}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </button>
+          </div>
+        )}
 
         {/* Keyboard Hints - Fixed Bottom */}
-        <div className={`fixed bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-6 backdrop-blur px-6 py-3 rounded-full text-sm ${isDark ? 'bg-slate-800/90 text-white' : 'bg-slate-900/90 text-white'}`}>
+        <div className={`fixed bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-4 backdrop-blur px-6 py-3 rounded-full text-sm ${isDark ? 'bg-slate-800/90 text-white' : 'bg-slate-900/90 text-white'}`}>
           <span><kbd className={`px-2 py-1 rounded ${isDark ? 'bg-slate-700' : 'bg-slate-700'}`}>Space</kbd> Play/Pause</span>
           <span><kbd className={`px-2 py-1 rounded ${isDark ? 'bg-slate-700' : 'bg-slate-700'}`}>R</kbd> Restart</span>
-          <span><kbd className={`px-2 py-1 rounded ${isDark ? 'bg-slate-700' : 'bg-slate-700'}`}>Q</kbd> QR Code</span>
+          <span><kbd className={`px-2 py-1 rounded ${isDark ? 'bg-slate-700' : 'bg-slate-700'}`}>V</kbd> {lexisViewMode === 'overview' ? 'Focus' : 'Overview'}</span>
+          {lexisViewMode === 'focus' && <span><kbd className={`px-2 py-1 rounded ${isDark ? 'bg-slate-700' : 'bg-slate-700'}`}>←→</kbd> Navigate</span>}
           <span><kbd className={`px-2 py-1 rounded ${isDark ? 'bg-slate-700' : 'bg-slate-700'}`}>Esc</kbd> Exit</span>
         </div>
 
@@ -651,6 +831,73 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntrie
               </div>
             </div>
           </div>
+        )}
+
+        {/* Lexis Audio Confirmation Modal */}
+        {showLexisAudioConfirm && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+            <div className={`rounded-2xl max-w-md w-full p-6 ${isDark ? 'bg-slate-800' : 'bg-white'}`}>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center">
+                  <SpeakerIcon className="w-6 h-6 text-amber-600" />
+                </div>
+                <div>
+                  <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>Generate Vocabulary Audio</h2>
+                  <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>TTS for {selectedTest?.lexis?.length || 0} vocabulary items</p>
+                </div>
+              </div>
+
+              <p className={`mb-4 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+                This will generate audio teaching the vocabulary words to students. The audio will include:
+              </p>
+
+              <ul className={`mb-6 space-y-2 text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                <li>- Introduction: "The key vocabulary words are..."</li>
+                <li>- Each word with its Arabic translation</li>
+                <li>- Pauses for comprehension</li>
+              </ul>
+
+              {lexisAudioError && (
+                <div className="mb-4 p-3 bg-red-100 border border-red-200 rounded-lg text-red-700 text-sm">
+                  {lexisAudioError}
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => { setShowLexisAudioConfirm(false); setLexisAudioError(null); }}
+                  disabled={isGeneratingLexisAudio}
+                  className={`flex-1 px-4 py-3 rounded-xl font-medium transition-colors disabled:opacity-50 ${isDark ? 'bg-slate-700 text-slate-300 hover:bg-slate-600' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleGenerateLexisAudio}
+                  disabled={isGeneratingLexisAudio}
+                  className="flex-1 px-4 py-3 bg-amber-600 text-white rounded-xl font-medium hover:bg-amber-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {isGeneratingLexisAudio ? (
+                    <>
+                      <SpinnerIcon className="w-4 h-4" />
+                      Generating...
+                    </>
+                  ) : (
+                    'Generate Audio'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Lexis Audio Element */}
+        {selectedTest?.lexisAudio?.url && (
+          <audio
+            ref={lexisAudioRef}
+            src={selectedTest.lexisAudio.url}
+            preload="metadata"
+            className="hidden"
+          />
         )}
       </div>
     );

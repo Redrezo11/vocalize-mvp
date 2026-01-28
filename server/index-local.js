@@ -57,6 +57,7 @@ const listeningTestSchema = new mongoose.Schema({
   type: { type: String, enum: ['listening-comprehension', 'fill-in-blank', 'dictation'], required: true },
   questions: [testQuestionSchema],
   lexis: [lexisItemSchema],  // Vocabulary items for the test
+  lexisAudio: { type: mongoose.Schema.Types.Mixed, default: null },  // Simple Mixed type - no validation issues
   created_at: { type: Date, default: Date.now },
   updated_at: { type: Date, default: Date.now }
 });
@@ -257,7 +258,9 @@ app.post('/api/tests', async (req, res) => {
 // Update test
 app.put('/api/tests/:id', async (req, res) => {
   try {
-    const { title, type, questions, lexis } = req.body;
+    const { title, type, questions, lexis, lexisAudio } = req.body;
+
+    console.log('[PUT /api/tests/:id] Received lexisAudio:', lexisAudio ? { engine: lexisAudio.engine, urlLength: lexisAudio.url?.length } : 'undefined');
 
     const updateData = {
       title,
@@ -271,6 +274,12 @@ app.put('/api/tests/:id', async (req, res) => {
       updateData.lexis = lexis;
     }
 
+    // Only update lexisAudio if provided
+    if (lexisAudio !== undefined) {
+      updateData.lexisAudio = lexisAudio;
+      console.log('[PUT /api/tests/:id] Adding lexisAudio to updateData');
+    }
+
     const test = await ListeningTest.findByIdAndUpdate(
       req.params.id,
       updateData,
@@ -281,6 +290,7 @@ app.put('/api/tests/:id', async (req, res) => {
       return res.status(404).json({ error: 'Test not found' });
     }
 
+    console.log('[PUT /api/tests/:id] Saved test has lexisAudio:', test.lexisAudio ? { engine: test.lexisAudio.engine, urlLength: test.lexisAudio.url?.length } : 'undefined');
     res.json(test);
   } catch (error) {
     console.error('Update test error:', error);

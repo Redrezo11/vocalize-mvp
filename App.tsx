@@ -545,11 +545,12 @@ const App: React.FC = () => {
       const response = await fetch(`${API_BASE}/audio-entries/${audio.id}/tests`);
       if (response.ok) {
         const tests = await response.json();
-        setAudioTests(tests.map((t: { _id: string; audioId: string; title: string; type: string; questions: Array<{ _id?: string; questionText: string; options?: string[]; correctAnswer: string }>; lexis?: Array<{ _id?: string; term: string; definition: string; definitionArabic?: string; example?: string; partOfSpeech?: string }>; created_at: string; updated_at: string }) => ({
+        setAudioTests(tests.map((t: { _id: string; audioId: string; title: string; type: string; questions: Array<{ _id?: string; questionText: string; options?: string[]; correctAnswer: string }>; lexis?: Array<{ _id?: string; term: string; definition: string; definitionArabic?: string; example?: string; partOfSpeech?: string }>; lexisAudio?: { url: string; generatedAt: string; engine: 'gemini' | 'elevenlabs' }; created_at: string; updated_at: string }) => ({
           ...t,
           id: t._id,
           questions: t.questions.map((q: { _id?: string; questionText: string; options?: string[]; correctAnswer: string }) => ({ ...q, id: q._id || Math.random().toString(36).substring(2, 11) })),
-          lexis: t.lexis?.map((l: { _id?: string; term: string; definition: string; definitionArabic?: string; example?: string; partOfSpeech?: string }) => ({ ...l, id: l._id || Math.random().toString(36).substring(2, 11) }))
+          lexis: t.lexis?.map((l: { _id?: string; term: string; definition: string; definitionArabic?: string; example?: string; partOfSpeech?: string }) => ({ ...l, id: l._id || Math.random().toString(36).substring(2, 11) })),
+          lexisAudio: t.lexisAudio
         })));
       }
     } catch (error) {
@@ -682,15 +683,18 @@ const App: React.FC = () => {
 
   // Load all tests for classroom mode
   const loadAllTests = async () => {
+    console.log('[loadAllTests] Fetching all tests...');
     try {
       const response = await fetch(`${API_BASE}/tests`);
       if (response.ok) {
         const tests = await response.json();
-        setAllTests(tests.map((t: { _id: string; audioId: string; title: string; type: string; questions: Array<{ _id?: string; questionText: string; options?: string[]; correctAnswer: string; explanation?: string }>; lexis?: Array<{ _id?: string; term: string; definition: string; definitionArabic?: string; example?: string; partOfSpeech?: string }>; created_at: string; updated_at: string }) => ({
+        console.log('[loadAllTests] Raw tests from server:', tests.map((t: any) => ({ id: t._id, title: t.title, hasLexisAudio: !!t.lexisAudio })));
+        setAllTests(tests.map((t: { _id: string; audioId: string; title: string; type: string; questions: Array<{ _id?: string; questionText: string; options?: string[]; correctAnswer: string; explanation?: string }>; lexis?: Array<{ _id?: string; term: string; definition: string; definitionArabic?: string; example?: string; partOfSpeech?: string }>; lexisAudio?: { url: string; generatedAt: string; engine: 'gemini' | 'elevenlabs' }; created_at: string; updated_at: string }) => ({
           ...t,
           id: t._id,
           questions: t.questions.map((q: { _id?: string; questionText: string; options?: string[]; correctAnswer: string; explanation?: string }) => ({ ...q, id: q._id || Math.random().toString(36).substring(2, 11) })),
-          lexis: t.lexis?.map((l: { _id?: string; term: string; definition: string; definitionArabic?: string; example?: string; partOfSpeech?: string }) => ({ ...l, id: l._id || Math.random().toString(36).substring(2, 11) }))
+          lexis: t.lexis?.map((l: { _id?: string; term: string; definition: string; definitionArabic?: string; example?: string; partOfSpeech?: string }) => ({ ...l, id: l._id || Math.random().toString(36).substring(2, 11) })),
+          lexisAudio: t.lexisAudio
         })));
       }
     } catch (error) {
@@ -1166,6 +1170,26 @@ const App: React.FC = () => {
             } catch (error) {
               console.error('Failed to delete test:', error);
               alert('Failed to delete test. Please try again.');
+            }
+          }}
+          onUpdateTest={async (test) => {
+            console.log('[onUpdateTest] Called with test:', test.id);
+            console.log('[onUpdateTest] test.lexisAudio:', test.lexisAudio);
+            try {
+              const response = await fetch(`${API_BASE}/tests/${test.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(test),
+              });
+              if (!response.ok) throw new Error('Failed to update test');
+              const updatedTest = await response.json();
+              console.log('[onUpdateTest] Server response:', updatedTest);
+              console.log('[onUpdateTest] Server response lexisAudio:', updatedTest.lexisAudio);
+              // Update both local state lists
+              setAllTests(prev => prev.map(t => t.id === test.id ? updatedTest : t));
+              setAudioTests(prev => prev.map(t => t.id === test.id ? updatedTest : t));
+            } catch (error) {
+              console.error('Failed to update test:', error);
             }
           }}
         />

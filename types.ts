@@ -139,6 +139,12 @@ export interface LexisItem {
   partOfSpeech?: string;           // noun, verb, adjective, etc.
 }
 
+export interface LexisAudio {
+  url: string;                     // Audio URL (base64 data URL or cloudinary)
+  generatedAt: string;
+  engine: 'gemini' | 'elevenlabs';
+}
+
 export interface ListeningTest {
   id: string;
   audioId: string;
@@ -146,6 +152,7 @@ export interface ListeningTest {
   type: TestType;
   questions: TestQuestion[];
   lexis?: LexisItem[];             // Optional vocabulary items
+  lexisAudio?: LexisAudio;         // Generated vocabulary audio
   createdAt: string;
   updatedAt: string;
 }
