@@ -177,7 +177,7 @@ JSON FORMAT (return exactly this structure):
   {
     "term": "vocabulary word or phrase",
     "definition": "Clear English definition appropriate for ${difficultyLevel} level",
-    "definitionArabic": "التعريف بالعربية",
+    "definitionArabic": "كلمة عربية",
     "example": "Example sentence using the term (preferably from or related to the transcript)",
     "partOfSpeech": "noun/verb/adjective/adverb/phrase/idiom"
   }
@@ -186,7 +186,7 @@ JSON FORMAT (return exactly this structure):
 RULES:
 - term: The vocabulary word or phrase from the transcript
 - definition: Clear, simple English definition appropriate for ${difficultyLevel} learners
-- definitionArabic: Arabic translation or definition (العربية)
+- definitionArabic: Simple Arabic translation word(s) only - NOT a definition or explanation. Just the direct Arabic equivalent for easy memorization (e.g., "travel" → "يسافر", "library" → "مكتبة")
 - example: A contextual example sentence (can be from the transcript or created)
 - partOfSpeech: Grammatical category (noun, verb, adjective, adverb, phrase, idiom, etc.)
 
