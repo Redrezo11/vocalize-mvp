@@ -766,8 +766,8 @@ JSON FORMAT (return exactly this structure):
       </div>
 
       {/* Floating Save Button - Bottom Right Corner */}
-      {/* Show in create mode when there are questions, or in edit mode only when dirty */}
-      {questions.length > 0 && (!isEditMode || isDirty) && (
+      {/* Show in create mode when there are questions OR lexis, or in edit mode only when dirty */}
+      {(questions.length > 0 || lexis.length > 0) && (!isEditMode || isDirty) && (
         <button
           onClick={handleSave}
           className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-full font-semibold shadow-lg shadow-emerald-500/30 hover:shadow-xl hover:shadow-emerald-500/40 hover:scale-105 transition-all duration-200"
@@ -777,7 +777,7 @@ JSON FORMAT (return exactly this structure):
             <polyline points="17 21 17 13 7 13 7 21" />
             <polyline points="7 3 7 8 15 8" />
           </svg>
-          {isEditMode ? 'Update' : 'Save'} ({questions.length})
+          {isEditMode ? 'Update' : 'Save'} {questions.length > 0 && `(${questions.length})`} {lexis.length > 0 && `[${lexis.length}]`}
         </button>
       )}
 
