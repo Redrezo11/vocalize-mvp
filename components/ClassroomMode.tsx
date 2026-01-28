@@ -311,7 +311,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntrie
                           {getTestTypeLabel(test.type)}
                         </span>
                         <span className={`text-sm ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-                          {test.questions.length} question{test.questions.length !== 1 ? 's' : ''}
+                          {test.lexis?.length || 0} vocab word{(test.lexis?.length || 0) !== 1 ? 's' : ''}
                         </span>
                       </div>
                       <h3 className={`text-xl font-semibold mb-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>{test.title}</h3>
@@ -546,67 +546,67 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntrie
           </div>
         </div>
 
-        {/* Questions List - Traditional Test Format */}
+        {/* Vocabulary / Lexis Section */}
         <div className="max-w-4xl mx-auto px-6 py-8">
           <div className={`mb-6 pb-4 border-b-2 ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
             <h2 className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-              {getTestTypeLabel(selectedTest.type)} Test
+              Key Vocabulary
             </h2>
             <p className={`mt-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-              {selectedTest.questions.length} question{selectedTest.questions.length !== 1 ? 's' : ''}
+              {selectedTest.lexis?.length || 0} word{(selectedTest.lexis?.length || 0) !== 1 ? 's' : ''}
             </p>
           </div>
 
-          <div className="space-y-8">
-            {selectedTest.questions.map((question, index) => (
-              <div key={question.id} className={`pb-6 border-b last:border-b-0 ${isDark ? 'border-slate-700' : 'border-slate-100'}`}>
-                {/* Question Number and Text */}
-                <div className="flex gap-4 mb-4">
-                  <span className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${isDark ? 'bg-indigo-600 text-white' : 'bg-slate-900 text-white'}`}>
-                    {index + 1}
-                  </span>
-                  <p className={`text-xl font-medium pt-1.5 leading-relaxed ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                    {question.questionText}
-                  </p>
-                </div>
-
-                {/* Multiple Choice Options */}
-                {selectedTest.type === 'listening-comprehension' && question.options && (
-                  <div className="ml-14 space-y-3">
-                    {question.options.map((option, optIndex) => {
-                      const letter = String.fromCharCode(65 + optIndex); // A, B, C, D
-                      return (
-                        <div
-                          key={optIndex}
-                          className={`flex items-center gap-4 p-4 rounded-xl border-2 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'}`}
-                        >
-                          <span className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm ${isDark ? 'bg-slate-700 text-slate-300' : 'bg-slate-200 text-slate-700'}`}>
-                            {letter}
+          {(!selectedTest.lexis || selectedTest.lexis.length === 0) ? (
+            <div className={`text-center py-12 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+              <p className="text-lg">No vocabulary items for this test</p>
+              <p className="text-sm mt-2">Add vocabulary in the test builder</p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {selectedTest.lexis.map((item, index) => (
+                <div key={item.id} className={`p-6 rounded-2xl border-2 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
+                  <div className="flex items-start gap-4">
+                    <span className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${isDark ? 'bg-indigo-600 text-white' : 'bg-slate-900 text-white'}`}>
+                      {index + 1}
+                    </span>
+                    <div className="flex-1">
+                      {/* Term and Part of Speech */}
+                      <div className="flex items-center gap-3 mb-2">
+                        <h3 className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                          {item.term}
+                        </h3>
+                        {item.partOfSpeech && (
+                          <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${isDark ? 'bg-slate-700 text-slate-400' : 'bg-slate-200 text-slate-600'}`}>
+                            {item.partOfSpeech}
                           </span>
-                          <span className={`text-lg ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>{option}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+                        )}
+                      </div>
 
-                {/* Fill in Blank / Dictation - Answer Line */}
-                {(selectedTest.type === 'fill-in-blank' || selectedTest.type === 'dictation') && (
-                  <div className="ml-14">
-                    <div className={`p-4 rounded-xl border-2 border-dashed ${isDark ? 'bg-slate-800 border-slate-600' : 'bg-slate-50 border-slate-300'}`}>
-                      <div className={`h-8 border-b-2 ${isDark ? 'border-slate-500' : 'border-slate-400'}`}></div>
-                      {selectedTest.type === 'dictation' && (
-                        <>
-                          <div className={`h-8 border-b-2 mt-2 ${isDark ? 'border-slate-600' : 'border-slate-300'}`}></div>
-                          <div className={`h-8 border-b-2 mt-2 ${isDark ? 'border-slate-600' : 'border-slate-300'}`}></div>
-                        </>
+                      {/* Definition */}
+                      <p className={`text-lg mb-2 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                        {item.definition}
+                      </p>
+
+                      {/* Arabic Definition */}
+                      {item.definitionArabic && (
+                        <p className={`text-lg mb-2 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} dir="rtl">
+                          {item.definitionArabic}
+                        </p>
+                      )}
+
+                      {/* Example */}
+                      {item.example && (
+                        <p className={`text-base italic mt-3 pl-4 border-l-4 ${isDark ? 'text-slate-400 border-indigo-500' : 'text-slate-500 border-indigo-400'}`}>
+                          "{item.example}"
+                        </p>
                       )}
                     </div>
                   </div>
-                )}
-              </div>
-            ))}
-          </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Keyboard Hints - Fixed Bottom */}
