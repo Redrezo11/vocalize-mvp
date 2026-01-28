@@ -719,12 +719,12 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntrie
                     <span className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${isDark ? 'bg-indigo-600 text-white' : 'bg-slate-900 text-white'}`}>
                       {index + 1}
                     </span>
-                    <h3 className={`text-xl font-bold truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                    <h3 className={`text-2xl font-bold truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>
                       {item.term}
                     </h3>
                   </div>
                   {item.partOfSpeech && (
-                    <p className={`text-lg font-bold uppercase tracking-wide mb-1 ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`}>
+                    <p className={`text-base font-semibold mb-1 ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`}>
                       {item.partOfSpeech}
                     </p>
                   )}
@@ -759,11 +759,11 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntrie
                 </span>
               </div>
 
-              <h3 className={`text-6xl font-bold mb-4 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+              <h3 className={`text-7xl font-bold mb-4 ${isDark ? 'text-white' : 'text-slate-900'}`}>
                 {selectedTest.lexis[focusedLexisIndex].term}
               </h3>
               {selectedTest.lexis[focusedLexisIndex].partOfSpeech && (
-                <p className={`text-4xl font-bold uppercase tracking-wide mb-8 ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`}>
+                <p className={`text-3xl font-semibold mb-8 ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`}>
                   {selectedTest.lexis[focusedLexisIndex].partOfSpeech}
                 </p>
               )}
