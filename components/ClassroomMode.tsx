@@ -722,12 +722,12 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntrie
                     <h3 className={`text-xl font-bold truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>
                       {item.term}
                     </h3>
-                    {item.partOfSpeech && (
-                      <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${isDark ? 'bg-slate-700 text-slate-400' : 'bg-slate-200 text-slate-600'}`}>
-                        {item.partOfSpeech}
-                      </span>
-                    )}
                   </div>
+                  {item.partOfSpeech && (
+                    <p className={`text-sm font-medium italic mb-1 ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`}>
+                      ({item.partOfSpeech})
+                    </p>
+                  )}
                   {item.definitionArabic && (
                     <p className={`text-lg leading-snug line-clamp-2 ${isDark ? 'text-slate-300' : 'text-slate-700'}`} dir="rtl">
                       {item.definitionArabic}
@@ -759,16 +759,14 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntrie
                 </span>
               </div>
 
-              <div className="flex items-center justify-center gap-4 mb-8">
-                <h3 className={`text-6xl font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                  {selectedTest.lexis[focusedLexisIndex].term}
-                </h3>
-                {selectedTest.lexis[focusedLexisIndex].partOfSpeech && (
-                  <span className={`px-4 py-2 text-lg font-medium rounded-full ${isDark ? 'bg-slate-700 text-slate-400' : 'bg-slate-200 text-slate-600'}`}>
-                    {selectedTest.lexis[focusedLexisIndex].partOfSpeech}
-                  </span>
-                )}
-              </div>
+              <h3 className={`text-6xl font-bold mb-4 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                {selectedTest.lexis[focusedLexisIndex].term}
+              </h3>
+              {selectedTest.lexis[focusedLexisIndex].partOfSpeech && (
+                <p className={`text-2xl font-medium italic mb-6 ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`}>
+                  ({selectedTest.lexis[focusedLexisIndex].partOfSpeech})
+                </p>
+              )}
 
               {selectedTest.lexis[focusedLexisIndex].definitionArabic && (
                 <p className={`text-5xl leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-700'}`} dir="rtl">
