@@ -12,10 +12,13 @@ export function buildLexisScript(lexis: LexisItem[]): string {
     const arabic = item.definitionArabic || '';
 
     // Format: "Number 1: [English] ... [Arabic]"
-    return `${number} ${english}. ... ${arabic}`;
+    return `${number} ${english}. ... ${arabic}.`;
   }).join('\n\n');
 
-  return intro + words;
+  // Add ending to ensure last word is fully spoken
+  const ending = "\n\n... End of vocabulary.";
+
+  return intro + words + ending;
 }
 
 // Helper to create WAV header (same as useGeminiTTS.ts)
