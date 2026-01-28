@@ -76,6 +76,7 @@ const listeningTestSchema = new mongoose.Schema({
   type: { type: String, enum: ['listening-comprehension', 'fill-in-blank', 'dictation'], required: true },
   questions: [testQuestionSchema],
   lexis: [lexisItemSchema],  // Vocabulary items for the test
+  lexisAudio: { type: mongoose.Schema.Types.Mixed, default: null },  // Generated vocabulary audio
   created_at: { type: Date, default: Date.now },
   updated_at: { type: Date, default: Date.now }
 });
@@ -332,11 +333,9 @@ app.post('/api/tests', async (req, res) => {
 // Update test
 app.put('/api/tests/:id', async (req, res) => {
   try {
-    const { title, type, questions, lexis } = req.body;
+    const { title, type, questions, lexis, lexisAudio } = req.body;
 
-    console.log('[SERVER PUT /api/tests/:id] Received lexis:', lexis);
-    console.log('[SERVER PUT /api/tests/:id] lexis type:', typeof lexis);
-    console.log('[SERVER PUT /api/tests/:id] lexis length:', lexis?.length);
+    console.log('[SERVER PUT /api/tests/:id] Received lexisAudio:', lexisAudio ? { engine: lexisAudio.engine, urlLength: lexisAudio.url?.length } : 'undefined');
 
     const updateData = {
       title,
@@ -348,10 +347,13 @@ app.put('/api/tests/:id', async (req, res) => {
     // Only update lexis if provided
     if (lexis !== undefined) {
       updateData.lexis = lexis;
-      console.log('[SERVER PUT /api/tests/:id] Adding lexis to updateData');
     }
 
-    console.log('[SERVER PUT /api/tests/:id] updateData.lexis:', updateData.lexis?.length, 'items');
+    // Only update lexisAudio if provided
+    if (lexisAudio !== undefined) {
+      updateData.lexisAudio = lexisAudio;
+      console.log('[SERVER PUT /api/tests/:id] Adding lexisAudio to updateData');
+    }
 
     const test = await ListeningTest.findByIdAndUpdate(
       req.params.id,
@@ -359,12 +361,11 @@ app.put('/api/tests/:id', async (req, res) => {
       { new: true }
     );
 
-    console.log('[SERVER PUT /api/tests/:id] Saved test.lexis:', test?.lexis);
-
     if (!test) {
       return res.status(404).json({ error: 'Test not found' });
     }
 
+    console.log('[SERVER PUT /api/tests/:id] Saved test has lexisAudio:', test.lexisAudio ? { engine: test.lexisAudio.engine, urlLength: test.lexisAudio.url?.length } : 'undefined');
     res.json(test);
   } catch (error) {
     console.error('Update test error:', error);
