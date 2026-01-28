@@ -4,8 +4,6 @@ export type CreationMethod = 'audio' | 'transcript' | 'import';
 
 interface HomePageProps {
   onSelect: (method: CreationMethod) => void;
-  onViewLibrary: () => void;
-  libraryCount: number;
 }
 
 // Icons for the cards
@@ -35,16 +33,9 @@ const ImportIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
-const FolderIcon = ({ className }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
-  </svg>
-);
 
 export const HomePage: React.FC<HomePageProps> = ({
   onSelect,
-  onViewLibrary,
-  libraryCount,
 }) => {
   const methods = [
     {
@@ -108,21 +99,6 @@ export const HomePage: React.FC<HomePageProps> = ({
           ))}
         </div>
 
-        {/* Library Link */}
-        {libraryCount > 0 && (
-          <div className="text-center">
-            <button
-              onClick={onViewLibrary}
-              className="inline-flex items-center gap-2 px-6 py-3 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl font-medium transition-all duration-200"
-            >
-              <FolderIcon className="w-5 h-5" />
-              <span>View My Library</span>
-              <span className="px-2 py-0.5 bg-slate-200 text-slate-600 rounded-full text-sm font-bold">
-                {libraryCount}
-              </span>
-            </button>
-          </div>
-        )}
       </div>
     </main>
   );

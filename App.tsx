@@ -5,7 +5,7 @@ import { useElevenLabsTTS } from './hooks/useElevenLabsTTS';
 import { useMongoStorage } from './hooks/useMongoStorage';
 import { parseDialogue, parseLLMTranscript, guessGender } from './utils/parser';
 import { BrowserVoiceConfig, EngineType, GEMINI_VOICES, SpeakerVoiceMapping, AppView, SavedAudio, ListeningTest, TestAttempt } from './types';
-import { PlayIcon, StopIcon, FolderIcon, PlusIcon, SaveIcon, ArrowLeftIcon, PresentationIcon, FileTextIcon, SparklesIcon, SettingsIcon } from './components/Icons';
+import { PlayIcon, StopIcon, FolderIcon, PlusIcon, SaveIcon, ArrowLeftIcon, PresentationIcon, FileTextIcon, SparklesIcon, SettingsIcon, ImportIcon } from './components/Icons';
 import { SaveDialog } from './components/SaveDialog';
 import { PromptBuilder } from './components/PromptBuilder';
 import { Settings, AppSettings, DEFAULT_SETTINGS } from './components/Settings';
@@ -798,7 +798,7 @@ const App: React.FC = () => {
   const renderNav = () => (
     <nav className="sticky top-0 z-30 bg-white/70 backdrop-blur-xl border-b border-slate-200/50 shadow-sm shadow-slate-200/50 px-6 py-3">
       <div className="max-w-7xl mx-auto flex items-center justify-between">
-        <div className="flex items-center gap-3 group cursor-pointer" onClick={() => setCurrentView('editor')}>
+        <div className="flex items-center gap-3 group cursor-pointer" onClick={() => setCurrentView('home')}>
           <div className="h-10 w-10 rounded-xl overflow-hidden shadow-lg shadow-indigo-500/30 group-hover:shadow-indigo-500/50 group-hover:scale-105 transition-all duration-200">
             <img
               src="/logo-512.png"
@@ -824,19 +824,33 @@ const App: React.FC = () => {
             <PresentationIcon className="w-4 h-4" />
             <span className="text-sm">Classroom</span>
           </button>
-          <button
-            onClick={() => setCurrentView('transcript')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] ${
-              currentView === 'editor'
-                ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-500/30 hover:from-indigo-500 hover:to-violet-500'
-                : 'bg-white text-indigo-600 hover:bg-indigo-50 border border-indigo-300'
-            }`}
-            title="Text-only mode - create tests without storing audio"
-          >
-            <FileTextIcon className="w-4 h-4" />
-            <span className="text-sm">Text Only</span>
-          </button>
-          {currentView === 'editor' || currentView === 'library' || currentView === 'detail' ? (
+          {/* Hide Text Only button on home/library (redundant - home has cards, library has Create New modal) */}
+          {currentView !== 'home' && currentView !== 'library' && (
+            <button
+              onClick={() => setCurrentView('transcript')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] ${
+                currentView === 'editor'
+                  ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-500/30 hover:from-indigo-500 hover:to-violet-500'
+                  : 'bg-white text-indigo-600 hover:bg-indigo-50 border border-indigo-300'
+              }`}
+              title="Text-only mode - create tests without storing audio"
+            >
+              <FileTextIcon className="w-4 h-4" />
+              <span className="text-sm">Text Only</span>
+            </button>
+          )}
+          {/* Show Import button on editor and transcript views */}
+          {(currentView === 'editor' || currentView === 'transcript') && (
+            <button
+              onClick={() => setShowImportWizard(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl font-medium transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] bg-white text-amber-600 hover:bg-amber-50 border border-amber-300"
+              title="Import existing questions and vocabulary"
+            >
+              <ImportIcon className="w-4 h-4" />
+              <span className="text-sm">Import</span>
+            </button>
+          )}
+          {currentView === 'home' || currentView === 'editor' || currentView === 'library' || currentView === 'detail' ? (
             <button
               onClick={() => {
                 // When in detail view, go back to the correct tab based on entry type
@@ -888,8 +902,6 @@ const App: React.FC = () => {
   const renderHome = () => (
     <HomePage
       onSelect={handleHomeMethodSelect}
-      onViewLibrary={() => setCurrentView('library')}
-      libraryCount={audioStorage.savedAudios.length}
     />
   );
 
