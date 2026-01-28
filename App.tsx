@@ -65,6 +65,7 @@ const App: React.FC = () => {
   const [allTests, setAllTests] = useState<ListeningTest[]>([]);
   const [selectedTest, setSelectedTest] = useState<ListeningTest | null>(null);
   const [editingTest, setEditingTest] = useState<ListeningTest | null>(null);
+  const [testBuilderKey, setTestBuilderKey] = useState(0); // Key to force TestBuilder remount
   const [studentTestId, setStudentTestId] = useState<string | null>(null);
   const [studentTest, setStudentTest] = useState<ListeningTest | null>(null);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
@@ -570,6 +571,7 @@ const App: React.FC = () => {
   const handleCreateTest = (audio: SavedAudio) => {
     setSelectedAudio(audio);
     setEditingTest(null);
+    setTestBuilderKey(prev => prev + 1); // Force TestBuilder to remount with fresh state
     setCurrentView('test-builder');
   };
 
@@ -1092,6 +1094,7 @@ const App: React.FC = () => {
       <Suspense fallback={<LoadingSpinner />}>
         <main className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
           <TestBuilder
+            key={editingTest?.id || `new-${testBuilderKey}`}
             audio={selectedAudio}
             existingTest={editingTest || undefined}
             defaultDifficulty={settingsHook.settings.difficultyLevel}
