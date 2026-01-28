@@ -40,7 +40,7 @@ const CONTENT_MODES: { value: ContentMode; label: string; description: string; c
   },
   {
     value: 'elsd',
-    label: 'ELSD Strict (KSU)',
+    label: 'ELSD (KSU)',
     description: 'Follows KSU university guidelines. No music, celebrities, non-Islamic holidays, mixed-gender socializing, etc.',
     color: 'amber'
   },
@@ -307,7 +307,7 @@ export const Settings: React.FC<SettingsProps> = ({
                 )}
                 {localSettings.contentMode === 'elsd' && (
                   <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-xl">
-                    <p className="text-xs text-amber-800 font-medium mb-1">ELSD Strict Mode (KSU Guidelines)</p>
+                    <p className="text-xs text-amber-800 font-medium mb-1">ELSD Mode (KSU Guidelines)</p>
                     <p className="text-xs text-amber-700">
                       <strong>Avoids:</strong> All halal restrictions PLUS music/singing, celebrities, non-Islamic holidays,
                       magic/supernatural, mixed-gender casual socializing, moving out at 18, fashion focus, film-making careers.

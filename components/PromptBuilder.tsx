@@ -564,7 +564,7 @@ ${contentMode === 'halal' ? `
 
 **Apply these guidelines while keeping the dialogue natural and educational.**
 ` : contentMode === 'elsd' ? `
-## CRITICAL: ELSD Strict Content Guidelines (KSU University Standards)
+## CRITICAL: ELSD Content Guidelines (KSU University Standards)
 
 **This content MUST strictly follow King Saud University ELSD department guidelines.**
 
