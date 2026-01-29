@@ -1,4 +1,4 @@
-import { LexisItem, LexisAudio } from '../types';
+import { LexisItem, LexisAudio, WordAudio } from '../types';
 import { GoogleGenAI, Modality } from "@google/genai";
 
 // Build the script for TTS
@@ -350,5 +350,97 @@ export async function generateLexisAudio(lexis: LexisItem[], engine?: LexisTTSEn
   return {
     success: false,
     error: 'TTS quota exceeded for Gemini, ElevenLabs, and OpenAI. Please try again later.'
+  };
+}
+
+// Build script for a single word (for per-word audio generation)
+export function buildSingleWordScript(item: LexisItem, index: number): string {
+  const english = item.term;
+  const arabic = item.definitionArabic || '';
+  // Simple format: "Word number X. [English]. In Arabic: [Arabic]."
+  return `Word number ${index + 1}. ${english}. In Arabic: ${arabic}.`;
+}
+
+// Generate audio for a single vocabulary word
+export async function generateSingleWordAudio(
+  item: LexisItem,
+  index: number,
+  engine: LexisTTSEngine
+): Promise<{ url: string; duration?: number } | null> {
+  const script = buildSingleWordScript(item, index);
+  console.log(`[LexisTTS] Generating audio for word ${index + 1}: ${item.term}`);
+
+  let audioUrl: string | null = null;
+
+  if (engine === 'gemini') {
+    audioUrl = await generateWithGemini(script);
+  } else if (engine === 'openai') {
+    audioUrl = await generateWithOpenAI(script);
+  }
+
+  if (!audioUrl) {
+    console.error(`[LexisTTS] Failed to generate audio for word: ${item.term}`);
+    return null;
+  }
+
+  // Try to estimate duration from the audio data
+  // For now, we'll let the browser calculate it when loaded
+  return { url: audioUrl };
+}
+
+// Generate per-word audio for all vocabulary items
+export interface GenerateWordAudiosResult {
+  success: boolean;
+  wordAudios?: { [wordId: string]: WordAudio };
+  error?: string;
+  failedWords?: string[];
+}
+
+export async function generateAllWordAudios(
+  lexis: LexisItem[],
+  engine: LexisTTSEngine,
+  onProgress?: (current: number, total: number, wordTerm: string) => void
+): Promise<GenerateWordAudiosResult> {
+  if (!lexis || lexis.length === 0) {
+    return { success: false, error: 'No vocabulary items to generate audio for' };
+  }
+
+  const wordAudios: { [wordId: string]: WordAudio } = {};
+  const failedWords: string[] = [];
+
+  for (let i = 0; i < lexis.length; i++) {
+    const item = lexis[i];
+
+    // Report progress
+    if (onProgress) {
+      onProgress(i + 1, lexis.length, item.term);
+    }
+
+    const result = await generateSingleWordAudio(item, i, engine);
+
+    if (result) {
+      wordAudios[item.id] = result;
+    } else {
+      failedWords.push(item.term);
+    }
+
+    // Small delay between requests to avoid rate limiting
+    if (i < lexis.length - 1) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+  }
+
+  if (Object.keys(wordAudios).length === 0) {
+    return {
+      success: false,
+      error: 'Failed to generate audio for any words',
+      failedWords
+    };
+  }
+
+  return {
+    success: true,
+    wordAudios,
+    failedWords: failedWords.length > 0 ? failedWords : undefined
   };
 }

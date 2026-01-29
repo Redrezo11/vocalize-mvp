@@ -139,10 +139,16 @@ export interface LexisItem {
   partOfSpeech?: string;           // noun, verb, adjective, etc.
 }
 
+export interface WordAudio {
+  url: string;                     // Audio URL for individual word
+  duration?: number;               // Duration in seconds (for timing slideshow)
+}
+
 export interface LexisAudio {
-  url: string;                     // Audio URL (base64 data URL or cloudinary)
+  url: string;                     // Full audio URL (base64 data URL or cloudinary)
   generatedAt: string;
   engine: 'gemini' | 'elevenlabs' | 'openai';
+  wordAudios?: { [wordId: string]: WordAudio };  // Per-word audio files
 }
 
 export interface ListeningTest {
