@@ -96,6 +96,7 @@ async function generateWithGemini(script: string): Promise<string | null> {
 
   try {
     console.log('[LexisTTS] Using GoogleGenAI SDK with gemini-2.5-flash-preview-tts model');
+    console.log('[LexisTTS] Script:', script);
     const ai = new GoogleGenAI({ apiKey });
 
     // Use Orus (male, firm voice) for vocabulary teaching
@@ -116,20 +117,38 @@ async function generateWithGemini(script: string): Promise<string | null> {
       },
     });
 
+    console.log('[LexisTTS] Gemini response received');
+    console.log('[LexisTTS] Response candidates:', response.candidates?.length);
+
+    // Debug: log the response structure
+    if (response.candidates?.[0]?.content?.parts?.[0]) {
+      const part = response.candidates[0].content.parts[0];
+      console.log('[LexisTTS] Part keys:', Object.keys(part));
+      if (part.inlineData) {
+        console.log('[LexisTTS] inlineData mimeType:', part.inlineData.mimeType);
+        console.log('[LexisTTS] inlineData data length:', part.inlineData.data?.length || 0);
+      }
+    }
+
     const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
 
     if (!base64Audio) {
       console.log('[LexisTTS] No audio data in Gemini response');
+      console.log('[LexisTTS] Full response structure:', JSON.stringify(response, null, 2).substring(0, 1000));
       return null;
     }
 
+    console.log('[LexisTTS] Got base64 audio, length:', base64Audio.length);
+
     // Convert PCM to WAV data URL
     const wavDataUrl = await pcmToWavDataUrl(base64Audio);
+    console.log('[LexisTTS] WAV data URL created, length:', wavDataUrl.length);
     return wavDataUrl;
 
   } catch (error: any) {
     const errorMsg = error?.message || String(error) || '';
     console.error('[LexisTTS] Gemini TTS error:', errorMsg);
+    console.error('[LexisTTS] Full error:', error);
 
     // Check if it's a quota error
     if (errorMsg.includes('429') || errorMsg.includes('quota') || errorMsg.includes('RESOURCE_EXHAUSTED')) {

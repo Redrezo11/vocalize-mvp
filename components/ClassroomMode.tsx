@@ -42,7 +42,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntrie
   const [isGeneratingLexisAudio, setIsGeneratingLexisAudio] = useState(false);
   const [lexisAudioError, setLexisAudioError] = useState<string | null>(null);
   const [isPlayingLexisAudio, setIsPlayingLexisAudio] = useState(false);
-  const [lexisTTSEngine, setLexisTTSEngine] = useState<LexisTTSEngine>('gemini');
+  const [lexisTTSEngine, setLexisTTSEngine] = useState<LexisTTSEngine>('openai');
   const lexisAudioRef = useRef<HTMLAudioElement>(null);
 
   // Slideshow state for Focus Mode
@@ -767,38 +767,28 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntrie
 
                 {/* Lexis Audio Button */}
                 {selectedTest.lexis && selectedTest.lexis.length > 0 && (
-                  selectedTest.lexisAudio ? (
-                    <button
-                      onClick={handlePlayLexisAudio}
-                      className={`flex items-center gap-2 h-[34px] px-3 rounded-lg transition-colors ${
-                        isPlayingLexisAudio
-                          ? 'bg-green-600 text-white hover:bg-green-500'
-                          : 'bg-emerald-600 text-white hover:bg-emerald-500'
-                      }`}
-                      title={isPlayingLexisAudio ? "Pause vocabulary audio" : "Play vocabulary audio"}
-                    >
-                      {isPlayingLexisAudio ? (
-                        <PauseIcon className="w-4 h-4" />
-                      ) : (
-                        <SpeakerIcon className="w-4 h-4" />
-                      )}
-                      <span className="text-sm">Vocab</span>
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => setShowLexisAudioConfirm(true)}
-                      disabled={isGeneratingLexisAudio}
-                      className="flex items-center gap-2 h-[34px] px-3 bg-amber-600 text-white rounded-lg hover:bg-amber-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      title="Generate vocabulary audio"
-                    >
-                      {isGeneratingLexisAudio ? (
-                        <SpinnerIcon className="w-4 h-4" />
-                      ) : (
-                        <SpeakerIcon className="w-4 h-4" />
-                      )}
-                      <span className="text-sm">{isGeneratingLexisAudio ? 'Generating' : 'Vocab'}</span>
-                    </button>
-                  )
+                  <button
+                    onClick={() => setShowLexisAudioConfirm(true)}
+                    disabled={isGeneratingLexisAudio || isGeneratingWordAudios}
+                    className={`flex items-center gap-2 h-[34px] px-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                      selectedTest.lexisAudio
+                        ? 'bg-emerald-600 text-white hover:bg-emerald-500'
+                        : 'bg-amber-600 text-white hover:bg-amber-500'
+                    }`}
+                    title="Manage vocabulary audio"
+                  >
+                    {(isGeneratingLexisAudio || isGeneratingWordAudios) ? (
+                      <SpinnerIcon className="w-4 h-4" />
+                    ) : (
+                      <SpeakerIcon className="w-4 h-4" />
+                    )}
+                    <span className="text-sm">
+                      {isGeneratingLexisAudio || isGeneratingWordAudios ? 'Generating' : 'Vocab'}
+                    </span>
+                    {selectedTest.lexisAudio && (
+                      <span className="w-2 h-2 bg-green-400 rounded-full" title="Audio generated" />
+                    )}
+                  </button>
                 )}
 
                 {/* Play Counter */}
@@ -1114,15 +1104,72 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntrie
                 </div>
               </div>
 
+              {/* Existing Audio Status */}
+              {selectedTest?.lexisAudio && (
+                <div className={`mb-4 p-4 rounded-xl border ${isDark ? 'bg-slate-700/50 border-slate-600' : 'bg-slate-50 border-slate-200'}`}>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className={`font-medium ${isDark ? 'text-white' : 'text-slate-900'}`}>Current Audio</h3>
+                    <span className={`text-xs px-2 py-1 rounded-full ${isDark ? 'bg-slate-600 text-slate-300' : 'bg-slate-200 text-slate-600'}`}>
+                      {selectedTest.lexisAudio.engine}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedTest.lexisAudio.url && (
+                      <button
+                        onClick={handlePlayLexisAudio}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                          isPlayingLexisAudio
+                            ? 'bg-green-600 text-white'
+                            : 'bg-emerald-600 text-white hover:bg-emerald-500'
+                        }`}
+                      >
+                        {isPlayingLexisAudio ? <PauseIcon className="w-4 h-4" /> : <PlayIcon className="w-4 h-4" />}
+                        {isPlayingLexisAudio ? 'Pause' : 'Play Full Audio'}
+                      </button>
+                    )}
+                    {selectedTest.lexisAudio.wordAudios && (
+                      <span className="flex items-center gap-1 px-3 py-2 bg-green-100 text-green-700 rounded-lg text-sm">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                          <polyline points="22 4 12 14.01 9 11.01" />
+                        </svg>
+                        Per-word audio ready
+                      </span>
+                    )}
+                    <button
+                      onClick={() => {
+                        if (confirm('Delete all vocabulary audio? This cannot be undone.')) {
+                          const updatedTest: ListeningTest = {
+                            ...selectedTest,
+                            lexisAudio: undefined
+                          };
+                          setSelectedTest(updatedTest);
+                          if (onUpdateTest) onUpdateTest(updatedTest);
+                        }
+                      }}
+                      className="flex items-center gap-2 px-3 py-2 bg-red-100 text-red-700 hover:bg-red-200 rounded-lg text-sm font-medium transition-colors"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                      </svg>
+                      Delete Audio
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <p className={`mb-4 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
-                This will generate audio teaching the vocabulary words to students. The audio will include:
+                {selectedTest?.lexisAudio ? 'Regenerate audio or generate per-word audio for slideshow:' : 'Generate audio teaching the vocabulary words to students:'}
               </p>
 
-              <ul className={`mb-4 space-y-2 text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                <li>- Introduction: "The key vocabulary words are..."</li>
-                <li>- Each word with its Arabic translation</li>
-                <li>- Pauses for comprehension</li>
-              </ul>
+              {!selectedTest?.lexisAudio && (
+                <ul className={`mb-4 space-y-2 text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                  <li>- Introduction: "The key vocabulary words are..."</li>
+                  <li>- Each word with its Arabic translation</li>
+                  <li>- Pauses for comprehension</li>
+                </ul>
+              )}
 
               {/* TTS Engine Selector */}
               <div className="mb-6">
@@ -1202,9 +1249,13 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntrie
                   )}
                 </button>
 
-                {/* Per-Word Audio Button (for slideshow) */}
+                {/* Per-Word Audio Button (for slideshow) - Always uses GPT-4o mini to avoid Gemini quota issues */}
                 <button
-                  onClick={handleGenerateWordAudios}
+                  onClick={() => {
+                    // Force OpenAI for per-word generation (Gemini quota issues with many requests)
+                    setLexisTTSEngine('openai');
+                    handleGenerateWordAudios();
+                  }}
                   disabled={isGeneratingLexisAudio || isGeneratingWordAudios}
                   className="w-full px-4 py-3 bg-green-600 text-white rounded-xl font-medium hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
@@ -1219,13 +1270,13 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntrie
                         <polygon points="5 3 19 12 5 21 5 3" />
                         <line x1="19" y1="5" x2="19" y2="19" />
                       </svg>
-                      Generate Per-Word Audio (Slideshow)
+                      Generate Per-Word Audio (GPT-4o mini)
                     </>
                   )}
                 </button>
 
                 <p className={`text-xs text-center ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-                  Full Audio: single file for all vocabulary &bull; Per-Word: individual files for slideshow mode
+                  Full Audio: single file &bull; Per-Word: individual files for slideshow (uses GPT-4o mini)
                 </p>
 
                 <button
