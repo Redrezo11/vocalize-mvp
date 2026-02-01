@@ -7,6 +7,7 @@ import { generateLexisAudio, generateAllWordAudios, LexisTTSEngine } from '../ut
 
 interface ClassroomModeProps {
   tests: ListeningTest[];
+  isLoadingTests?: boolean;  // Loading state for initial test fetch
   audioEntries: SavedAudio[];
   theme?: ClassroomTheme;
   onExit: () => void;
@@ -18,7 +19,7 @@ interface ClassroomModeProps {
 
 type ClassroomView = 'select' | 'present';
 
-export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntries, theme = 'light', onExit, onPreviewStudent, onEditTest, onDeleteTest, onUpdateTest }) => {
+export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTests = false, audioEntries, theme = 'light', onExit, onPreviewStudent, onEditTest, onDeleteTest, onUpdateTest }) => {
   const isDark = theme === 'dark';
   const [view, setView] = useState<ClassroomView>('select');
   const [selectedTest, setSelectedTest] = useState<ListeningTest | null>(null);
@@ -586,7 +587,12 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, audioEntrie
       </div>
 
       {/* Test List */}
-      {tests.length === 0 ? (
+      {isLoadingTests && tests.length === 0 ? (
+        <div className="text-center py-24">
+          <div className={`w-12 h-12 border-4 ${isDark ? 'border-indigo-400 border-t-transparent' : 'border-indigo-600 border-t-transparent'} rounded-full animate-spin mx-auto mb-6`} />
+          <p className={`text-xl ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Loading tests...</p>
+        </div>
+      ) : tests.length === 0 ? (
         <div className="text-center py-24">
           <p className={`text-2xl mb-4 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>No tests available</p>
           <p className={isDark ? 'text-slate-500' : 'text-slate-400'}>Create tests from your audio library first</p>

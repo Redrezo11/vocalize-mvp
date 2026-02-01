@@ -1,5 +1,17 @@
 import { LexisItem, LexisAudio, WordAudio } from '../types';
-import { GoogleGenAI, Modality } from "@google/genai";
+
+// Lazy load Google SDK only when needed (saves ~251KB on initial load)
+let GoogleGenAI: any = null;
+let Modality: any = null;
+
+async function loadGoogleSDK() {
+  if (!GoogleGenAI) {
+    const module = await import("@google/genai");
+    GoogleGenAI = module.GoogleGenAI;
+    Modality = module.Modality;
+  }
+  return { GoogleGenAI, Modality };
+}
 
 // Build the script for TTS
 export function buildLexisScript(lexis: LexisItem[]): string {
@@ -95,9 +107,12 @@ async function generateWithGemini(script: string): Promise<string | null> {
   }
 
   try {
+    // Lazy load the Google SDK
+    const { GoogleGenAI: SDK, Modality: Mod } = await loadGoogleSDK();
+
     console.log('[LexisTTS] Using GoogleGenAI SDK with gemini-2.5-flash-preview-tts model');
     console.log('[LexisTTS] Script:', script);
-    const ai = new GoogleGenAI({ apiKey });
+    const ai = new SDK({ apiKey });
 
     // Use Orus (male, firm voice) for vocabulary teaching
     const speechConfig = {
@@ -112,7 +127,7 @@ async function generateWithGemini(script: string): Promise<string | null> {
         parts: [{ text: script }],
       },
       config: {
-        responseModalities: [Modality.AUDIO],
+        responseModalities: [Mod.AUDIO],
         speechConfig: speechConfig,
       },
     });

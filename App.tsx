@@ -65,6 +65,8 @@ const App: React.FC = () => {
   // Test state
   const [audioTests, setAudioTests] = useState<ListeningTest[]>([]);
   const [allTests, setAllTests] = useState<ListeningTest[]>([]);
+  const [allTestsLastFetched, setAllTestsLastFetched] = useState<number>(0); // Cache timestamp
+  const [isLoadingTests, setIsLoadingTests] = useState(false); // Loading state for tests
   const [selectedTest, setSelectedTest] = useState<ListeningTest | null>(null);
   const [editingTest, setEditingTest] = useState<ListeningTest | null>(null);
   const [testBuilderKey, setTestBuilderKey] = useState(0); // Key to force TestBuilder remount
@@ -800,9 +802,19 @@ const App: React.FC = () => {
     // Could save attempt to database for tracking progress
   };
 
-  // Load all tests for classroom mode
-  const loadAllTests = async () => {
+  // Load all tests for classroom mode (with caching)
+  const loadAllTests = async (forceRefresh = false) => {
+    const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+    const now = Date.now();
+
+    // Skip fetch if we have recent data (unless forced)
+    if (!forceRefresh && allTests.length > 0 && (now - allTestsLastFetched) < CACHE_DURATION) {
+      console.log('[loadAllTests] Using cached tests (age:', Math.round((now - allTestsLastFetched) / 1000), 's)');
+      return;
+    }
+
     console.log('[loadAllTests] Fetching all tests...');
+    setIsLoadingTests(true);
     try {
       const response = await fetch(`${API_BASE}/tests`);
       if (response.ok) {
@@ -817,16 +829,21 @@ const App: React.FC = () => {
           lexis: t.lexis?.map((l: { _id?: string; term: string; definition: string; definitionArabic?: string; example?: string; partOfSpeech?: string }) => ({ ...l, id: l._id || Math.random().toString(36).substring(2, 11) })),
           lexisAudio: t.lexisAudio
         })));
+        setAllTestsLastFetched(now);
       }
     } catch (error) {
       console.error('Failed to load all tests:', error);
+    } finally {
+      setIsLoadingTests(false);
     }
   };
 
-  // Enter classroom mode
-  const handleEnterClassroom = async () => {
-    await loadAllTests();
+  // Enter classroom mode (non-blocking - show UI immediately, load data in background)
+  const handleEnterClassroom = () => {
+    // Show classroom immediately
     setCurrentView('classroom');
+    // Load tests in background (uses cache if available)
+    loadAllTests();
   };
 
   // Settings handlers
@@ -1169,6 +1186,14 @@ const App: React.FC = () => {
     </main>
   );
 
+  // Preload classroom and prefetch tests when library view is shown
+  useEffect(() => {
+    if (currentView === 'library') {
+      preloadClassroom();
+      loadAllTests(); // Prefetch tests for faster classroom entry
+    }
+  }, [currentView]);
+
   // Library view
   const renderLibrary = () => {
     console.log('[renderLibrary] libraryTab =', libraryTab);
@@ -1317,6 +1342,7 @@ const App: React.FC = () => {
       <Suspense fallback={<LoadingSpinner />}>
         <ClassroomMode
           tests={allTests}
+          isLoadingTests={isLoadingTests}
           audioEntries={audioStorage.savedAudios}
           theme={settingsHook.settings.classroomTheme}
           onExit={() => setCurrentView('library')}

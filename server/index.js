@@ -67,6 +67,10 @@ const audioEntrySchema = new mongoose.Schema({
   updated_at: { type: Date, default: Date.now }
 });
 
+// Add indexes for faster queries
+audioEntrySchema.index({ updated_at: -1 }); // For sorting by recent
+audioEntrySchema.index({ is_transcript_only: 1 }); // For filtering
+
 const AudioEntry = mongoose.model('AudioEntry', audioEntrySchema);
 
 // Test Question Schema
@@ -99,6 +103,10 @@ const listeningTestSchema = new mongoose.Schema({
   created_at: { type: Date, default: Date.now },
   updated_at: { type: Date, default: Date.now }
 });
+
+// Add indexes for faster queries
+listeningTestSchema.index({ created_at: -1 }); // For sorting by recent
+listeningTestSchema.index({ audioId: 1 }); // For querying by audio
 
 const ListeningTest = mongoose.model('ListeningTest', listeningTestSchema);
 
