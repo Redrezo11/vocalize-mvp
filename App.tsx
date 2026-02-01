@@ -58,7 +58,7 @@ const API_BASE = '/api';
 const App: React.FC = () => {
   // Navigation state
   const [currentView, setCurrentView] = useState<AppView>('home');
-  const [libraryTab, setLibraryTab] = useState<'audio' | 'transcripts'>('audio');
+  const [libraryTab, setLibraryTab] = useState<'audio' | 'transcripts' | 'tests'>('audio');
   const [selectedAudio, setSelectedAudio] = useState<SavedAudio | null>(null);
   const [editingAudioId, setEditingAudioId] = useState<string | null>(null);
 
@@ -533,12 +533,59 @@ const App: React.FC = () => {
     }
   };
 
-  // Handle import completion (placeholder for now)
-  const handleImportComplete = (data: ImportData) => {
+  // Handle import completion - save the test to database
+  const handleImportComplete = async (data: ImportData) => {
     setShowImportWizard(false);
     console.log('[App] Import completed with data:', data);
-    // TODO: Implement actual import logic
-    alert(`Import completed!\n\nTitle: ${data.title}\nQuestions: ${data.parsedQuestionCount}\nVocabulary: ${data.parsedLexisCount}\nAudio: ${data.audioOption === 'external' ? 'External' : data.audioFile?.name || 'None'}`);
+
+    try {
+      // Validate that all questions have correct answers
+      const questionsWithoutAnswers = data.parsedQuestions.filter(q => !q.correctAnswer);
+      if (questionsWithoutAnswers.length > 0) {
+        alert(`Cannot save: ${questionsWithoutAnswers.length} question(s) are missing correct answers.\n\nPlease enter the answer key before saving.`);
+        setShowImportWizard(true);
+        return;
+      }
+
+      // Create test entry in database
+      const testData = {
+        audioId: 'transcript-import-' + Date.now(), // Standalone test (not linked to audio)
+        title: data.title,
+        type: 'listening-comprehension',
+        questions: data.parsedQuestions.map(q => ({
+          questionText: q.questionText,
+          options: q.options || [],
+          correctAnswer: q.correctAnswer,
+          explanation: q.explanation || '',
+        })),
+        lexis: [], // TODO: Parse lexis from lexisText if provided
+      };
+
+      const response = await fetch(`${API_BASE}/tests`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(testData),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save test');
+      }
+
+      const savedTest = await response.json();
+      console.log('[App] Test saved:', savedTest);
+
+      // Refresh tests list
+      await loadAllTests();
+
+      // Navigate to library tests tab
+      setLibraryTab('tests');
+      setCurrentView('library');
+
+      alert(`Test "${data.title}" saved successfully with ${data.parsedQuestionCount} questions!\n\nYou can find it in the Tests tab.`);
+    } catch (error) {
+      console.error('[App] Error saving imported test:', error);
+      alert('Failed to save test. Please try again.');
+    }
   };
 
   const handleEdit = (audio: SavedAudio) => {
@@ -677,6 +724,45 @@ const App: React.FC = () => {
     setCurrentView('test-take');
   };
 
+  // Handler for viewing a standalone test from the library
+  const handleViewTestFromLibrary = (test: ListeningTest) => {
+    // For standalone tests, show a simple info dialog for now
+    // TODO: Create a dedicated test detail view
+    alert(`Test: ${test.title}\n\nQuestions: ${test.questions.length}\nType: ${test.type}\nCreated: ${new Date(test.createdAt).toLocaleDateString()}`);
+  };
+
+  // Handler for editing a test from the library
+  const handleEditTestFromLibrary = (test: ListeningTest) => {
+    // Find associated audio if exists
+    if (test.audioId) {
+      const audio = audioStorage.savedAudios.find(a => a.id === test.audioId);
+      if (audio) {
+        setSelectedAudio(audio);
+      }
+    }
+    setEditingTest(test);
+    setCurrentView('test-builder');
+  };
+
+  // Handler for deleting a standalone test from the library
+  const handleDeleteTestFromLibrary = async (test: ListeningTest) => {
+    try {
+      const response = await fetch(`${API_BASE}/tests/${test.id}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete test');
+      }
+
+      // Refresh tests list
+      await loadAllTests();
+    } catch (error) {
+      console.error('Failed to delete test:', error);
+      alert('Failed to delete test. Please try again.');
+    }
+  };
+
   // Transcript-only mode handlers
   const handleSaveTranscript = async (title: string, transcript: string, speakers: string[]) => {
     setIsSavingTranscript(true);
@@ -725,6 +811,8 @@ const App: React.FC = () => {
         setAllTests(tests.map((t: { _id: string; audioId: string; title: string; type: string; questions: Array<{ _id?: string; questionText: string; options?: string[]; correctAnswer: string; explanation?: string }>; lexis?: Array<{ _id?: string; term: string; definition: string; definitionArabic?: string; example?: string; partOfSpeech?: string }>; lexisAudio?: { url: string; generatedAt: string; engine: 'gemini' | 'elevenlabs' }; created_at: string; updated_at: string }) => ({
           ...t,
           id: t._id,
+          createdAt: t.created_at,
+          updatedAt: t.updated_at,
           questions: t.questions.map((q: { _id?: string; questionText: string; options?: string[]; correctAnswer: string; explanation?: string }) => ({ ...q, id: q._id || Math.random().toString(36).substring(2, 11) })),
           lexis: t.lexis?.map((l: { _id?: string; term: string; definition: string; definitionArabic?: string; example?: string; partOfSpeech?: string }) => ({ ...l, id: l._id || Math.random().toString(36).substring(2, 11) })),
           lexisAudio: t.lexisAudio
@@ -1090,14 +1178,18 @@ const App: React.FC = () => {
         <AudioLibrary
           key={libraryTab}
           savedAudios={audioStorage.savedAudios}
+          tests={allTests}
           isLoading={audioStorage.isLoading}
           initialTab={libraryTab}
           onPlay={handlePlayFromLibrary}
           onDelete={handleDelete}
+          onDeleteTest={handleDeleteTestFromLibrary}
+          onEditTest={handleEditTestFromLibrary}
           onCreateNew={handleCreateNew}
           onCreateTranscript={handleCreateTranscript}
           onImportComplete={handleImportComplete}
           onViewDetail={handleViewDetail}
+          onViewTest={handleViewTestFromLibrary}
         />
       </Suspense>
     </main>
@@ -1139,7 +1231,21 @@ const App: React.FC = () => {
 
   // Test builder view
   const renderTestBuilder = () => {
-    if (!selectedAudio) {
+    // For standalone tests without audio, create a placeholder audio object
+    const audioForBuilder = selectedAudio || (editingTest ? {
+      id: editingTest.id,
+      title: editingTest.title,
+      transcript: '', // Standalone tests don't have transcript
+      audioUrl: null,
+      engine: EngineType.BROWSER,
+      speakerMapping: {},
+      speakers: [],
+      isTranscriptOnly: true,
+      createdAt: editingTest.createdAt,
+      updatedAt: editingTest.updatedAt,
+    } as SavedAudio : null);
+
+    if (!audioForBuilder) {
       setCurrentView('library');
       return null;
     }
@@ -1149,13 +1255,17 @@ const App: React.FC = () => {
         <main className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
           <TestBuilder
             key={editingTest?.id || `new-${testBuilderKey}`}
-            audio={selectedAudio}
+            audio={audioForBuilder}
             existingTest={editingTest || undefined}
             defaultDifficulty={settingsHook.settings.difficultyLevel}
             onSave={handleSaveTest}
             onCancel={() => {
               setEditingTest(null);
-              handleViewDetail(selectedAudio);
+              if (selectedAudio) {
+                handleViewDetail(selectedAudio);
+              } else {
+                setCurrentView('library');
+              }
             }}
           />
         </main>
@@ -1212,6 +1322,13 @@ const App: React.FC = () => {
           onExit={() => setCurrentView('library')}
           onPreviewStudent={handlePreviewStudentView}
           onEditTest={(test) => {
+            // Find associated audio if exists
+            if (test.audioId) {
+              const audio = audioStorage.savedAudios.find(a => a.id === test.audioId);
+              if (audio) {
+                setSelectedAudio(audio);
+              }
+            }
             setEditingTest(test);
             setCurrentView('test-builder');
           }}

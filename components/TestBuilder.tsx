@@ -3,6 +3,7 @@ import { SavedAudio, TestType, TestQuestion, ListeningTest, LexisItem } from '..
 import { ArrowLeftIcon, PlusIcon, TrashIcon, SparklesIcon, CopyIcon, DownloadIcon, BookOpenIcon } from './Icons';
 import { parseDialogue } from '../utils/parser';
 import { CEFRLevel } from './Settings';
+import DocumentImport from './DocumentImport';
 
 interface TestBuilderProps {
   audio: SavedAudio;
@@ -245,6 +246,7 @@ export const TestBuilder: React.FC<TestBuilderProps> = ({ audio, existingTest, d
   const [updateExplanationMode, setUpdateExplanationMode] = useState<'replace' | 'supplement'>('supplement');
   const [updateExplanationPaste, setUpdateExplanationPaste] = useState('');
   const [showImportSection, setShowImportSection] = useState(false);
+  const [showDocumentImport, setShowDocumentImport] = useState(false);
 
   // Lexis (vocabulary) state
   const [lexis, setLexis] = useState<LexisItem[]>(() => {
@@ -630,6 +632,18 @@ JSON FORMAT (return exactly this structure):
     setIsDirty(true);
   };
 
+  // Import questions from document
+  const handleDocumentImport = (importedQuestions: TestQuestion[]) => {
+    // Generate new IDs for imported questions to avoid conflicts
+    const questionsWithNewIds = importedQuestions.map(q => ({
+      ...q,
+      id: generateId(),
+    }));
+    setQuestions([...questions, ...questionsWithNewIds]);
+    setShowDocumentImport(false);
+    setIsDirty(true);
+  };
+
   // Auto-generate questions using AI (Gemini)
   const generateQuestions = async () => {
     setIsGenerating(true);
@@ -995,13 +1009,21 @@ JSON FORMAT (return exactly this structure):
               <PlusIcon className="w-4 h-4" />
               Add Question
             </button>
+            <button
+              onClick={() => setShowDocumentImport(true)}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm bg-emerald-100 text-emerald-800 rounded-lg hover:bg-emerald-200 transition-colors"
+              title="Import questions from PDF, Word, or text document"
+            >
+              <DownloadIcon className="w-4 h-4" />
+              Import
+            </button>
           </div>
         </div>
 
         {questions.length === 0 ? (
           <div className="text-center py-12 text-slate-400">
             <p className="mb-2">No questions yet.</p>
-            <p className="text-sm">Use "LLM Template" to copy a prompt for any AI, or "AI Generate" to use Gemini directly.</p>
+            <p className="text-sm">Use "LLM Template" to copy a prompt for any AI, "AI Generate" to use Gemini, or "Import" to upload a document.</p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -1695,6 +1717,14 @@ JSON FORMAT (return exactly this structure):
             </div>
           </div>
         </div>
+      )}
+
+      {/* Document Import Modal */}
+      {showDocumentImport && (
+        <DocumentImport
+          onImport={handleDocumentImport}
+          onCancel={() => setShowDocumentImport(false)}
+        />
       )}
     </div>
   );
