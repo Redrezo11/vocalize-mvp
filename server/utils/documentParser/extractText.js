@@ -4,196 +4,36 @@
  */
 
 import mammoth from 'mammoth';
-import PDFParser from 'pdf2json';
-import WordsNinjaPack from 'wordsninja';
-
-// Create WordsNinja instance (the package exports a class that must be instantiated)
-const wordsNinja = new WordsNinjaPack();
-
-// Initialize WordsNinja dictionary once
-let wordsNinjaLoaded = false;
-async function ensureWordsNinjaLoaded() {
-  if (!wordsNinjaLoaded) {
-    console.log('[extractText] Loading WordsNinja dictionary...');
-    await wordsNinja.loadDictionary();
-    wordsNinjaLoaded = true;
-    console.log('[extractText] WordsNinja dictionary loaded');
-  }
-}
+import { PDFParse } from 'pdf-parse';
 
 /**
- * Extract text from a PDF buffer using pdf2json
- * This library is designed for Node.js and doesn't require browser APIs
+ * Extract text from a PDF buffer using pdf-parse v2
+ * Pure TypeScript cross-platform library with serverless support
  */
 export async function extractFromPDF(buffer) {
-  return new Promise((resolve) => {
-    try {
-      const pdfParser = new PDFParser();
+  try {
+    console.log('[extractText] Parsing PDF with pdf-parse v2...');
 
-      pdfParser.on('pdfParser_dataReady', async (pdfData) => {
-        try {
-          // Extract text from all pages
-          const pages = pdfData.Pages || [];
-          const textParts = [];
+    const parser = new PDFParse({ data: buffer });
+    const result = await parser.getText();
+    await parser.destroy();
 
-          for (const page of pages) {
-            const pageTexts = [];
-            for (const textItem of (page.Texts || [])) {
-              for (const run of (textItem.R || [])) {
-                if (run.T) {
-                  // Decode URI-encoded text
-                  pageTexts.push(decodeURIComponent(run.T));
-                }
-              }
-            }
-            textParts.push(pageTexts.join(' '));
-          }
+    console.log('[extractText] PDF parsed successfully, text length:', result.text?.length);
 
-          let text = textParts.join('\n\n');
-
-          // Fix character-spaced text (common in some PDFs where each char is positioned separately)
-          // Detect if text has the pattern of single chars separated by spaces: "L i s t e n i n g"
-          const charSpacedPattern = /^(?:[A-Za-z0-9] ){5,}/;
-          if (charSpacedPattern.test(text.trim())) {
-            console.log('[extractText] Detected character-spaced text, collapsing spaces...');
-
-            // Step 1: Remove ALL whitespace between characters (collapse everything)
-            // This handles "L i s t e n i n g" -> "Listening" and "C  o m p a n y" -> "Company"
-            let collapsed = text.replace(/(\S)\s+(?=\S)/g, '$1');
-
-            console.log('[extractText] Collapsed text sample (first 200 chars):', collapsed.substring(0, 200));
-
-            // Step 2: Use WordsNinja to segment collapsed text properly
-            // This handles "Whoisspeakinginthetalk" -> "Who is speaking in the talk"
-            try {
-              await ensureWordsNinjaLoaded();
-
-              // Split by existing punctuation and newlines to preserve structure
-              // Include () so option markers like a), b) are preserved and not consumed by WordsNinja
-              const segments = collapsed.split(/([.?!,;:()\n]+)/);
-              const resegmented = [];
-
-              for (let i = 0; i < segments.length; i++) {
-                const segment = segments[i];
-                // If it's punctuation or newline, keep as-is
-                if (/^[.?!,;:\n]+$/.test(segment)) {
-                  resegmented.push(segment);
-                } else if (segment.trim()) {
-                  // For text segments, split by existing spaces first
-                  const words = segment.split(/\s+/);
-                  const processedWords = [];
-
-                  for (const word of words) {
-                    // Skip if word is just numbers, option letters, or very short
-                    if (/^\d+$/.test(word) || /^[a-dA-D]\)$/.test(word) || word.length <= 2) {
-                      processedWords.push(word);
-                    } else if (/^[A-Z][a-z]*[A-Z]/.test(word) || /[a-z][A-Z]/.test(word)) {
-                      // Word has mixed case, likely needs segmentation
-                      // e.g., "Whoisspeaking" or "LevelAQuestions1"
-                      const segmented = wordsNinja.splitSentence(word);
-                      if (segmented.length > 1) {
-                        processedWords.push(segmented.join(' '));
-                      } else {
-                        processedWords.push(word);
-                      }
-                    } else if (word.length > 5) {
-                      // Word longer than 5 chars without spaces, try to segment
-                      // (lowered from 15 to catch collapsed words like "Astudent", "Toexplain")
-                      const segmented = wordsNinja.splitSentence(word);
-                      if (segmented.length > 1) {
-                        processedWords.push(segmented.join(' '));
-                      } else {
-                        processedWords.push(word);
-                      }
-                    } else {
-                      processedWords.push(word);
-                    }
-                  }
-                  resegmented.push(processedWords.join(' '));
-                }
-              }
-
-              collapsed = resegmented.join('');
-              console.log('[extractText] After word segmentation (first 300 chars):', collapsed.substring(0, 300));
-            } catch (segmentError) {
-              console.error('[extractText] Word segmentation error, falling back to heuristics:', segmentError.message);
-              // Fall back to basic heuristics if WordsNinja fails
-              collapsed = collapsed.replace(/([a-z])([A-Z][a-z]{2,})/g, '$1 $2');
-            }
-
-            // Step 3: Fix punctuation that got stuck to words
-            // "1." should stay, but "word.Next" -> "word. Next"
-            collapsed = collapsed.replace(/([a-z])\.([A-Z])/g, '$1. $2');
-            collapsed = collapsed.replace(/([a-z])\?([A-Z])/g, '$1? $2');
-            collapsed = collapsed.replace(/([a-z])!([A-Z])/g, '$1! $2');
-
-            // Step 4: Add space after ) when followed by uppercase or number (new question/option)
-            collapsed = collapsed.replace(/\.(\d)/g, '. $1');
-            collapsed = collapsed.replace(/\)(\d)/g, ') $1');
-            collapsed = collapsed.replace(/\)([A-Z])/g, ') $1');
-
-            // Step 5: Fix option patterns - "a)Text" -> "a) Text"
-            collapsed = collapsed.replace(/([a-d])\)([A-Z])/gi, '$1) $2');
-
-            // Step 6: Fix common word boundaries that got collapsed
-            const wordBoundaryFixes = [
-              [/\?([a-d]\))/gi, '? $1'],      // "talk?a)" -> "talk? a)"
-              [/\.([a-d]\))/gi, '. $1'],      // "manager.a)" -> "manager. a)"
-              [/(\d)\.([A-Z])/g, '$1. $2'],   // "1.What" -> "1. What"
-            ];
-            for (const [pattern, replacement] of wordBoundaryFixes) {
-              collapsed = collapsed.replace(pattern, replacement);
-            }
-
-            // Step 7: Add newlines before question numbers so parser can detect them
-            // Pattern: period/question mark followed by space and a number followed by period
-            collapsed = collapsed.replace(/([.?!])\s+(\d+)\.\s+/g, '$1\n$2. ');
-
-            // Step 8: Fix first question embedded in header (e.g., "LevelAQuestions1." or "Questions1.")
-            // Add newline before "1." if preceded by text like "Questions"
-            collapsed = collapsed.replace(/([Qq]uestions?\s*)(\d+)\.\s*/g, '$1\n$2. ');
-            // Also handle "Level A Questions 1." pattern
-            collapsed = collapsed.replace(/(Level\s*[A-Za-z]?\s*Questions?\s*)(\d+)\.\s*/gi, '$1\n$2. ');
-
-            text = collapsed;
-          }
-
-          resolve({
-            success: true,
-            text: text.trim(),
-            pageCount: pages.length,
-            info: pdfData.Meta || {},
-          });
-        } catch (parseError) {
-          console.error('[extractText] PDF text extraction error:', parseError.message);
-          resolve({
-            success: false,
-            error: `Failed to extract text from PDF: ${parseError.message}`,
-            text: '',
-          });
-        }
-      });
-
-      pdfParser.on('pdfParser_dataError', (errData) => {
-        console.error('[extractText] PDF parsing error:', errData.parserError);
-        resolve({
-          success: false,
-          error: `Failed to parse PDF: ${errData.parserError}`,
-          text: '',
-        });
-      });
-
-      // Parse the buffer
-      pdfParser.parseBuffer(buffer);
-    } catch (error) {
-      console.error('[extractText] PDF extraction error:', error.message);
-      resolve({
-        success: false,
-        error: `Failed to extract text from PDF: ${error.message}`,
-        text: '',
-      });
-    }
-  });
+    return {
+      success: true,
+      text: result.text?.trim() || '',
+      pageCount: result.total || 1,
+      info: {},
+    };
+  } catch (error) {
+    console.error('[extractText] PDF extraction error:', error.message);
+    return {
+      success: false,
+      error: `Failed to extract text from PDF: ${error.message}`,
+      text: '',
+    };
+  }
 }
 
 /**
