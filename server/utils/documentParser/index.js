@@ -51,6 +51,8 @@ export async function parseDocument(buffer, filename) {
     result.rawText = processedText;
 
     console.log(`[DocumentParser] Extracted ${processedText.length} characters`);
+    // Debug: Log first 500 chars of extracted text to see format
+    console.log('[DocumentParser] Text sample (first 500 chars):', processedText.substring(0, 500));
 
     // Step 3: Detect and split sections
     const sections = splitDocument(processedText);
@@ -64,6 +66,11 @@ export async function parseDocument(buffer, filename) {
     // Store transcript and vocabulary if found
     result.transcript = sections.transcript;
     result.vocabulary = sections.vocabulary;
+
+    // Debug: Log sections.questions sample
+    if (sections.questions) {
+      console.log('[DocumentParser] Questions section sample (first 500 chars):', sections.questions.substring(0, 500));
+    }
 
     // Step 4: Parse answer key if present
     const answerKeyMap = parseAnswerKey(sections.answerKey);
