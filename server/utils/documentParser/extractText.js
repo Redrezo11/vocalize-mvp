@@ -5,14 +5,19 @@
 
 import mammoth from 'mammoth';
 import PDFParser from 'pdf2json';
-import WordsNinja from 'wordsninja';
+import WordsNinjaPack from 'wordsninja';
+
+// Create WordsNinja instance (the package exports a class that must be instantiated)
+const wordsNinja = new WordsNinjaPack();
 
 // Initialize WordsNinja dictionary once
 let wordsNinjaLoaded = false;
 async function ensureWordsNinjaLoaded() {
   if (!wordsNinjaLoaded) {
-    await WordsNinja.loadDictionary();
+    console.log('[extractText] Loading WordsNinja dictionary...');
+    await wordsNinja.loadDictionary();
     wordsNinjaLoaded = true;
+    console.log('[extractText] WordsNinja dictionary loaded');
   }
 }
 
@@ -52,9 +57,9 @@ export async function extractFromPDF(buffer) {
           if (charSpacedPattern.test(text.trim())) {
             console.log('[extractText] Detected character-spaced text, collapsing spaces...');
 
-            // Step 1: Remove ALL single spaces between characters (collapse everything)
-            // This handles "L i s t e n i n g" -> "Listening"
-            let collapsed = text.replace(/(\S) (?=\S)/g, '$1');
+            // Step 1: Remove ALL whitespace between characters (collapse everything)
+            // This handles "L i s t e n i n g" -> "Listening" and "C  o m p a n y" -> "Company"
+            let collapsed = text.replace(/(\S)\s+(?=\S)/g, '$1');
 
             console.log('[extractText] Collapsed text sample (first 200 chars):', collapsed.substring(0, 200));
 
@@ -84,15 +89,16 @@ export async function extractFromPDF(buffer) {
                     } else if (/^[A-Z][a-z]*[A-Z]/.test(word) || /[a-z][A-Z]/.test(word)) {
                       // Word has mixed case, likely needs segmentation
                       // e.g., "Whoisspeaking" or "LevelAQuestions1"
-                      const segmented = WordsNinja.splitSentence(word);
+                      const segmented = wordsNinja.splitSentence(word);
                       if (segmented.length > 1) {
                         processedWords.push(segmented.join(' '));
                       } else {
                         processedWords.push(word);
                       }
-                    } else if (word.length > 15) {
-                      // Long word without spaces, try to segment
-                      const segmented = WordsNinja.splitSentence(word);
+                    } else if (word.length > 5) {
+                      // Word longer than 5 chars without spaces, try to segment
+                      // (lowered from 15 to catch collapsed words like "Astudent", "Toexplain")
+                      const segmented = wordsNinja.splitSentence(word);
                       if (segmented.length > 1) {
                         processedWords.push(segmented.join(' '));
                       } else {
