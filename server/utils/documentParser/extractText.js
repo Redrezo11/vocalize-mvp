@@ -34,7 +34,23 @@ export async function extractFromPDF(buffer) {
             textParts.push(pageTexts.join(' '));
           }
 
-          const text = textParts.join('\n\n');
+          let text = textParts.join('\n\n');
+
+          // Fix character-spaced text (common in some PDFs where each char is positioned separately)
+          // Detect if text has the pattern of single chars separated by spaces: "L i s t e n i n g"
+          // Check by looking for repeated "char space char space" patterns
+          const charSpacedPattern = /^(?:[A-Za-z0-9] ){5,}/;
+          if (charSpacedPattern.test(text.trim())) {
+            console.log('[extractText] Detected character-spaced text, collapsing spaces...');
+            // Remove spaces between single characters
+            // Match: single char, space, single char (lookahead to not consume)
+            // Repeat until we hit a natural word boundary (double space or punctuation with space)
+            text = text.replace(/([A-Za-z0-9]) (?=[A-Za-z0-9] |[A-Za-z0-9]$|[A-Za-z0-9][.,!?:;'")])/g, '$1');
+            // Clean up: handle remaining single-char patterns
+            text = text.replace(/([A-Za-z0-9]) ([A-Za-z0-9])$/gm, '$1$2');
+            // Normalize multiple spaces to single
+            text = text.replace(/  +/g, ' ');
+          }
 
           resolve({
             success: true,
