@@ -69,7 +69,8 @@ export async function extractFromPDF(buffer) {
               await ensureWordsNinjaLoaded();
 
               // Split by existing punctuation and newlines to preserve structure
-              const segments = collapsed.split(/([.?!,;:\n]+)/);
+              // Include () so option markers like a), b) are preserved and not consumed by WordsNinja
+              const segments = collapsed.split(/([.?!,;:()\n]+)/);
               const resegmented = [];
 
               for (let i = 0; i < segments.length; i++) {
