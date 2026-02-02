@@ -77,6 +77,11 @@ export async function extractFromPDF(buffer) {
               collapsed = collapsed.replace(pattern, replacement);
             }
 
+            // Step 7: Add newlines before question numbers so parser can detect them
+            // Pattern: period/question mark followed by space and a number followed by period
+            // "manager. 2." -> "manager.\n2."
+            collapsed = collapsed.replace(/([.?!])\s+(\d+)\.\s+/g, '$1\n$2. ');
+
             text = collapsed;
           }
 
