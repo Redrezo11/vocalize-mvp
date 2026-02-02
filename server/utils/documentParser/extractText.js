@@ -82,6 +82,10 @@ export async function extractFromPDF(buffer) {
             // "manager. 2." -> "manager.\n2."
             collapsed = collapsed.replace(/([.?!])\s+(\d+)\.\s+/g, '$1\n$2. ');
 
+            // Step 8: Handle first question embedded in header (e.g., "Questions1." or "LevelAQuestions1.")
+            // Add newline before first question number that follows text
+            collapsed = collapsed.replace(/([a-zA-Z])(\d+)\.\s+/g, '$1\n$2. ');
+
             text = collapsed;
           }
 
