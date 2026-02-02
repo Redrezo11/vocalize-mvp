@@ -3,6 +3,8 @@ import mongoose from 'mongoose';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import multer from 'multer';
+import { parseDocument, validateFile, getSupportedTypes } from './utils/documentParser/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -13,6 +15,22 @@ const PORT = process.env.PORT || 3001;
 // Middleware
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
+
+// Multer configuration for file uploads (memory storage)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB max
+  },
+  fileFilter: (req, file, cb) => {
+    const validation = validateFile(file.originalname, 0); // Size checked by limits
+    if (validation.valid) {
+      cb(null, true);
+    } else {
+      cb(new Error(validation.error), false);
+    }
+  },
+});
 
 // Audio Entry Schema
 const audioEntrySchema = new mongoose.Schema({
@@ -365,6 +383,55 @@ app.put('/api/settings', async (req, res) => {
     });
   } catch (error) {
     console.error('Update settings error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ==================== DOCUMENT IMPORT ROUTES ====================
+
+// Get supported file types
+app.get('/api/import/supported-types', (req, res) => {
+  res.json(getSupportedTypes());
+});
+
+// Import document (PDF, DOCX, TXT) and parse questions
+app.post('/api/import/document', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    console.log(`[Import] Processing file: ${req.file.originalname} (${req.file.size} bytes)`);
+
+    // Parse the document
+    const result = await parseDocument(req.file.buffer, req.file.originalname);
+
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        error: result.error,
+      });
+    }
+
+    // Return parsed data
+    res.json({
+      success: true,
+      questions: result.questions,
+      transcript: result.transcript,
+      vocabulary: result.vocabulary,
+      confidence: result.confidence,
+      warnings: result.warnings,
+      questionCount: result.questions.length,
+      rawText: result.rawText,
+    });
+
+  } catch (error) {
+    console.error('[Import] Error:', error);
+
+    if (error.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({ error: 'File too large. Maximum size is 10MB.' });
+    }
+
     res.status(500).json({ error: error.message });
   }
 });
