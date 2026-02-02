@@ -4,42 +4,74 @@
  */
 
 import mammoth from 'mammoth';
+import PDFParser from 'pdf2json';
 
 /**
- * Extract text from a PDF buffer
- * Uses pdf-parse v2 with PDFParse class
+ * Extract text from a PDF buffer using pdf2json
+ * This library is designed for Node.js and doesn't require browser APIs
  */
 export async function extractFromPDF(buffer) {
-  try {
-    // pdf-parse v2 exports PDFParse and VerbosityLevel as named exports
-    const { PDFParse, VerbosityLevel } = await import('pdf-parse');
+  return new Promise((resolve) => {
+    try {
+      const pdfParser = new PDFParser();
 
-    // Create parser instance with the buffer data
-    const parser = new PDFParse({
-      verbosity: VerbosityLevel.ERRORS,
-      data: buffer,
-    });
+      pdfParser.on('pdfParser_dataReady', (pdfData) => {
+        try {
+          // Extract text from all pages
+          const pages = pdfData.Pages || [];
+          const textParts = [];
 
-    // Get text from all pages
-    const result = await parser.getText();
+          for (const page of pages) {
+            const pageTexts = [];
+            for (const textItem of (page.Texts || [])) {
+              for (const run of (textItem.R || [])) {
+                if (run.T) {
+                  // Decode URI-encoded text
+                  pageTexts.push(decodeURIComponent(run.T));
+                }
+              }
+            }
+            textParts.push(pageTexts.join(' '));
+          }
 
-    // Combine all page text
-    const text = result.pages.map(page => page.text).join('\n\n');
+          const text = textParts.join('\n\n');
 
-    return {
-      success: true,
-      text: text.trim(),
-      pageCount: result.total,
-      info: {},
-    };
-  } catch (error) {
-    console.error('[extractText] PDF extraction error:', error.message);
-    return {
-      success: false,
-      error: `Failed to extract text from PDF: ${error.message}`,
-      text: '',
-    };
-  }
+          resolve({
+            success: true,
+            text: text.trim(),
+            pageCount: pages.length,
+            info: pdfData.Meta || {},
+          });
+        } catch (parseError) {
+          console.error('[extractText] PDF text extraction error:', parseError.message);
+          resolve({
+            success: false,
+            error: `Failed to extract text from PDF: ${parseError.message}`,
+            text: '',
+          });
+        }
+      });
+
+      pdfParser.on('pdfParser_dataError', (errData) => {
+        console.error('[extractText] PDF parsing error:', errData.parserError);
+        resolve({
+          success: false,
+          error: `Failed to parse PDF: ${errData.parserError}`,
+          text: '',
+        });
+      });
+
+      // Parse the buffer
+      pdfParser.parseBuffer(buffer);
+    } catch (error) {
+      console.error('[extractText] PDF extraction error:', error.message);
+      resolve({
+        success: false,
+        error: `Failed to extract text from PDF: ${error.message}`,
+        text: '',
+      });
+    }
+  });
 }
 
 /**
