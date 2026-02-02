@@ -5,6 +5,16 @@
 
 import mammoth from 'mammoth';
 import PDFParser from 'pdf2json';
+import WordsNinja from 'wordsninja';
+
+// Initialize WordsNinja dictionary once
+let wordsNinjaLoaded = false;
+async function ensureWordsNinjaLoaded() {
+  if (!wordsNinjaLoaded) {
+    await WordsNinja.loadDictionary();
+    wordsNinjaLoaded = true;
+  }
+}
 
 /**
  * Extract text from a PDF buffer using pdf2json
@@ -15,7 +25,7 @@ export async function extractFromPDF(buffer) {
     try {
       const pdfParser = new PDFParser();
 
-      pdfParser.on('pdfParser_dataReady', (pdfData) => {
+      pdfParser.on('pdfParser_dataReady', async (pdfData) => {
         try {
           // Extract text from all pages
           const pages = pdfData.Pages || [];
@@ -46,28 +56,79 @@ export async function extractFromPDF(buffer) {
             // This handles "L i s t e n i n g" -> "Listening"
             let collapsed = text.replace(/(\S) (?=\S)/g, '$1');
 
-            // Step 2: Fix punctuation that got stuck to words
+            console.log('[extractText] Collapsed text sample (first 200 chars):', collapsed.substring(0, 200));
+
+            // Step 2: Use WordsNinja to segment collapsed text properly
+            // This handles "Whoisspeakinginthetalk" -> "Who is speaking in the talk"
+            try {
+              await ensureWordsNinjaLoaded();
+
+              // Split by existing punctuation and newlines to preserve structure
+              const segments = collapsed.split(/([.?!,;:\n]+)/);
+              const resegmented = [];
+
+              for (let i = 0; i < segments.length; i++) {
+                const segment = segments[i];
+                // If it's punctuation or newline, keep as-is
+                if (/^[.?!,;:\n]+$/.test(segment)) {
+                  resegmented.push(segment);
+                } else if (segment.trim()) {
+                  // For text segments, split by existing spaces first
+                  const words = segment.split(/\s+/);
+                  const processedWords = [];
+
+                  for (const word of words) {
+                    // Skip if word is just numbers, option letters, or very short
+                    if (/^\d+$/.test(word) || /^[a-dA-D]\)$/.test(word) || word.length <= 2) {
+                      processedWords.push(word);
+                    } else if (/^[A-Z][a-z]*[A-Z]/.test(word) || /[a-z][A-Z]/.test(word)) {
+                      // Word has mixed case, likely needs segmentation
+                      // e.g., "Whoisspeaking" or "LevelAQuestions1"
+                      const segmented = WordsNinja.splitSentence(word);
+                      if (segmented.length > 1) {
+                        processedWords.push(segmented.join(' '));
+                      } else {
+                        processedWords.push(word);
+                      }
+                    } else if (word.length > 15) {
+                      // Long word without spaces, try to segment
+                      const segmented = WordsNinja.splitSentence(word);
+                      if (segmented.length > 1) {
+                        processedWords.push(segmented.join(' '));
+                      } else {
+                        processedWords.push(word);
+                      }
+                    } else {
+                      processedWords.push(word);
+                    }
+                  }
+                  resegmented.push(processedWords.join(' '));
+                }
+              }
+
+              collapsed = resegmented.join('');
+              console.log('[extractText] After word segmentation (first 300 chars):', collapsed.substring(0, 300));
+            } catch (segmentError) {
+              console.error('[extractText] Word segmentation error, falling back to heuristics:', segmentError.message);
+              // Fall back to basic heuristics if WordsNinja fails
+              collapsed = collapsed.replace(/([a-z])([A-Z][a-z]{2,})/g, '$1 $2');
+            }
+
+            // Step 3: Fix punctuation that got stuck to words
             // "1." should stay, but "word.Next" -> "word. Next"
             collapsed = collapsed.replace(/([a-z])\.([A-Z])/g, '$1. $2');
             collapsed = collapsed.replace(/([a-z])\?([A-Z])/g, '$1? $2');
             collapsed = collapsed.replace(/([a-z])!([A-Z])/g, '$1! $2');
 
-            // Step 3: Add space after ) when followed by uppercase or number (new question/option)
-            // "manager.2." -> "manager. 2."
+            // Step 4: Add space after ) when followed by uppercase or number (new question/option)
             collapsed = collapsed.replace(/\.(\d)/g, '. $1');
             collapsed = collapsed.replace(/\)(\d)/g, ') $1');
             collapsed = collapsed.replace(/\)([A-Z])/g, ') $1');
 
-            // Step 4: Fix option patterns - "a)Text" -> "a) Text"
+            // Step 5: Fix option patterns - "a)Text" -> "a) Text"
             collapsed = collapsed.replace(/([a-d])\)([A-Z])/gi, '$1) $2');
 
-            // Step 5: Add space between camelCase for question text readability
-            // "Whoisspeaking" -> "Who is speaking" (heuristic: lowercase followed by uppercase)
-            // But be careful not to break proper nouns - only add space when followed by common words
-            collapsed = collapsed.replace(/([a-z])([A-Z][a-z]{2,})/g, '$1 $2');
-
             // Step 6: Fix common word boundaries that got collapsed
-            // These are safe patterns where we know a space should exist
             const wordBoundaryFixes = [
               [/\?([a-d]\))/gi, '? $1'],      // "talk?a)" -> "talk? a)"
               [/\.([a-d]\))/gi, '. $1'],      // "manager.a)" -> "manager. a)"
@@ -79,12 +140,13 @@ export async function extractFromPDF(buffer) {
 
             // Step 7: Add newlines before question numbers so parser can detect them
             // Pattern: period/question mark followed by space and a number followed by period
-            // "manager. 2." -> "manager.\n2."
             collapsed = collapsed.replace(/([.?!])\s+(\d+)\.\s+/g, '$1\n$2. ');
 
-            // Step 8: Handle first question embedded in header (e.g., "Questions1." or "LevelAQuestions1.")
-            // Add newline before first question number that follows text
-            collapsed = collapsed.replace(/([a-zA-Z])(\d+)\.\s+/g, '$1\n$2. ');
+            // Step 8: Fix first question embedded in header (e.g., "LevelAQuestions1." or "Questions1.")
+            // Add newline before "1." if preceded by text like "Questions"
+            collapsed = collapsed.replace(/([Qq]uestions?\s*)(\d+)\.\s*/g, '$1\n$2. ');
+            // Also handle "Level A Questions 1." pattern
+            collapsed = collapsed.replace(/(Level\s*[A-Za-z]?\s*Questions?\s*)(\d+)\.\s*/gi, '$1\n$2. ');
 
             text = collapsed;
           }

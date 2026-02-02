@@ -31,7 +31,8 @@
     "pdf2json": "^4.0.2",
     "qrcode": "^1.5.4",
     "react": "^19.2.1",
-    "react-dom": "^19.2.1"
+    "react-dom": "^19.2.1",
+    "wordsninja": "^1.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
