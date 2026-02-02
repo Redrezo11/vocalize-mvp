@@ -38,18 +38,46 @@ export async function extractFromPDF(buffer) {
 
           // Fix character-spaced text (common in some PDFs where each char is positioned separately)
           // Detect if text has the pattern of single chars separated by spaces: "L i s t e n i n g"
-          // Check by looking for repeated "char space char space" patterns
           const charSpacedPattern = /^(?:[A-Za-z0-9] ){5,}/;
           if (charSpacedPattern.test(text.trim())) {
             console.log('[extractText] Detected character-spaced text, collapsing spaces...');
-            // Remove spaces between single characters
-            // Match: single char, space, single char (lookahead to not consume)
-            // Repeat until we hit a natural word boundary (double space or punctuation with space)
-            text = text.replace(/([A-Za-z0-9]) (?=[A-Za-z0-9] |[A-Za-z0-9]$|[A-Za-z0-9][.,!?:;'")])/g, '$1');
-            // Clean up: handle remaining single-char patterns
-            text = text.replace(/([A-Za-z0-9]) ([A-Za-z0-9])$/gm, '$1$2');
-            // Normalize multiple spaces to single
-            text = text.replace(/  +/g, ' ');
+
+            // Step 1: Remove ALL single spaces between characters (collapse everything)
+            // This handles "L i s t e n i n g" -> "Listening"
+            let collapsed = text.replace(/(\S) (?=\S)/g, '$1');
+
+            // Step 2: Fix punctuation that got stuck to words
+            // "1." should stay, but "word.Next" -> "word. Next"
+            collapsed = collapsed.replace(/([a-z])\.([A-Z])/g, '$1. $2');
+            collapsed = collapsed.replace(/([a-z])\?([A-Z])/g, '$1? $2');
+            collapsed = collapsed.replace(/([a-z])!([A-Z])/g, '$1! $2');
+
+            // Step 3: Add space after ) when followed by uppercase or number (new question/option)
+            // "manager.2." -> "manager. 2."
+            collapsed = collapsed.replace(/\.(\d)/g, '. $1');
+            collapsed = collapsed.replace(/\)(\d)/g, ') $1');
+            collapsed = collapsed.replace(/\)([A-Z])/g, ') $1');
+
+            // Step 4: Fix option patterns - "a)Text" -> "a) Text"
+            collapsed = collapsed.replace(/([a-d])\)([A-Z])/gi, '$1) $2');
+
+            // Step 5: Add space between camelCase for question text readability
+            // "Whoisspeaking" -> "Who is speaking" (heuristic: lowercase followed by uppercase)
+            // But be careful not to break proper nouns - only add space when followed by common words
+            collapsed = collapsed.replace(/([a-z])([A-Z][a-z]{2,})/g, '$1 $2');
+
+            // Step 6: Fix common word boundaries that got collapsed
+            // These are safe patterns where we know a space should exist
+            const wordBoundaryFixes = [
+              [/\?([a-d]\))/gi, '? $1'],      // "talk?a)" -> "talk? a)"
+              [/\.([a-d]\))/gi, '. $1'],      // "manager.a)" -> "manager. a)"
+              [/(\d)\.([A-Z])/g, '$1. $2'],   // "1.What" -> "1. What"
+            ];
+            for (const [pattern, replacement] of wordBoundaryFixes) {
+              collapsed = collapsed.replace(pattern, replacement);
+            }
+
+            text = collapsed;
           }
 
           resolve({
