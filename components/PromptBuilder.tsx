@@ -665,10 +665,21 @@ ${contentMode === 'halal' ? `
 ## Additional Requirements
 
 1. Make the dialogue natural and engaging
-2. Include at least one comprehension-check moment (e.g., one speaker clarifying something)
-3. Use appropriate fillers and discourse markers for the level (um, well, you know, etc.)
-4. Include varied intonation cues in the text (questions, exclamations, emphasis)
-5. End with a natural conclusion
+2. Use appropriate fillers and discourse markers for the level (um, well, you know, etc.)
+3. Include varied intonation cues in the text (questions, exclamations, emphasis)
+4. End with a natural conclusion
+
+## CRITICAL: No Meta-Commentary
+
+**IMPORTANT:** Once the dialogue begins, it must be a pure, uninterrupted conversation between the characters.
+
+- **DO NOT** include any narrator interruptions during the dialogue
+- **DO NOT** ask the listener questions like "Did you understand?" or "Would you like comprehension questions?"
+- **DO NOT** include any text about creating exercises, questions, or tests
+- **DO NOT** break the fourth wall or address the listener/reader directly
+- The dialogue should end naturally with the characters finishing their conversation - nothing more
+
+The audio will be used as a listening exercise. Comprehension questions are created separately - your job is ONLY to create the dialogue itself.
 
 Now generate the listening exercise:`;
 
