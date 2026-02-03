@@ -109,6 +109,21 @@ export const parseLLMTranscript = (text: string): ParsedTranscript => {
           // Skip if it looks like a section header
           if (!['TITLE', 'VOICE_ASSIGNMENTS', 'DIALOGUE'].includes(speaker.toUpperCase())) {
             result.voiceAssignments[speaker] = voice;
+
+            // Also extract name from parentheses if present: "Customer (Faisal)" -> also map "Faisal"
+            const parenMatch = speaker.match(/\(([^)]+)\)/);
+            if (parenMatch) {
+              const nameInParens = parenMatch[1].trim();
+              result.voiceAssignments[nameInParens] = voice;
+            }
+
+            // Also extract first word as potential name: "Customer Faisal" -> also map "Faisal" won't work
+            // But "Faisal the Customer" -> map "Faisal"
+            const words = speaker.split(/\s+/);
+            if (words.length > 1) {
+              // Map the first word (often the name)
+              result.voiceAssignments[words[0]] = voice;
+            }
           }
         }
       }

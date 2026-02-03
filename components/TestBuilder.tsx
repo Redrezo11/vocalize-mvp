@@ -212,18 +212,14 @@ const getTestTypeLabel = (type: TestType): string => {
   }
 };
 
-// Generate a smart default title
-const generateDefaultTitle = (audioTitle: string, testType: TestType): string => {
-  const typeLabel = getTestTypeLabel(testType);
-  const date = new Date();
-  const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  const timeStr = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-  return `${audioTitle} - ${typeLabel} (${dateStr}, ${timeStr})`;
+// Generate a smart default title with difficulty level
+const generateDefaultTitle = (audioTitle: string, difficulty: CEFRLevel = 'B1'): string => {
+  return `${audioTitle} (${difficulty})`;
 };
 
 export const TestBuilder: React.FC<TestBuilderProps> = ({ audio, existingTest, defaultDifficulty = 'B1', onSave, onCancel }) => {
   const [testType, setTestType] = useState<TestType>(existingTest?.type || 'listening-comprehension');
-  const [testTitle, setTestTitle] = useState(existingTest?.title || generateDefaultTitle(audio.title, existingTest?.type || 'listening-comprehension'));
+  const [testTitle, setTestTitle] = useState(existingTest?.title || generateDefaultTitle(audio.title, defaultDifficulty));
   const [questions, setQuestions] = useState<TestQuestion[]>(existingTest?.questions || []);
   const [isGenerating, setIsGenerating] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
@@ -588,12 +584,15 @@ JSON FORMAT (return exactly this structure):
     setTestType(newType);
     setQuestions([]);
     setIsDirty(true);
-    // Update title if it hasn't been manually changed from the default pattern
-    if (!isEditMode) {
-      const currentDefault = generateDefaultTitle(audio.title, testType);
-      if (testTitle === currentDefault || testTitle === `${audio.title} - Listening Test`) {
-        setTestTitle(generateDefaultTitle(audio.title, newType));
-      }
+  };
+
+  // Handle difficulty change - update title if using default pattern
+  const handleDifficultyChange = (newDifficulty: CEFRLevel) => {
+    const oldDefault = generateDefaultTitle(audio.title, difficultyLevel);
+    setDifficultyLevel(newDifficulty);
+    // Update title if it matches the old default
+    if (!isEditMode && testTitle === oldDefault) {
+      setTestTitle(generateDefaultTitle(audio.title, newDifficulty));
     }
   };
 
@@ -1162,7 +1161,7 @@ JSON FORMAT (return exactly this structure):
                   {(['A1', 'A2', 'B1', 'B2', 'C1'] as CEFRLevel[]).map((level) => (
                     <button
                       key={level}
-                      onClick={() => setDifficultyLevel(level)}
+                      onClick={() => handleDifficultyChange(level)}
                       className={`py-2 px-4 rounded-lg font-medium text-sm transition-all ${
                         difficultyLevel === level
                           ? 'bg-amber-600 text-white'
@@ -1333,7 +1332,7 @@ JSON FORMAT (return exactly this structure):
                   {(['A1', 'A2', 'B1', 'B2', 'C1'] as CEFRLevel[]).map((level) => (
                     <button
                       key={level}
-                      onClick={() => setDifficultyLevel(level)}
+                      onClick={() => handleDifficultyChange(level)}
                       className={`py-2 px-4 rounded-lg font-medium text-sm transition-all ${
                         difficultyLevel === level
                           ? 'bg-indigo-600 text-white'

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ListeningTest } from '../types';
 import { CheckCircleIcon } from './Icons';
 import { ClassroomTheme } from './Settings';
+import { LexisMatchGame } from './LexisMatchGame';
 
 interface StudentTestProps {
   test: ListeningTest;
@@ -16,6 +17,18 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [score, setScore] = useState<number | null>(null);
+
+  // Lexis game state - show game first if lexis with Arabic translations exists
+  const hasLexisGame = test.lexis && test.lexis.some(item => item.definitionArabic);
+  const [showLexisGame, setShowLexisGame] = useState(hasLexisGame);
+
+  const handleLexisComplete = () => {
+    setShowLexisGame(false);
+  };
+
+  const handleLexisSkip = () => {
+    setShowLexisGame(false);
+  };
 
   const updateAnswer = (questionId: string, answer: string) => {
     if (isSubmitted) return;
@@ -64,6 +77,18 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
   const answeredCount = Object.keys(answers).length;
   const totalQuestions = test.questions.length;
   const progressPercent = (answeredCount / totalQuestions) * 100;
+
+  // Show Lexis Match Game before questions
+  if (showLexisGame && test.lexis) {
+    return (
+      <LexisMatchGame
+        lexis={test.lexis}
+        theme={theme}
+        onComplete={handleLexisComplete}
+        onSkip={handleLexisSkip}
+      />
+    );
+  }
 
   return (
     <div className={`min-h-screen flex flex-col ${isDark ? 'bg-slate-900' : 'bg-slate-50'}`}>

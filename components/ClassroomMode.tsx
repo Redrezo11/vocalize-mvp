@@ -53,6 +53,9 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
   const [wordAudioProgress, setWordAudioProgress] = useState({ current: 0, total: 0, word: '' });
   const wordAudioRef = useRef<HTMLAudioElement>(null);
 
+  // Teacher controls - hide answers by default
+  const [showAnswers, setShowAnswers] = useState(false);
+
   const SPEED_OPTIONS = [0.5, 0.75, 1] as const;
 
   // Get audio for a test
@@ -897,9 +900,33 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
           /* No lexis - show questions if available */
           selectedTest.questions && selectedTest.questions.length > 0 ? (
             <div className="max-w-4xl mx-auto px-6 py-8">
-              <h2 className={`text-xl font-bold mb-6 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                Questions ({selectedTest.questions.length})
-              </h2>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                  Questions ({selectedTest.questions.length})
+                </h2>
+                <button
+                  onClick={() => setShowAnswers(!showAnswers)}
+                  className={`px-4 py-2 rounded-xl font-medium text-sm transition-all flex items-center gap-2 ${
+                    showAnswers
+                      ? 'bg-green-500 text-white hover:bg-green-600'
+                      : isDark
+                        ? 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                        : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                  }`}
+                >
+                  {showAnswers ? (
+                    <>
+                      <span>✓</span>
+                      <span>Answers Shown</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>○</span>
+                      <span>Show Answers</span>
+                    </>
+                  )}
+                </button>
+              </div>
               <div className="space-y-4">
                 {selectedTest.questions.map((question, index) => (
                   <div
@@ -920,7 +947,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                               <div
                                 key={optIndex}
                                 className={`p-3 rounded-xl border ${
-                                  option === question.correctAnswer
+                                  showAnswers && option === question.correctAnswer
                                     ? 'bg-green-50 border-green-300 text-green-800'
                                     : isDark
                                       ? 'bg-slate-700 border-slate-600 text-slate-300'
@@ -929,7 +956,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                               >
                                 <span className="font-medium mr-2">{String.fromCharCode(65 + optIndex)}.</span>
                                 {option}
-                                {option === question.correctAnswer && (
+                                {showAnswers && option === question.correctAnswer && (
                                   <span className="ml-2 text-green-600">✓</span>
                                 )}
                               </div>
