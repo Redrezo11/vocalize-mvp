@@ -3,6 +3,7 @@ import { ListeningTest } from '../types';
 import { CheckCircleIcon } from './Icons';
 import { ClassroomTheme } from './Settings';
 import { LexisMatchGame } from './LexisMatchGame';
+import { LexisGapFillGame } from './LexisGapFillGame';
 
 interface StudentTestProps {
   test: ListeningTest;
@@ -18,16 +19,35 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [score, setScore] = useState<number | null>(null);
 
-  // Lexis game state - show game first if lexis with Arabic translations exists
-  const hasLexisGame = test.lexis && test.lexis.some(item => item.definitionArabic);
-  const [showLexisGame, setShowLexisGame] = useState(hasLexisGame);
+  // Lexis game state - show match game first if lexis with Arabic translations exists
+  const hasLexisMatchGame = test.lexis && test.lexis.some(item => item.definitionArabic);
+  const hasLexisGapFillGame = test.lexis && test.lexis.some(item => item.example);
 
-  const handleLexisComplete = () => {
-    setShowLexisGame(false);
+  const [showLexisMatchGame, setShowLexisMatchGame] = useState(hasLexisMatchGame);
+  const [showLexisGapFillGame, setShowLexisGapFillGame] = useState(false); // Shows after match game
+
+  const handleMatchGameComplete = () => {
+    setShowLexisMatchGame(false);
+    // Show gap-fill game next if available
+    if (hasLexisGapFillGame) {
+      setShowLexisGapFillGame(true);
+    }
   };
 
-  const handleLexisSkip = () => {
-    setShowLexisGame(false);
+  const handleMatchGameSkip = () => {
+    setShowLexisMatchGame(false);
+    // Show gap-fill game next if available
+    if (hasLexisGapFillGame) {
+      setShowLexisGapFillGame(true);
+    }
+  };
+
+  const handleGapFillComplete = () => {
+    setShowLexisGapFillGame(false);
+  };
+
+  const handleGapFillSkip = () => {
+    setShowLexisGapFillGame(false);
   };
 
   const updateAnswer = (questionId: string, answer: string) => {
@@ -78,14 +98,26 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
   const totalQuestions = test.questions.length;
   const progressPercent = (answeredCount / totalQuestions) * 100;
 
-  // Show Lexis Match Game before questions
-  if (showLexisGame && test.lexis) {
+  // Show Lexis Match Game first (English ↔ Arabic)
+  if (showLexisMatchGame && test.lexis) {
     return (
       <LexisMatchGame
         lexis={test.lexis}
         theme={theme}
-        onComplete={handleLexisComplete}
-        onSkip={handleLexisSkip}
+        onComplete={handleMatchGameComplete}
+        onSkip={handleMatchGameSkip}
+      />
+    );
+  }
+
+  // Show Gap-Fill Game second (fill in the blank with vocab)
+  if (showLexisGapFillGame && test.lexis) {
+    return (
+      <LexisGapFillGame
+        lexis={test.lexis}
+        theme={theme}
+        onComplete={handleGapFillComplete}
+        onSkip={handleGapFillSkip}
       />
     );
   }
