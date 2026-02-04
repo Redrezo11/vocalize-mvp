@@ -1055,10 +1055,11 @@ const App: React.FC = () => {
             autoComplete="off"
           />
           <textarea
-            className="w-full min-h-[450px] resize-none text-lg leading-8 text-slate-700 bg-transparent border-0 focus:ring-0 p-0 font-medium placeholder:text-slate-400"
+            className="w-full min-h-[450px] resize-none text-lg leading-8 text-slate-400 focus:text-slate-700 bg-transparent border-0 focus:ring-0 p-0 font-medium placeholder:text-slate-400 transition-colors duration-200"
             placeholder="Type or paste your script..."
             value={text}
             onChange={(e) => setText(e.target.value)}
+            onFocus={(e) => e.target.select()}
           />
         </div>
       </div>

@@ -65,6 +65,9 @@ const lexisItemSchema = new mongoose.Schema({
   term: { type: String, required: true },
   definition: { type: String, required: true },
   definitionArabic: { type: String },
+  hintArabic: { type: String },
+  explanation: { type: String },
+  explanationArabic: { type: String },
   example: { type: String },
   partOfSpeech: { type: String }
 });

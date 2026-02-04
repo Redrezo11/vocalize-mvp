@@ -179,6 +179,9 @@ JSON FORMAT (return exactly this structure):
     "term": "vocabulary word or phrase",
     "definition": "Clear English definition appropriate for ${difficultyLevel} level",
     "definitionArabic": "كلمة عربية",
+    "hintArabic": "شرح بالعربية",
+    "explanation": "Brief English explanation of why this word matters or how it is used",
+    "explanationArabic": "شرح مختصر بالعربية",
     "example": "Example sentence using the term (preferably from or related to the transcript)",
     "partOfSpeech": "noun/verb/adjective/adverb/phrase/idiom"
   }
@@ -188,6 +191,9 @@ RULES:
 - term: The vocabulary word or phrase from the transcript
 - definition: Clear, simple English definition appropriate for ${difficultyLevel} learners
 - definitionArabic: Simple Arabic translation word(s) only - NOT a definition or explanation. Just the direct Arabic equivalent for easy memorization (e.g., "travel" → "يسافر", "library" → "مكتبة")
+- hintArabic: Arabic translation of the English definition — a brief explanation in Arabic that helps learners understand the meaning (e.g., "commute" definition "to travel regularly between home and work" → "السفر بشكل منتظم بين المنزل والعمل")
+- explanation: A short English sentence explaining the word's usage, nuance, or why it matters in context (shown as feedback when the learner answers incorrectly)
+- explanationArabic: Arabic translation of the explanation field
 - example: A contextual example sentence (can be from the transcript or created)
 - partOfSpeech: Grammatical category (noun, verb, adjective, adverb, phrase, idiom, etc.)
 
@@ -454,6 +460,9 @@ JSON FORMAT (return exactly this structure):
         term: item.term || '',
         definition: item.definition || '',
         definitionArabic: item.definitionArabic,
+        hintArabic: item.hintArabic,
+        explanation: item.explanation,
+        explanationArabic: item.explanationArabic,
         example: item.example,
         partOfSpeech: item.partOfSpeech,
       }));
@@ -503,6 +512,9 @@ JSON FORMAT (return exactly this structure):
           term: item.term || '',
           definition: item.definition || '',
           definitionArabic: item.definitionArabic,
+          hintArabic: item.hintArabic,
+          explanation: item.explanation,
+          explanationArabic: item.explanationArabic,
           example: item.example,
           partOfSpeech: item.partOfSpeech,
         }));
@@ -951,6 +963,14 @@ JSON FORMAT (return exactly this structure):
                       />
                       <input
                         type="text"
+                        dir="rtl"
+                        value={item.hintArabic || ''}
+                        onChange={(e) => updateLexisItem(item.id, { hintArabic: e.target.value || undefined })}
+                        placeholder="شرح بالعربية (تلميح)"
+                        className="w-full p-2 bg-white border border-amber-200 rounded-lg text-sm text-right focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                      />
+                      <input
+                        type="text"
                         value={item.example || ''}
                         onChange={(e) => updateLexisItem(item.id, { example: e.target.value || undefined })}
                         placeholder="Example sentence (optional)"
@@ -1229,6 +1249,9 @@ JSON FORMAT (return exactly this structure):
     "term": "vocabulary word",
     "definition": "English definition",
     "definitionArabic": "التعريف بالعربية",
+    "hintArabic": "شرح بالعربية",
+    "explanation": "Why this word matters",
+    "explanationArabic": "شرح مختصر",
     "example": "Example sentence",
     "partOfSpeech": "noun"
   }

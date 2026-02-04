@@ -136,6 +136,9 @@ export interface LexisItem {
   term: string;                    // The vocabulary word or phrase
   definition: string;              // English definition
   definitionArabic?: string;       // Arabic translation/definition
+  hintArabic?: string;             // Arabic explanation of the English definition (for gap-fill hints)
+  explanation?: string;            // English explanation shown on wrong answer in gap-fill
+  explanationArabic?: string;      // Arabic explanation shown on wrong answer in gap-fill
   example?: string;                // Example sentence from transcript or context
   partOfSpeech?: string;           // noun, verb, adjective, etc.
 }

@@ -82,6 +82,7 @@ export const LexisGapFillGame: React.FC<LexisGapFillGameProps> = ({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [showFeedback, setShowFeedback] = useState(false);
+  const [showHint, setShowHint] = useState(false);
   const [correctCount, setCorrectCount] = useState(0);
   const [answeredQuestions, setAnsweredQuestions] = useState<Set<string>>(new Set());
 
@@ -120,6 +121,7 @@ export const LexisGapFillGame: React.FC<LexisGapFillGameProps> = ({
         setCurrentIndex(prev => prev + 1);
         setSelectedAnswer(null);
         setShowFeedback(false);
+        setShowHint(false);
       }
     }, 1500);
   };
@@ -128,6 +130,7 @@ export const LexisGapFillGame: React.FC<LexisGapFillGameProps> = ({
     setCurrentIndex(0);
     setSelectedAnswer(null);
     setShowFeedback(false);
+    setShowHint(false);
     setCorrectCount(0);
     setAnsweredQuestions(new Set());
   };
@@ -271,15 +274,30 @@ export const LexisGapFillGame: React.FC<LexisGapFillGameProps> = ({
             ))}
           </div>
 
-          {/* Definition hint */}
-          <div className={`mb-6 p-3 rounded-xl ${isDark ? 'bg-slate-700/50' : 'bg-slate-100'}`}>
-            <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-              <span className="font-medium">Hint:</span> {currentQuestion.lexisItem.definition}
-            </p>
-            {currentQuestion.lexisItem.definitionArabic && (
-              <p className={`text-sm mt-1 text-right ${isDark ? 'text-slate-400' : 'text-slate-500'}`} dir="rtl">
-                {currentQuestion.lexisItem.definitionArabic}
-              </p>
+          {/* Hint toggle */}
+          <div className="mb-6">
+            {!showHint ? (
+              <button
+                onClick={() => setShowHint(true)}
+                className={`w-full p-3 rounded-xl text-sm font-medium transition-all duration-200 border-2 border-dashed ${
+                  isDark
+                    ? 'border-slate-600 text-slate-400 hover:border-amber-500/50 hover:text-amber-400 hover:bg-amber-900/10'
+                    : 'border-slate-300 text-slate-400 hover:border-amber-400 hover:text-amber-600 hover:bg-amber-50'
+                }`}
+              >
+                💡 Hint / تلميح
+              </button>
+            ) : (
+              <div className={`p-3 rounded-xl transition-all duration-200 ${isDark ? 'bg-amber-900/20 border border-amber-700/40' : 'bg-amber-50 border border-amber-200'}`}>
+                <p className={`text-sm ${isDark ? 'text-amber-300/90' : 'text-amber-800'}`}>
+                  {currentQuestion.lexisItem.definition}
+                </p>
+                {currentQuestion.lexisItem.hintArabic && (
+                  <p className={`text-sm mt-1 text-right ${isDark ? 'text-amber-400/80' : 'text-amber-700'}`} dir="rtl" style={{ fontFamily: "'Noto Sans Arabic', 'Segoe UI', Tahoma, sans-serif" }}>
+                    {currentQuestion.lexisItem.hintArabic}
+                  </p>
+                )}
+              </div>
             )}
           </div>
 
@@ -326,18 +344,37 @@ export const LexisGapFillGame: React.FC<LexisGapFillGameProps> = ({
           </div>
 
           {/* Feedback */}
-          {showFeedback && (
-            <div className={`mt-4 p-3 rounded-xl text-center ${
-              selectedAnswer?.toLowerCase() === currentQuestion.correctAnswer.toLowerCase()
-                ? isDark ? 'bg-green-900/30 text-green-300' : 'bg-green-50 text-green-700'
-                : isDark ? 'bg-red-900/30 text-red-300' : 'bg-red-50 text-red-700'
-            }`}>
-              {selectedAnswer?.toLowerCase() === currentQuestion.correctAnswer.toLowerCase()
-                ? '✓ Correct!'
-                : `✗ The answer is "${currentQuestion.correctAnswer}"`
-              }
-            </div>
-          )}
+          {showFeedback && (() => {
+            const isCorrect = selectedAnswer?.toLowerCase() === currentQuestion.correctAnswer.toLowerCase();
+            return (
+              <div className={`mt-4 p-3 rounded-xl ${
+                isCorrect
+                  ? isDark ? 'bg-green-900/30 text-green-300' : 'bg-green-50 text-green-700'
+                  : isDark ? 'bg-red-900/30' : 'bg-red-50'
+              }`}>
+                <p className={`text-center font-medium ${isCorrect ? '' : isDark ? 'text-red-300' : 'text-red-700'}`}>
+                  {isCorrect
+                    ? '✓ Correct!'
+                    : `✗ The answer is "${currentQuestion.correctAnswer}"`
+                  }
+                </p>
+                {!isCorrect && (currentQuestion.lexisItem.explanation || currentQuestion.lexisItem.explanationArabic) && (
+                  <div className={`mt-2 pt-2 border-t ${isDark ? 'border-red-800/40' : 'border-red-200'}`}>
+                    {currentQuestion.lexisItem.explanation && (
+                      <p className={`text-sm ${isDark ? 'text-red-300/80' : 'text-red-600'}`}>
+                        {currentQuestion.lexisItem.explanation}
+                      </p>
+                    )}
+                    {currentQuestion.lexisItem.explanationArabic && (
+                      <p className={`text-sm mt-1 text-right ${isDark ? 'text-red-400/70' : 'text-red-500'}`} dir="rtl" style={{ fontFamily: "'Noto Sans Arabic', 'Segoe UI', Tahoma, sans-serif" }}>
+                        {currentQuestion.lexisItem.explanationArabic}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
       </div>
 
