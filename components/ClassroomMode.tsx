@@ -10,6 +10,8 @@ interface ClassroomModeProps {
   isLoadingTests?: boolean;  // Loading state for initial test fetch
   audioEntries: SavedAudio[];
   theme?: ClassroomTheme;
+  autoSelectTestId?: string | null;
+  onAutoSelectHandled?: () => void;
   onExit: () => void;
   onPreviewStudent: (test: ListeningTest) => void;
   onEditTest?: (test: ListeningTest) => void;
@@ -19,7 +21,7 @@ interface ClassroomModeProps {
 
 type ClassroomView = 'select' | 'present';
 
-export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTests = false, audioEntries, theme = 'light', onExit, onPreviewStudent, onEditTest, onDeleteTest, onUpdateTest }) => {
+export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTests = false, audioEntries, theme = 'light', autoSelectTestId, onAutoSelectHandled, onExit, onPreviewStudent, onEditTest, onDeleteTest, onUpdateTest }) => {
   const isDark = theme === 'dark';
   const [view, setView] = useState<ClassroomView>('select');
   const [selectedTest, setSelectedTest] = useState<ListeningTest | null>(null);
@@ -57,6 +59,21 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
   const [showAnswers, setShowAnswers] = useState(false);
 
   const SPEED_OPTIONS = [0.5, 0.75, 0.85, 0.9, 1] as const;
+
+  // Auto-select test when navigating from One Shot creator
+  useEffect(() => {
+    if (autoSelectTestId && tests.length > 0) {
+      const test = tests.find(t => t.id === autoSelectTestId);
+      if (test) {
+        const audio = audioEntries.find(a => a.id === test.audioId);
+        setSelectedTest(test);
+        setSelectedAudio(audio || null);
+        setPlayCount(0);
+        setView('present');
+        onAutoSelectHandled?.();
+      }
+    }
+  }, [autoSelectTestId, tests, audioEntries, onAutoSelectHandled]);
 
   // Get audio for a test
   const getAudioForTest = (test: ListeningTest): SavedAudio | undefined => {

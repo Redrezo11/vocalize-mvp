@@ -1,6 +1,6 @@
 import React from 'react';
 
-export type CreationMethod = 'audio' | 'transcript' | 'import';
+export type CreationMethod = 'audio' | 'transcript' | 'import' | 'oneshot';
 
 interface HomePageProps {
   onSelect: (method: CreationMethod) => void;
@@ -30,6 +30,12 @@ const ImportIcon = ({ className }: { className?: string }) => (
     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
     <polyline points="7 10 12 15 17 10" />
     <line x1="12" x2="12" y1="15" y2="3" />
+  </svg>
+);
+
+const ZapIcon = ({ className }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
   </svg>
 );
 
@@ -65,11 +71,20 @@ export const HomePage: React.FC<HomePageProps> = ({
       hoverGradient: 'hover:from-amber-400 hover:to-orange-400',
       shadow: 'shadow-amber-500/30',
     },
+    {
+      id: 'oneshot' as CreationMethod,
+      title: 'One Shot',
+      description: 'Create a complete test with audio in one step using your LLM.',
+      icon: ZapIcon,
+      gradient: 'from-rose-500 to-pink-500',
+      hoverGradient: 'hover:from-rose-400 hover:to-pink-400',
+      shadow: 'shadow-rose-500/30',
+    },
   ];
 
   return (
     <main className="min-h-[calc(100vh-80px)] flex flex-col items-center justify-center p-4 sm:p-6 lg:p-8">
-      <div className="max-w-4xl w-full">
+      <div className="max-w-5xl w-full">
         {/* Header */}
         <div className="text-center mb-12">
           <h1 className="text-4xl sm:text-5xl font-bold bg-gradient-to-r from-slate-900 via-indigo-900 to-violet-900 bg-clip-text text-transparent mb-4">
@@ -81,7 +96,7 @@ export const HomePage: React.FC<HomePageProps> = ({
         </div>
 
         {/* Method Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
           {methods.map((method) => (
             <button
               key={method.id}

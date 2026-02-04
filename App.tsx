@@ -22,6 +22,7 @@ const TestTaker = lazy(() => import('./components/TestTaker').then(m => ({ defau
 const ClassroomMode = lazy(() => import('./components/ClassroomMode').then(m => ({ default: m.ClassroomMode })));
 const StudentTest = lazy(() => import('./components/StudentTest').then(m => ({ default: m.StudentTest })));
 const TranscriptMode = lazy(() => import('./components/TranscriptMode').then(m => ({ default: m.TranscriptMode })));
+const OneShotCreator = lazy(() => import('./components/OneShotCreator').then(m => ({ default: m.OneShotCreator })));
 
 // Preload functions for components
 const preloadClassroom = () => import('./components/ClassroomMode');
@@ -87,6 +88,8 @@ const App: React.FC = () => {
   const [showPromptBuilder, setShowPromptBuilder] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showImportWizard, setShowImportWizard] = useState(false);
+  const [showOneShotCreator, setShowOneShotCreator] = useState(false);
+  const [autoSelectTestId, setAutoSelectTestId] = useState<string | null>(null);
   const settingsHook = useSettings();
 
   // Analysis State
@@ -534,6 +537,9 @@ const App: React.FC = () => {
       case 'import':
         setShowImportWizard(true);
         break;
+      case 'oneshot':
+        setShowOneShotCreator(true);
+        break;
     }
   };
 
@@ -591,6 +597,33 @@ const App: React.FC = () => {
       alert('Failed to save test. Please try again.');
     }
   };
+
+  // Handle one-shot completion - add test to state and navigate to classroom
+  const handleOneShotComplete = useCallback((result: { audioEntry: SavedAudio; test: any }) => {
+    setShowOneShotCreator(false);
+
+    // Map server response to ListeningTest
+    const newTest: ListeningTest = {
+      ...result.test,
+      id: result.test._id || result.test.id,
+      createdAt: result.test.created_at,
+      updatedAt: result.test.updated_at,
+      questions: result.test.questions?.map((q: any) => ({ ...q, id: q._id || Math.random().toString(36).substring(2, 11) })) || [],
+      lexis: result.test.lexis?.map((l: any) => ({ ...l, id: l._id || Math.random().toString(36).substring(2, 11) })),
+      lexisAudio: result.test.lexisAudio,
+    };
+
+    // Add to allTests
+    setAllTests(prev => [newTest, ...prev]);
+    setAllTestsLastFetched(0);
+
+    // Refresh audio storage so classroom can find the audio entry
+    audioStorage.loadAll();
+
+    // Navigate to classroom and auto-select the new test
+    setAutoSelectTestId(newTest.id);
+    setCurrentView('classroom');
+  }, [audioStorage]);
 
   const handleEdit = (audio: SavedAudio) => {
     // For transcript-only entries, go to detail view (where they can create tests)
@@ -1377,6 +1410,8 @@ const App: React.FC = () => {
           isLoadingTests={isLoadingTests}
           audioEntries={audioStorage.savedAudios}
           theme={settingsHook.settings.classroomTheme}
+          autoSelectTestId={autoSelectTestId}
+          onAutoSelectHandled={() => setAutoSelectTestId(null)}
           onExit={() => setCurrentView('library')}
           onPreviewStudent={handlePreviewStudentView}
           onEditTest={(test) => {
@@ -1485,6 +1520,17 @@ const App: React.FC = () => {
         onClose={() => setShowImportWizard(false)}
         onComplete={handleImportComplete}
       />
+
+      {/* One Shot Creator Modal */}
+      <Suspense fallback={null}>
+        <OneShotCreator
+          isOpen={showOneShotCreator}
+          defaultDifficulty={settingsHook.settings.difficultyLevel}
+          contentMode={settingsHook.settings.contentMode}
+          onClose={() => setShowOneShotCreator(false)}
+          onComplete={handleOneShotComplete}
+        />
+      </Suspense>
     </div>
   );
 };
