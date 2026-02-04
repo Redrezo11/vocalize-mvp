@@ -13,6 +13,7 @@ interface PromptBuilderProps {
   contentMode?: ContentMode; // Content filtering mode: standard, halal, or elsd
   onClose: () => void;
   onApplyPrompt: (prompt: string, voiceAssignments: Record<string, string>) => void;
+  onDifficultyUsed?: (difficulty: string) => void;
 }
 
 const CEFR_DESCRIPTIONS: Record<CEFRLevel, string> = {
@@ -251,6 +252,7 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
   contentMode = 'standard',
   onClose,
   onApplyPrompt,
+  onDifficultyUsed,
 }) => {
   const [difficulty, setDifficulty] = useState<CEFRLevel>(defaultDifficulty);
   const [topic, setTopic] = useState('');
@@ -692,6 +694,7 @@ Now generate the listening exercise:`;
     try {
       await navigator.clipboard.writeText(prompt);
       setCopied(true);
+      onDifficultyUsed?.(difficulty);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
       console.error('Failed to copy:', err);

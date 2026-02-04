@@ -15,6 +15,7 @@ interface MongoAudioEntry {
   speaker_mapping?: SpeakerVoiceMapping;
   speakers?: string[];
   is_transcript_only?: boolean;
+  difficulty?: string;
   duration?: number;
   created_at: string;
   updated_at: string;
@@ -31,6 +32,7 @@ const docToSavedAudio = (doc: MongoAudioEntry): SavedAudio => {
     speakerMapping: doc.speaker_mapping || {},
     speakers: doc.speakers || [],
     isTranscriptOnly: doc.is_transcript_only || false,
+    difficulty: doc.difficulty || undefined,
     createdAt: doc.created_at,
     updatedAt: doc.updated_at,
   };
@@ -113,6 +115,7 @@ export const useMongoStorage = () => {
         speaker_mapping: audio.speakerMapping,
         speakers: audio.speakers,
         is_transcript_only: audio.isTranscriptOnly || false,
+        difficulty: audio.difficulty || null,
       };
       console.log('[useMongoStorage.create] Request body:', { ...requestBody, transcript: requestBody.transcript?.substring(0, 50) });
       console.log('[useMongoStorage.create] audio.isTranscriptOnly =', audio.isTranscriptOnly);
@@ -162,6 +165,7 @@ export const useMongoStorage = () => {
           speaker_mapping: updates.speakerMapping,
           speakers: updates.speakers,
           is_transcript_only: updates.isTranscriptOnly,
+          difficulty: updates.difficulty,
         }),
       });
 

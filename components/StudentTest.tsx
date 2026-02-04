@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { ListeningTest } from '../types';
 import { CheckCircleIcon } from './Icons';
 import { ClassroomTheme } from './Settings';
@@ -12,6 +12,29 @@ interface StudentTestProps {
   onExitPreview?: () => void;
 }
 
+// SessionStorage key for tracking completed lexis games per test
+const getGamesCompletedKey = (testId: string) => `lexis-games-done-${testId}`;
+
+type LexisPhase = 'match' | 'gapfill' | 'done';
+
+const getInitialLexisPhase = (test: ListeningTest): LexisPhase => {
+  // Check sessionStorage first — if games were already completed, skip them
+  const storageKey = getGamesCompletedKey(test.id);
+  try {
+    if (sessionStorage.getItem(storageKey) === 'true') {
+      return 'done';
+    }
+  } catch { /* sessionStorage unavailable */ }
+
+  const hasMatch = test.lexis && test.lexis.some(item => item.definitionArabic);
+  if (hasMatch) return 'match';
+
+  const hasGapFill = test.lexis && test.lexis.some(item => item.example);
+  if (hasGapFill) return 'gapfill';
+
+  return 'done';
+};
+
 export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light', isPreview = false, onExitPreview }) => {
   const isDark = theme === 'dark';
   const [answers, setAnswers] = useState<{ [questionId: string]: string }>({});
@@ -19,36 +42,30 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [score, setScore] = useState<number | null>(null);
 
-  // Lexis game state - show match game first if lexis with Arabic translations exists
-  const hasLexisMatchGame = test.lexis && test.lexis.some(item => item.definitionArabic);
+  // Single state machine for lexis game phase, initialized from sessionStorage
+  const [lexisPhase, setLexisPhase] = useState<LexisPhase>(() => getInitialLexisPhase(test));
+
   const hasLexisGapFillGame = test.lexis && test.lexis.some(item => item.example);
 
-  const [showLexisMatchGame, setShowLexisMatchGame] = useState(hasLexisMatchGame);
-  const [showLexisGapFillGame, setShowLexisGapFillGame] = useState(false); // Shows after match game
+  const markGamesDone = useCallback(() => {
+    try {
+      sessionStorage.setItem(getGamesCompletedKey(test.id), 'true');
+    } catch { /* sessionStorage unavailable */ }
+  }, [test.id]);
 
-  const handleMatchGameComplete = () => {
-    setShowLexisMatchGame(false);
-    // Show gap-fill game next if available
+  const advanceFromMatch = useCallback(() => {
     if (hasLexisGapFillGame) {
-      setShowLexisGapFillGame(true);
+      setLexisPhase('gapfill');
+    } else {
+      setLexisPhase('done');
+      markGamesDone();
     }
-  };
+  }, [hasLexisGapFillGame, markGamesDone]);
 
-  const handleMatchGameSkip = () => {
-    setShowLexisMatchGame(false);
-    // Show gap-fill game next if available
-    if (hasLexisGapFillGame) {
-      setShowLexisGapFillGame(true);
-    }
-  };
-
-  const handleGapFillComplete = () => {
-    setShowLexisGapFillGame(false);
-  };
-
-  const handleGapFillSkip = () => {
-    setShowLexisGapFillGame(false);
-  };
+  const advanceFromGapFill = useCallback(() => {
+    setLexisPhase('done');
+    markGamesDone();
+  }, [markGamesDone]);
 
   const updateAnswer = (questionId: string, answer: string) => {
     if (isSubmitted) return;
@@ -99,25 +116,25 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
   const progressPercent = (answeredCount / totalQuestions) * 100;
 
   // Show Lexis Match Game first (English ↔ Arabic)
-  if (showLexisMatchGame && test.lexis) {
+  if (lexisPhase === 'match' && test.lexis) {
     return (
       <LexisMatchGame
         lexis={test.lexis}
         theme={theme}
-        onComplete={handleMatchGameComplete}
-        onSkip={handleMatchGameSkip}
+        onComplete={advanceFromMatch}
+        onSkip={advanceFromMatch}
       />
     );
   }
 
   // Show Gap-Fill Game second (fill in the blank with vocab)
-  if (showLexisGapFillGame && test.lexis) {
+  if (lexisPhase === 'gapfill' && test.lexis) {
     return (
       <LexisGapFillGame
         lexis={test.lexis}
         theme={theme}
-        onComplete={handleGapFillComplete}
-        onSkip={handleGapFillSkip}
+        onComplete={advanceFromGapFill}
+        onSkip={advanceFromGapFill}
       />
     );
   }

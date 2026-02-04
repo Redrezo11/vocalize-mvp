@@ -74,6 +74,7 @@ const App: React.FC = () => {
   const [studentTest, setStudentTest] = useState<ListeningTest | null>(null);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [isSavingTranscript, setIsSavingTranscript] = useState(false);
+  const [lastPromptDifficulty, setLastPromptDifficulty] = useState<string | null>(null);
 
   // Editor state
   const [title, setTitle] = useState("Untitled Audio");
@@ -418,6 +419,7 @@ const App: React.FC = () => {
       engine,
       speakerMapping,
       speakers: analysis.speakers,
+      ...(lastPromptDifficulty && { difficulty: lastPromptDifficulty }),
     };
 
     // Determine the blob to save based on engine
@@ -670,6 +672,9 @@ const App: React.FC = () => {
 
       // Refresh tests list
       setAudioTests(prev => prev.filter(t => t.id !== test.id));
+      // Also remove from allTests cache so classroom view stays in sync
+      setAllTests(prev => prev.filter(t => t.id !== test.id));
+      setAllTestsLastFetched(0);
     } catch (error) {
       console.error('Failed to delete test:', error);
       alert('Failed to delete test. Please try again.');
@@ -707,6 +712,27 @@ const App: React.FC = () => {
         console.error('[App] Server error:', responseData);
         throw new Error('Failed to save test');
       }
+
+      // Update allTests cache directly so classroom view reflects the change immediately
+      const savedTest: ListeningTest = {
+        ...responseData,
+        id: responseData._id,
+        createdAt: responseData.created_at,
+        updatedAt: responseData.updated_at,
+        questions: responseData.questions?.map((q: { _id?: string; questionText: string; options?: string[]; correctAnswer: string; explanation?: string }) => ({ ...q, id: q._id || Math.random().toString(36).substring(2, 11) })) || [],
+        lexis: responseData.lexis?.map((l: { _id?: string; term: string; definition: string; definitionArabic?: string; example?: string; partOfSpeech?: string }) => ({ ...l, id: l._id || Math.random().toString(36).substring(2, 11) })),
+        lexisAudio: responseData.lexisAudio,
+      };
+
+      if (editingTest) {
+        // Replace existing test in the list
+        setAllTests(prev => prev.map(t => t.id === savedTest.id ? savedTest : t));
+      } else {
+        // Add new test to the front of the list
+        setAllTests(prev => [savedTest, ...prev]);
+      }
+      // Invalidate cache so next loadAllTests() fetches fresh data from server
+      setAllTestsLastFetched(0);
 
       alert(editingTest ? 'Test updated successfully!' : 'Test created successfully!');
       setEditingTest(null);
@@ -757,8 +783,9 @@ const App: React.FC = () => {
         throw new Error('Failed to delete test');
       }
 
-      // Refresh tests list
-      await loadAllTests();
+      // Remove from allTests cache directly
+      setAllTests(prev => prev.filter(t => t.id !== test.id));
+      setAllTestsLastFetched(0);
     } catch (error) {
       console.error('Failed to delete test:', error);
       alert('Failed to delete test. Please try again.');
@@ -866,7 +893,11 @@ const App: React.FC = () => {
           questions: t.questions.map((q: { _id?: string; questionText: string; options?: string[]; correctAnswer: string; explanation?: string }) => ({
             ...q,
             id: q._id || Math.random().toString(36).substring(2, 11)
-          }))
+          })),
+          lexis: t.lexis?.map((l: { _id?: string; term: string; definition: string; definitionArabic?: string; example?: string; partOfSpeech?: string }) => ({
+            ...l,
+            id: l._id || Math.random().toString(36).substring(2, 11)
+          })),
         };
         setStudentTest(test);
         setCurrentView('student-test');
@@ -1282,7 +1313,7 @@ const App: React.FC = () => {
             key={editingTest?.id || `new-${testBuilderKey}`}
             audio={audioForBuilder}
             existingTest={editingTest || undefined}
-            defaultDifficulty={settingsHook.settings.difficultyLevel}
+            defaultDifficulty={(audioForBuilder.difficulty as import('./components/Settings').CEFRLevel) || settingsHook.settings.difficultyLevel}
             onSave={handleSaveTest}
             onCancel={() => {
               setEditingTest(null);
@@ -1437,6 +1468,7 @@ const App: React.FC = () => {
           console.log('Prompt generated:', prompt);
           console.log('Voice assignments:', voiceAssignments);
         }}
+        onDifficultyUsed={(diff) => setLastPromptDifficulty(diff)}
       />
 
       <Settings

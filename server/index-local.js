@@ -43,6 +43,7 @@ const audioEntrySchema = new mongoose.Schema({
   speaker_mapping: { type: Object, default: {} },
   speakers: [{ type: String }],
   is_transcript_only: { type: Boolean, default: false },
+  difficulty: { type: String, default: null },
   created_at: { type: Date, default: Date.now },
   updated_at: { type: Date, default: Date.now }
 });
@@ -121,7 +122,7 @@ app.get('/api/audio-entries/:id', async (req, res) => {
 // Create audio entry (stores audio as base64 in DB for local dev - no Cloudinary)
 app.post('/api/audio-entries', async (req, res) => {
   try {
-    const { title, transcript, audio_data, duration, engine, speaker_mapping, speakers, is_transcript_only } = req.body;
+    const { title, transcript, audio_data, duration, engine, speaker_mapping, speakers, is_transcript_only, difficulty } = req.body;
 
     // For local dev, store audio as data URL directly
     let audioUrl = null;
@@ -137,7 +138,8 @@ app.post('/api/audio-entries', async (req, res) => {
       engine,
       speaker_mapping,
       speakers,
-      is_transcript_only: is_transcript_only || false
+      is_transcript_only: is_transcript_only || false,
+      difficulty: difficulty || null
     });
 
     await entry.save();
@@ -151,7 +153,7 @@ app.post('/api/audio-entries', async (req, res) => {
 // Update audio entry
 app.put('/api/audio-entries/:id', async (req, res) => {
   try {
-    const { title, transcript, audio_data, duration, engine, speaker_mapping, speakers, is_transcript_only } = req.body;
+    const { title, transcript, audio_data, duration, engine, speaker_mapping, speakers, is_transcript_only, difficulty } = req.body;
 
     const existingEntry = await AudioEntry.findById(req.params.id);
     if (!existingEntry) {
@@ -170,6 +172,11 @@ app.put('/api/audio-entries/:id', async (req, res) => {
     // Only update is_transcript_only if provided
     if (is_transcript_only !== undefined) {
       updateData.is_transcript_only = is_transcript_only;
+    }
+
+    // Only update difficulty if provided
+    if (difficulty !== undefined) {
+      updateData.difficulty = difficulty;
     }
 
     // For local dev, store audio as data URL directly

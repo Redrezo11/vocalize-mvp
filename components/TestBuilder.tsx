@@ -145,9 +145,9 @@ RULES:
 // Calculate suggested lexis count based on word count
 const getSuggestedLexisCount = (transcript: string): number => {
   const wordCount = transcript.split(/\s+/).filter(w => w.length > 0).length;
-  // Roughly 1 vocab item per 15-20 words, min 5, max 15
+  // Roughly 1 vocab item per 15-20 words, min 5, max 20
   const suggested = Math.round(wordCount / 17);
-  return Math.min(Math.max(suggested, 5), 15);
+  return Math.min(Math.max(suggested, 5), 20);
 };
 
 // LLM Template for lexis generation
@@ -169,7 +169,7 @@ TRANSCRIPT:
 ${transcript}
 ---
 
-${customPrompt ? `ADDITIONAL INSTRUCTIONS:\n${customPrompt}\n\n` : ''}Generate ${lexisCount} vocabulary items that are important for understanding this listening passage.
+${customPrompt ? `ADDITIONAL INSTRUCTIONS:\n${customPrompt}\n\n` : ''}Analyze the transcript and determine the appropriate number of vocabulary items (between 5 and ${lexisCount}) that ${difficultyLevel} learners need to know. Use your judgment based on the transcript content, length, and difficulty — do not pad with unnecessary words.
 
 IMPORTANT: Return ONLY a valid JSON array. Do not include any other text, markdown, or explanation.
 
@@ -256,7 +256,9 @@ export const TestBuilder: React.FC<TestBuilderProps> = ({ audio, existingTest, d
   const [lexisPasteContent, setLexisPasteContent] = useState('');
   const [showLexisImportSection, setShowLexisImportSection] = useState(false);
   const [isGeneratingLexis, setIsGeneratingLexis] = useState(false);
-  const [lexisCount, setLexisCount] = useState<number>(8);
+  const [lexisCount, setLexisCount] = useState<number>(() =>
+    existingTest?.lexis?.length || getSuggestedLexisCount(audio.transcript)
+  );
 
   const isEditMode = !!existingTest;
 
@@ -458,6 +460,7 @@ JSON FORMAT (return exactly this structure):
 
       console.log('[TestBuilder] handleImportLexis - setting lexis:', newLexis);
       setLexis(newLexis);
+      setLexisCount(newLexis.length);
       setIsDirty(true);
       setShowLexisModal(false);
       setLexisPasteContent('');
@@ -505,6 +508,7 @@ JSON FORMAT (return exactly this structure):
         }));
         console.log('[TestBuilder] generateLexis - setting lexis:', newLexis);
         setLexis(newLexis);
+        setLexisCount(newLexis.length);
         setIsDirty(true);
         setShowLexisModal(false);
         setCopyFeedback(`Generated ${newLexis.length} vocabulary items!`);
@@ -1134,13 +1138,13 @@ JSON FORMAT (return exactly this structure):
               {/* Vocabulary Count */}
               <div>
                 <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">
-                  Number of Vocabulary Items
+                  Maximum Vocabulary Items
                 </label>
                 <div className="flex gap-2 items-center">
                   <input
                     type="range"
                     min="5"
-                    max="15"
+                    max="20"
                     value={lexisCount}
                     onChange={(e) => setLexisCount(Number(e.target.value))}
                     className="flex-1"
@@ -1148,7 +1152,7 @@ JSON FORMAT (return exactly this structure):
                   <span className="w-8 text-center font-medium text-slate-700">{lexisCount}</span>
                 </div>
                 <p className="text-xs text-slate-500 mt-1">
-                  Suggested: {getSuggestedLexisCount(audio.transcript)} items based on transcript length (~{audio.transcript.split(/\s+/).length} words)
+                  Up to {lexisCount} items — the LLM will recommend the best count for this transcript (~{audio.transcript.split(/\s+/).length} words)
                 </p>
               </div>
 

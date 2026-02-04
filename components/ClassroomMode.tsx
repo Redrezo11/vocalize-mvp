@@ -56,7 +56,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
   // Teacher controls - hide answers by default
   const [showAnswers, setShowAnswers] = useState(false);
 
-  const SPEED_OPTIONS = [0.5, 0.75, 1] as const;
+  const SPEED_OPTIONS = [0.5, 0.75, 0.85, 0.9, 1] as const;
 
   // Get audio for a test
   const getAudioForTest = (test: ListeningTest): SavedAudio | undefined => {
