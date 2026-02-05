@@ -188,10 +188,10 @@ export const LexisMatchGame: React.FC<LexisMatchGameProps> = ({
         <div className="max-w-2xl mx-auto">
           {/* Instructions */}
           {matchedCount === 0 && (
-            <div className={`mb-4 p-3 rounded-xl text-center text-sm ${
+            <div className={`mb-4 p-3 rounded-xl text-center text-lg ${
               isDark ? 'bg-indigo-900/30 text-indigo-300' : 'bg-indigo-50 text-indigo-700'
-            }`}>
-              Tap an English word, then tap its Arabic translation to match!
+            }`} dir="rtl" style={{ fontFamily: "'Noto Sans Arabic', 'Segoe UI', Tahoma, sans-serif" }}>
+              اضغط على الكلمة الإنجليزية، ثم اضغط على ترجمتها العربية للمطابقة!
             </div>
           )}
 

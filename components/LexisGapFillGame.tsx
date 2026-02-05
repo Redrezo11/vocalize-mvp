@@ -85,11 +85,12 @@ export const LexisGapFillGame: React.FC<LexisGapFillGameProps> = ({
   const [showHint, setShowHint] = useState(false);
   const [correctCount, setCorrectCount] = useState(0);
   const [answeredQuestions, setAnsweredQuestions] = useState<Set<string>>(new Set());
+  const [viewingLastFeedback, setViewingLastFeedback] = useState(false);
 
   const currentQuestion = questions[currentIndex];
   const totalQuestions = questions.length;
   const progressPercent = totalQuestions > 0 ? (answeredQuestions.size / totalQuestions) * 100 : 0;
-  const isComplete = answeredQuestions.size === totalQuestions && totalQuestions > 0;
+  const isComplete = answeredQuestions.size === totalQuestions && totalQuestions > 0 && !viewingLastFeedback;
   const allCorrect = correctCount === totalQuestions;
 
   // Auto-complete when all answered correctly
@@ -115,15 +116,34 @@ export const LexisGapFillGame: React.FC<LexisGapFillGameProps> = ({
 
     setAnsweredQuestions(prev => new Set([...prev, currentQuestion.id]));
 
-    // Auto-advance after feedback
-    setTimeout(() => {
-      if (currentIndex < totalQuestions - 1) {
-        setCurrentIndex(prev => prev + 1);
-        setSelectedAnswer(null);
-        setShowFeedback(false);
-        setShowHint(false);
-      }
-    }, 1500);
+    // Only auto-advance for correct answers
+    // For wrong answers, wait for user to click Continue
+    if (isCorrect) {
+      setTimeout(() => {
+        if (currentIndex < totalQuestions - 1) {
+          setCurrentIndex(prev => prev + 1);
+          setSelectedAnswer(null);
+          setShowFeedback(false);
+          setShowHint(false);
+        }
+      }, 1500);
+    } else if (currentIndex === totalQuestions - 1) {
+      // Last question answered wrong - let user view feedback before showing results
+      setViewingLastFeedback(true);
+    }
+  };
+
+  const handleContinue = () => {
+    if (currentIndex < totalQuestions - 1) {
+      setCurrentIndex(prev => prev + 1);
+      setSelectedAnswer(null);
+      setShowFeedback(false);
+      setShowHint(false);
+    } else if (viewingLastFeedback) {
+      // Last question - dismiss feedback and show results
+      setViewingLastFeedback(false);
+      setShowFeedback(false);
+    }
   };
 
   const handleRetry = () => {
@@ -133,6 +153,7 @@ export const LexisGapFillGame: React.FC<LexisGapFillGameProps> = ({
     setShowHint(false);
     setCorrectCount(0);
     setAnsweredQuestions(new Set());
+    setViewingLastFeedback(false);
   };
 
   // If no questions with examples, skip this game
@@ -279,13 +300,15 @@ export const LexisGapFillGame: React.FC<LexisGapFillGameProps> = ({
             {!showHint ? (
               <button
                 onClick={() => setShowHint(true)}
-                className={`w-full p-3 rounded-xl text-sm font-medium transition-all duration-200 border-2 border-dashed ${
+                className={`w-full p-3 rounded-xl text-base font-medium transition-all duration-200 border-2 border-dashed ${
                   isDark
                     ? 'border-slate-600 text-slate-400 hover:border-amber-500/50 hover:text-amber-400 hover:bg-amber-900/10'
                     : 'border-slate-300 text-slate-400 hover:border-amber-400 hover:text-amber-600 hover:bg-amber-50'
                 }`}
               >
-                💡 Hint / تلميح
+                <span dir="rtl" style={{ fontFamily: "'Noto Sans Arabic', 'Segoe UI', Tahoma, sans-serif" }}>
+                  💡 اضغط هنا للحصول على تلميح
+                </span>
               </button>
             ) : (
               <div className={`p-3 rounded-xl transition-all duration-200 ${isDark ? 'bg-amber-900/20 border border-amber-700/40' : 'bg-amber-50 border border-amber-200'}`}>
@@ -371,6 +394,19 @@ export const LexisGapFillGame: React.FC<LexisGapFillGameProps> = ({
                       </p>
                     )}
                   </div>
+                )}
+                {/* Continue button for wrong answers */}
+                {!isCorrect && (
+                  <button
+                    onClick={handleContinue}
+                    className={`w-full mt-4 py-3 rounded-xl font-medium transition-colors ${
+                      isDark
+                        ? 'bg-indigo-600 text-white hover:bg-indigo-500'
+                        : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                    }`}
+                  >
+                    {currentIndex < totalQuestions - 1 ? 'Continue →' : 'See Results'}
+                  </button>
                 )}
               </div>
             );

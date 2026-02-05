@@ -71,6 +71,7 @@ const App: React.FC = () => {
   const [selectedTest, setSelectedTest] = useState<ListeningTest | null>(null);
   const [editingTest, setEditingTest] = useState<ListeningTest | null>(null);
   const [testBuilderKey, setTestBuilderKey] = useState(0); // Key to force TestBuilder remount
+  const [previewKey, setPreviewKey] = useState(0); // Key to force StudentTest remount on preview
   const [studentTestId, setStudentTestId] = useState<string | null>(null);
   const [studentTest, setStudentTest] = useState<ListeningTest | null>(null);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
@@ -954,6 +955,7 @@ const App: React.FC = () => {
   const handlePreviewStudentView = (test: ListeningTest) => {
     setStudentTest(test);
     setIsPreviewMode(true);
+    setPreviewKey(prev => prev + 1); // Force remount to reset lexis games
     setCurrentView('student-test');
   };
 
@@ -1392,6 +1394,7 @@ const App: React.FC = () => {
     return (
       <Suspense fallback={<LoadingSpinner />}>
         <StudentTest
+          key={isPreviewMode ? `preview-${previewKey}` : studentTest.id}
           test={studentTest}
           theme={settingsHook.settings.classroomTheme}
           isPreview={isPreviewMode}

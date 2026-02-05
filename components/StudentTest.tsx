@@ -17,14 +17,17 @@ const getGamesCompletedKey = (testId: string) => `lexis-games-done-${testId}`;
 
 type LexisPhase = 'match' | 'gapfill' | 'done';
 
-const getInitialLexisPhase = (test: ListeningTest): LexisPhase => {
-  // Check sessionStorage first — if games were already completed, skip them
-  const storageKey = getGamesCompletedKey(test.id);
-  try {
-    if (sessionStorage.getItem(storageKey) === 'true') {
-      return 'done';
-    }
-  } catch { /* sessionStorage unavailable */ }
+const getInitialLexisPhase = (test: ListeningTest, isPreview: boolean): LexisPhase => {
+  // For preview mode, always start fresh - don't check sessionStorage
+  // For students (not preview), check sessionStorage to skip completed games
+  if (!isPreview) {
+    const storageKey = getGamesCompletedKey(test.id);
+    try {
+      if (sessionStorage.getItem(storageKey) === 'true') {
+        return 'done';
+      }
+    } catch { /* sessionStorage unavailable */ }
+  }
 
   const hasMatch = test.lexis && test.lexis.some(item => item.definitionArabic);
   if (hasMatch) return 'match';
@@ -42,16 +45,18 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [score, setScore] = useState<number | null>(null);
 
-  // Single state machine for lexis game phase, initialized from sessionStorage
-  const [lexisPhase, setLexisPhase] = useState<LexisPhase>(() => getInitialLexisPhase(test));
+  // Single state machine for lexis game phase, initialized from sessionStorage (unless preview)
+  const [lexisPhase, setLexisPhase] = useState<LexisPhase>(() => getInitialLexisPhase(test, isPreview));
 
   const hasLexisGapFillGame = test.lexis && test.lexis.some(item => item.example);
 
+  // In preview mode, don't persist to sessionStorage
   const markGamesDone = useCallback(() => {
+    if (isPreview) return; // Don't persist in preview mode
     try {
       sessionStorage.setItem(getGamesCompletedKey(test.id), 'true');
     } catch { /* sessionStorage unavailable */ }
-  }, [test.id]);
+  }, [test.id, isPreview]);
 
   const advanceFromMatch = useCallback(() => {
     if (hasLexisGapFillGame) {
