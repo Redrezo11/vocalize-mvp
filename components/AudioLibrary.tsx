@@ -17,6 +17,7 @@ interface AudioLibraryProps {
   onEditTest?: (test: ListeningTest) => void;
   onCreateNew: () => void;
   onCreateTranscript: () => void;
+  onOneShot: () => void;
   onImportComplete: (data: ImportData) => void;
   onViewDetail: (audio: SavedAudio) => void;
   onViewTest?: (test: ListeningTest) => void;
@@ -59,6 +60,7 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
   onEditTest,
   onCreateNew,
   onCreateTranscript,
+  onOneShot,
   onImportComplete,
   onViewDetail,
   onViewTest,
@@ -79,6 +81,9 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
         break;
       case 'import':
         setShowImportWizard(true);
+        break;
+      case 'oneshot':
+        onOneShot();
         break;
     }
   };

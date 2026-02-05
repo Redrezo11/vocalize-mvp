@@ -1283,6 +1283,7 @@ const App: React.FC = () => {
           onEditTest={handleEditTestFromLibrary}
           onCreateNew={handleCreateNew}
           onCreateTranscript={handleCreateTranscript}
+          onOneShot={() => setShowOneShotCreator(true)}
           onImportComplete={handleImportComplete}
           onViewDetail={handleViewDetail}
           onViewTest={handleViewTestFromLibrary}

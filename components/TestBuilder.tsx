@@ -589,28 +589,40 @@ JSON FORMAT (return exactly this structure):
     }
   };
 
-  // AI generate lexis + preview using Gemini (bundled)
+  // AI generate lexis + preview using OpenAI GPT-5-Nano
   const generateLexis = async () => {
     setIsGeneratingLexis(true);
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
       if (!apiKey || apiKey === 'PLACEHOLDER_API_KEY') {
-        alert('Gemini API key not configured. Please use the LLM Template option instead.');
+        alert('OpenAI API key not configured. Please use the LLM Template option instead.');
         setIsGeneratingLexis(false);
         return;
       }
 
-      const { GoogleGenAI } = await import('@google/genai');
-      const ai = new GoogleGenAI({ apiKey });
-
       const prompt = getLexisLLMTemplate(audio.transcript.slice(0, 3000), lexisCustomPrompt, lexisCount, difficultyLevel);
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.0-flash',
-        contents: prompt,
+      const response = await fetch('https://api.openai.com/v1/responses', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'gpt-5-nano',
+          input: prompt,
+          reasoning: { effort: 'low' },
+        }),
       });
 
-      const text = response.text || '';
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.error?.message || `OpenAI API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const messageOutput = data.output?.find((o: { type: string }) => o.type === 'message');
+      const text = messageOutput?.content?.[0]?.text || '';
       console.log('[TestBuilder] LLM raw response:', text.slice(0, 500) + '...');
 
       // Try to parse as bundled format { lexis: [], preview: [] }
@@ -813,27 +825,39 @@ JSON FORMAT (return exactly this structure):
     setIsDirty(true);
   };
 
-  // Auto-generate questions using AI (Gemini)
+  // Auto-generate questions using AI (OpenAI GPT-5-Nano)
   const generateQuestions = async () => {
     setIsGenerating(true);
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
       if (!apiKey || apiKey === 'PLACEHOLDER_API_KEY') {
         generateSimpleQuestions();
         return;
       }
 
-      const { GoogleGenAI } = await import('@google/genai');
-      const ai = new GoogleGenAI({ apiKey });
-
       const prompt = getLLMTemplate(testType, audio.transcript.slice(0, 2000), customPrompt, includeExplanations, explanationStyle, questionCount, explanationLanguage, difficultyLevel);
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.0-flash',
-        contents: prompt,
+      const response = await fetch('https://api.openai.com/v1/responses', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'gpt-5-nano',
+          input: prompt,
+          reasoning: { effort: 'low' },
+        }),
       });
 
-      const text = response.text || '';
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.error?.message || `OpenAI API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const messageOutput = data.output?.find((o: { type: string }) => o.type === 'message');
+      const text = messageOutput?.content?.[0]?.text || '';
       const jsonMatch = text.match(/\[[\s\S]*\]/);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]) as Partial<TestQuestion>[];
@@ -1180,9 +1204,11 @@ JSON FORMAT (return exactly this structure):
               onClick={generateQuestions}
               disabled={isGenerating}
               className="flex items-center gap-2 px-3 py-1.5 text-sm bg-gradient-to-r from-purple-500 to-indigo-500 text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
+              title="GPT-5-nano: ~1.8K tokens"
             >
               <SparklesIcon className="w-4 h-4" />
               {isGenerating ? 'Generating...' : 'AI Generate'}
+              <span className="text-[10px] opacity-75">&lt;$0.001</span>
             </button>
             <button
               onClick={addQuestion}
@@ -1454,9 +1480,11 @@ JSON FORMAT (return exactly this structure):
                       onClick={generateLexis}
                       disabled={isGeneratingLexis}
                       className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
+                      title="GPT-5-nano: ~2.7K tokens"
                     >
                       <SparklesIcon className="w-4 h-4" />
                       {isGeneratingLexis ? 'Generating...' : 'AI Generate'}
+                      <span className="text-[10px] opacity-75">&lt;$0.001</span>
                     </button>
                   </>
                 ) : (
