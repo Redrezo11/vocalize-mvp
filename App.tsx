@@ -718,6 +718,8 @@ const App: React.FC = () => {
   const handleSaveTest = async (testData: Omit<ListeningTest, 'id' | 'createdAt' | 'updatedAt'>) => {
     console.log('[App] handleSaveTest called with testData:', testData);
     console.log('[App] handleSaveTest - testData.lexis:', testData.lexis);
+    console.log('[App] handleSaveTest - testData.preview:', testData.preview);
+    console.log('[App] handleSaveTest - testData.difficulty:', testData.difficulty);
     try {
       let response;
       if (editingTest) {
@@ -741,6 +743,8 @@ const App: React.FC = () => {
       const responseData = await response.json();
       console.log('[App] Server response:', responseData);
       console.log('[App] Server response lexis:', responseData.lexis);
+      console.log('[App] Server response preview:', responseData.preview);
+      console.log('[App] Server response difficulty:', responseData.difficulty);
 
       if (!response.ok) {
         console.error('[App] Server error:', responseData);

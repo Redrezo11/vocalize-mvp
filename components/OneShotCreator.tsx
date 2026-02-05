@@ -115,6 +115,10 @@ interface OneShotPayload {
     example?: string;
     partOfSpeech?: string;
   }>;
+  preview?: Array<{
+    type: 'prediction' | 'wordAssociation' | 'trueFalse';
+    items: any[];
+  }>;
 }
 
 function validatePayload(jsonText: string): OneShotPayload {
@@ -142,9 +146,26 @@ function validatePayload(jsonText: string): OneShotPayload {
   if (!parsed.difficulty) parsed.difficulty = 'B1';
   if (!parsed.voiceAssignments) parsed.voiceAssignments = {};
   if (!parsed.lexis) parsed.lexis = [];
+  if (!parsed.preview) parsed.preview = [];
 
   return parsed as OneShotPayload;
 }
+
+// --- Preview activity selection by difficulty ---
+const getPreviewActivities = (difficulty: CEFRLevel): string => {
+  switch (difficulty) {
+    case 'A1':
+    case 'A2':
+      return 'prediction (simple personal questions) + wordAssociation (concrete nouns/verbs)';
+    case 'B1':
+    case 'B2':
+      return 'wordAssociation (include collocations/phrasal verbs) + trueFalse (about dialogue content)';
+    case 'C1':
+      return 'trueFalse (inference-based) + prediction (abstract opinion questions)';
+    default:
+      return 'prediction + wordAssociation';
+  }
+};
 
 // --- Build guidelines template ---
 function buildTemplate(difficulty: CEFRLevel, contentMode: ContentMode): string {
@@ -154,10 +175,12 @@ function buildTemplate(difficulty: CEFRLevel, contentMode: ContentMode): string 
     ? `\nCONTENT RESTRICTIONS (ELSD - KSU University standards):\n- Academic and professionally appropriate content only\n- No controversial political, religious, or social topics\n- Focus on educational, practical, and workplace scenarios\n`
     : '';
 
+  const previewActivities = getPreviewActivities(difficulty);
+
   return `# One-Shot EFL Listening Test Generator
 
 ## Your Task
-Create a COMPLETE listening test package: a dialogue transcript, voice assignments, comprehension questions, and vocabulary items.
+Create a COMPLETE listening test package: a dialogue transcript, voice assignments, comprehension questions, vocabulary items, and preview activities.
 
 ## Target Level: ${difficulty} - ${CEFR_DESCRIPTIONS[difficulty]}
 
@@ -201,6 +224,25 @@ Return a SINGLE JSON object. No markdown fences, no explanation — ONLY valid J
       "example": "Example sentence using the word",
       "partOfSpeech": "noun/verb/adjective/adverb/phrase"
     }
+  ],
+  "preview": [
+    {
+      "type": "prediction",
+      "items": [
+        {
+          "question": "Personal question connecting topic to student's life",
+          "questionArabic": "سؤال شخصي بالعربية",
+          "options": ["Short answer 1", "Short answer 2", "Short answer 3"]
+        }
+      ]
+    },
+    {
+      "type": "wordAssociation",
+      "items": [
+        { "word": "word from dialogue", "inDialogue": true },
+        { "word": "distractor word", "inDialogue": false }
+      ]
+    }
   ]
 }
 
@@ -225,6 +267,29 @@ Return a SINGLE JSON object. No markdown fences, no explanation — ONLY valid J
 - definitionArabic: Just the Arabic word/phrase (e.g., "travel" → "يسافر")
 - hintArabic: Arabic translation of the English definition
 - Include part of speech for each item
+
+## Preview Activities Guidelines (Pre-Listening Warm-up)
+Generate exactly 2 preview activities: ${previewActivities}
+
+### Prediction Questions (if included)
+- 2-3 personal/opinion questions connecting the topic to the student's life
+- Include Arabic translation for each question
+- 2-3 short answer options per question
+- No correct answer — these are purely for engagement and schema activation
+
+### Word Association (if included)
+- 8-10 words total
+- 4-5 words that actually appear in the transcript (inDialogue: true)
+- 4-5 plausible distractor words NOT in the transcript (inDialogue: false)
+- Can include 2-3 terms from the lexis for reinforcement
+
+### True/False Predictions (if included)
+- 3-4 statements about the dialogue content
+- Mix of true and false statements
+- Include correctAnswer boolean for each
+- Include Arabic translation for each statement
+
+IMPORTANT: Preview content must NOT duplicate or rephrase the comprehension questions.
 
 ## Voice Selection
 - Pick 2 voices that create good contrast (e.g., one male + one female)
@@ -415,6 +480,7 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
         audioId: audioEntry.id,
         title: payload.title,
         type: 'listening-comprehension',
+        difficulty: payload.difficulty,
         questions: payload.questions.map(q => ({
           ...q,
           id: generateId(),
@@ -423,6 +489,15 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
           ? payload.lexis.map(l => ({
               ...l,
               id: generateId(),
+            }))
+          : undefined,
+        preview: payload.preview && payload.preview.length > 0
+          ? payload.preview.map(activity => ({
+              type: activity.type,
+              items: activity.items.map((item: any) => ({
+                ...item,
+                id: generateId(),
+              })),
             }))
           : undefined,
       };

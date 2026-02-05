@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { SavedAudio, TestType, TestQuestion, ListeningTest, LexisItem } from '../types';
+import { SavedAudio, TestType, TestQuestion, ListeningTest, LexisItem, PreviewActivity, PredictionItem, WordAssociationItem, TrueFalseItem } from '../types';
 import { ArrowLeftIcon, PlusIcon, TrashIcon, SparklesIcon, CopyIcon, DownloadIcon, BookOpenIcon } from './Icons';
 import { parseDialogue } from '../utils/parser';
 import { CEFRLevel } from './Settings';
@@ -150,7 +150,23 @@ const getSuggestedLexisCount = (transcript: string): number => {
   return Math.min(Math.max(suggested, 5), 20);
 };
 
-// LLM Template for lexis generation
+// Get preview activities based on CEFR level (same as OneShotCreator)
+const getPreviewActivitiesForLevel = (difficulty: CEFRLevel): string => {
+  switch (difficulty) {
+    case 'A1':
+    case 'A2':
+      return 'prediction (simple personal questions) + wordAssociation (concrete nouns/verbs)';
+    case 'B1':
+    case 'B2':
+      return 'wordAssociation (include collocations/phrasal verbs) + trueFalse (about dialogue content)';
+    case 'C1':
+      return 'trueFalse (inference-based) + prediction (abstract opinion questions)';
+    default:
+      return 'prediction + wordAssociation';
+  }
+};
+
+// LLM Template for lexis + preview generation (bundled)
 const getLexisLLMTemplate = (
   transcript: string,
   customPrompt: string,
@@ -158,8 +174,9 @@ const getLexisLLMTemplate = (
   difficultyLevel: CEFRLevel
 ): string => {
   const levelDescription = getCEFRDescription(difficultyLevel);
+  const previewActivities = getPreviewActivitiesForLevel(difficultyLevel);
 
-  return `Extract key vocabulary (lexis) from the following listening transcript for EFL learners.
+  return `Extract key vocabulary (lexis) AND generate preview activities from the following listening transcript for EFL learners.
 
 TARGET LEARNER LEVEL: ${difficultyLevel.toUpperCase()}
 ${levelDescription}
@@ -169,25 +186,48 @@ TRANSCRIPT:
 ${transcript}
 ---
 
-${customPrompt ? `ADDITIONAL INSTRUCTIONS:\n${customPrompt}\n\n` : ''}Analyze the transcript and determine the appropriate number of vocabulary items (between 5 and ${lexisCount}) that ${difficultyLevel} learners need to know. Use your judgment based on the transcript content, length, and difficulty — do not pad with unnecessary words.
+${customPrompt ? `ADDITIONAL INSTRUCTIONS:\n${customPrompt}\n\n` : ''}Analyze the transcript and generate TWO things:
+1. Vocabulary items (between 5 and ${lexisCount}) that ${difficultyLevel} learners need to know
+2. Preview activities for pre-listening warm-up
 
-IMPORTANT: Return ONLY a valid JSON array. Do not include any other text, markdown, or explanation.
+IMPORTANT: Return ONLY a valid JSON object. Do not include any other text, markdown, or explanation.
 
 JSON FORMAT (return exactly this structure):
-[
-  {
-    "term": "vocabulary word or phrase",
-    "definition": "Clear English definition appropriate for ${difficultyLevel} level",
-    "definitionArabic": "كلمة عربية",
-    "hintArabic": "شرح بالعربية",
-    "explanation": "Brief English explanation of why this word matters or how it is used",
-    "explanationArabic": "شرح مختصر بالعربية",
-    "example": "Example sentence using the term (preferably from or related to the transcript)",
-    "partOfSpeech": "noun/verb/adjective/adverb/phrase/idiom"
-  }
-]
+{
+  "lexis": [
+    {
+      "term": "vocabulary word or phrase",
+      "definition": "Clear English definition appropriate for ${difficultyLevel} level",
+      "definitionArabic": "كلمة عربية",
+      "hintArabic": "شرح بالعربية",
+      "explanation": "Brief English explanation of why this word matters or how it is used",
+      "explanationArabic": "شرح مختصر بالعربية",
+      "example": "Example sentence using the term (preferably from or related to the transcript)",
+      "partOfSpeech": "noun/verb/adjective/adverb/phrase/idiom"
+    }
+  ],
+  "preview": [
+    {
+      "type": "prediction",
+      "items": [
+        {
+          "question": "Personal question connecting topic to student's life",
+          "questionArabic": "سؤال شخصي بالعربية",
+          "options": ["Short answer 1", "Short answer 2", "Short answer 3"]
+        }
+      ]
+    },
+    {
+      "type": "wordAssociation",
+      "items": [
+        { "word": "word from dialogue", "inDialogue": true },
+        { "word": "distractor word", "inDialogue": false }
+      ]
+    }
+  ]
+}
 
-RULES:
+## LEXIS RULES:
 - term: The vocabulary word or phrase from the transcript
 - definition: Clear, simple English definition appropriate for ${difficultyLevel} learners
 - definitionArabic: Simple Arabic translation word(s) only - NOT a definition or explanation. Just the direct Arabic equivalent for easy memorization (e.g., "travel" → "يسافر", "library" → "مكتبة")
@@ -201,7 +241,30 @@ Focus on:
 - Words that are essential for understanding the main ideas
 - Vocabulary that ${difficultyLevel} learners might not know
 - Useful phrases and expressions from the dialogue
-- Academic or topic-specific vocabulary`;
+- Academic or topic-specific vocabulary
+
+## PREVIEW ACTIVITIES RULES:
+Generate exactly 2 preview activities: ${previewActivities}
+
+### Prediction Questions (if included)
+- 2-3 personal/opinion questions connecting the topic to the student's life
+- Include Arabic translation for each question
+- 2-3 short answer options per question
+- No correct answer — these are purely for engagement and schema activation
+
+### Word Association (if included)
+- 8-10 words total
+- 4-5 words that actually appear in the transcript (inDialogue: true)
+- 4-5 plausible distractor words NOT in the transcript (inDialogue: false)
+- Can include 2-3 terms from the lexis for reinforcement
+
+### True/False Predictions (if included)
+- 3-4 statements about the dialogue content
+- Mix of true and false statements
+- Include correctAnswer boolean for each
+- Include Arabic translation for each statement
+
+IMPORTANT: Preview content must NOT duplicate or rephrase the comprehension questions.`;
 };
 
 // Get a readable label for test type
@@ -265,6 +328,13 @@ export const TestBuilder: React.FC<TestBuilderProps> = ({ audio, existingTest, d
   const [lexisCount, setLexisCount] = useState<number>(() =>
     existingTest?.lexis?.length || getSuggestedLexisCount(audio.transcript)
   );
+
+  // Preview activities state (bundled with lexis generation)
+  const [preview, setPreview] = useState<PreviewActivity[]>(() => {
+    console.log('[TestBuilder] Initializing preview state');
+    console.log('[TestBuilder] existingTest?.preview:', existingTest?.preview);
+    return existingTest?.preview || [];
+  });
 
   const isEditMode = !!existingTest;
 
@@ -439,23 +509,46 @@ JSON FORMAT (return exactly this structure):
     setShowLexisImportSection(true);
   };
 
-  // Import lexis from LLM response
+  // Import lexis + preview from LLM response (bundled format)
   const handleImportLexis = () => {
     try {
-      const jsonMatch = lexisPasteContent.match(/\[[\s\S]*\]/);
-      if (!jsonMatch) {
-        alert('Could not find a valid JSON array in the pasted content.');
+      // Try to parse as the new bundled format { lexis: [], preview: [] }
+      let parsedLexis: Partial<LexisItem>[] = [];
+      let parsedPreview: any[] = [];
+
+      // First try to find an object with lexis/preview keys
+      const objectMatch = lexisPasteContent.match(/\{[\s\S]*\}/);
+      if (objectMatch) {
+        try {
+          const parsed = JSON.parse(objectMatch[0]);
+          if (parsed.lexis && Array.isArray(parsed.lexis)) {
+            parsedLexis = parsed.lexis;
+            parsedPreview = parsed.preview || [];
+          } else {
+            // Might be a legacy array format, check for array
+            throw new Error('No lexis key found, try array format');
+          }
+        } catch {
+          // Fall back to array format for backwards compatibility
+          const arrayMatch = lexisPasteContent.match(/\[[\s\S]*\]/);
+          if (arrayMatch) {
+            parsedLexis = JSON.parse(arrayMatch[0]);
+          }
+        }
+      } else {
+        // Try array format (legacy)
+        const arrayMatch = lexisPasteContent.match(/\[[\s\S]*\]/);
+        if (arrayMatch) {
+          parsedLexis = JSON.parse(arrayMatch[0]);
+        }
+      }
+
+      if (!parsedLexis || parsedLexis.length === 0) {
+        alert('Could not find valid lexis data in the pasted content.');
         return;
       }
 
-      const parsed = JSON.parse(jsonMatch[0]) as Partial<LexisItem>[];
-
-      if (!Array.isArray(parsed) || parsed.length === 0) {
-        alert('The JSON array is empty or invalid.');
-        return;
-      }
-
-      const newLexis: LexisItem[] = parsed.map(item => ({
+      const newLexis: LexisItem[] = parsedLexis.map(item => ({
         id: generateId(),
         term: item.term || '',
         definition: item.definition || '',
@@ -467,14 +560,28 @@ JSON FORMAT (return exactly this structure):
         partOfSpeech: item.partOfSpeech,
       }));
 
+      // Process preview activities if present
+      const newPreview: PreviewActivity[] = (parsedPreview || []).map((activity: any) => ({
+        type: activity.type,
+        items: (activity.items || []).map((item: any) => ({
+          ...item,
+          id: generateId(),
+        })),
+      }));
+
       console.log('[TestBuilder] handleImportLexis - setting lexis:', newLexis);
+      console.log('[TestBuilder] handleImportLexis - setting preview:', newPreview);
       setLexis(newLexis);
       setLexisCount(newLexis.length);
+      if (newPreview.length > 0) {
+        setPreview(newPreview);
+      }
       setIsDirty(true);
       setShowLexisModal(false);
       setLexisPasteContent('');
       setShowLexisImportSection(false);
-      setCopyFeedback(`Imported ${newLexis.length} vocabulary items!`);
+      const previewMsg = newPreview.length > 0 ? ` + ${newPreview.length} preview activities` : '';
+      setCopyFeedback(`Imported ${newLexis.length} vocabulary items${previewMsg}!`);
       setTimeout(() => setCopyFeedback(null), 2000);
     } catch (error) {
       console.error('Failed to parse lexis JSON:', error);
@@ -482,7 +589,7 @@ JSON FORMAT (return exactly this structure):
     }
   };
 
-  // AI generate lexis using Gemini
+  // AI generate lexis + preview using Gemini (bundled)
   const generateLexis = async () => {
     setIsGeneratingLexis(true);
     try {
@@ -504,10 +611,42 @@ JSON FORMAT (return exactly this structure):
       });
 
       const text = response.text || '';
-      const jsonMatch = text.match(/\[[\s\S]*\]/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]) as Partial<LexisItem>[];
-        const newLexis: LexisItem[] = parsed.map(item => ({
+      console.log('[TestBuilder] LLM raw response:', text.slice(0, 500) + '...');
+
+      // Try to parse as bundled format { lexis: [], preview: [] }
+      let parsedLexis: Partial<LexisItem>[] = [];
+      let parsedPreview: any[] = [];
+
+      const objectMatch = text.match(/\{[\s\S]*\}/);
+      console.log('[TestBuilder] Object match found:', !!objectMatch);
+      if (objectMatch) {
+        try {
+          const parsed = JSON.parse(objectMatch[0]);
+          console.log('[TestBuilder] Parsed JSON keys:', Object.keys(parsed));
+          console.log('[TestBuilder] parsed.lexis length:', parsed.lexis?.length);
+          console.log('[TestBuilder] parsed.preview:', parsed.preview);
+          if (parsed.lexis && Array.isArray(parsed.lexis)) {
+            parsedLexis = parsed.lexis;
+            parsedPreview = parsed.preview || [];
+          }
+        } catch (parseError) {
+          console.error('[TestBuilder] JSON parse error:', parseError);
+          // Fall back to array format
+          const arrayMatch = text.match(/\[[\s\S]*\]/);
+          if (arrayMatch) {
+            parsedLexis = JSON.parse(arrayMatch[0]);
+          }
+        }
+      } else {
+        // Try array format (legacy)
+        const arrayMatch = text.match(/\[[\s\S]*\]/);
+        if (arrayMatch) {
+          parsedLexis = JSON.parse(arrayMatch[0]);
+        }
+      }
+
+      if (parsedLexis.length > 0) {
+        const newLexis: LexisItem[] = parsedLexis.map(item => ({
           id: generateId(),
           term: item.term || '',
           definition: item.definition || '',
@@ -518,12 +657,27 @@ JSON FORMAT (return exactly this structure):
           example: item.example,
           partOfSpeech: item.partOfSpeech,
         }));
+
+        // Process preview activities if present
+        const newPreview: PreviewActivity[] = (parsedPreview || []).map((activity: any) => ({
+          type: activity.type,
+          items: (activity.items || []).map((item: any) => ({
+            ...item,
+            id: generateId(),
+          })),
+        }));
+
         console.log('[TestBuilder] generateLexis - setting lexis:', newLexis);
+        console.log('[TestBuilder] generateLexis - setting preview:', newPreview);
         setLexis(newLexis);
         setLexisCount(newLexis.length);
+        if (newPreview.length > 0) {
+          setPreview(newPreview);
+        }
         setIsDirty(true);
         setShowLexisModal(false);
-        setCopyFeedback(`Generated ${newLexis.length} vocabulary items!`);
+        const previewMsg = newPreview.length > 0 ? ` + ${newPreview.length} preview activities` : '';
+        setCopyFeedback(`Generated ${newLexis.length} vocabulary items${previewMsg}!`);
         setTimeout(() => setCopyFeedback(null), 2000);
       } else {
         alert('Could not parse AI response. Please try using the LLM Template option.');
@@ -754,6 +908,8 @@ JSON FORMAT (return exactly this structure):
     console.log('[TestBuilder] handleSave called');
     console.log('[TestBuilder] lexis state:', lexis);
     console.log('[TestBuilder] lexis.length:', lexis.length);
+    console.log('[TestBuilder] preview state:', preview);
+    console.log('[TestBuilder] preview.length:', preview.length);
 
     if (questions.length === 0) {
       alert('Please add at least one question');
@@ -766,9 +922,12 @@ JSON FORMAT (return exactly this structure):
       type: testType,
       questions,
       lexis: lexis.length > 0 ? lexis : undefined,
+      preview: preview.length > 0 ? preview : undefined,
+      difficulty: difficultyLevel,
     };
 
     console.log('[TestBuilder] Saving test with lexis:', test.lexis);
+    console.log('[TestBuilder] Saving test with preview:', test.preview);
     onSave(test);
   };
 
@@ -806,7 +965,7 @@ JSON FORMAT (return exactly this structure):
             <polyline points="17 21 17 13 7 13 7 21" />
             <polyline points="7 3 7 8 15 8" />
           </svg>
-          {isEditMode ? 'Update' : 'Save'} {questions.length > 0 && `(${questions.length})`} {lexis.length > 0 && `[${lexis.length}]`}
+          {isEditMode ? 'Update' : 'Save'} {questions.length > 0 && `(${questions.length})`} {lexis.length > 0 && `[${lexis.length}]`} {preview.length > 0 && `+${preview.length}P`}
         </button>
       )}
 

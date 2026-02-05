@@ -96,6 +96,12 @@ const lexisItemSchema = new mongoose.Schema({
   partOfSpeech: { type: String }
 });
 
+// Preview Activity Schema (pre-listening warm-up)
+const previewActivitySchema = new mongoose.Schema({
+  type: { type: String, enum: ['prediction', 'wordAssociation', 'trueFalse'], required: true },
+  items: { type: mongoose.Schema.Types.Mixed, required: true }  // Array of activity-specific items
+});
+
 // Listening Test Schema
 const listeningTestSchema = new mongoose.Schema({
   audioId: { type: mongoose.Schema.Types.ObjectId, ref: 'AudioEntry', required: false, default: null },  // null for transcript-only tests
@@ -104,6 +110,8 @@ const listeningTestSchema = new mongoose.Schema({
   questions: [testQuestionSchema],
   lexis: [lexisItemSchema],  // Vocabulary items for the test
   lexisAudio: { type: mongoose.Schema.Types.Mixed, default: null },  // Generated vocabulary audio
+  preview: [previewActivitySchema],  // Pre-listening preview activities
+  difficulty: { type: String, enum: ['A1', 'A2', 'B1', 'B2', 'C1'] },  // CEFR level
   created_at: { type: Date, default: Date.now },
   updated_at: { type: Date, default: Date.now }
 });
@@ -341,7 +349,9 @@ app.get('/api/tests/:id', async (req, res) => {
 // Create test
 app.post('/api/tests', async (req, res) => {
   try {
-    const { audioId, title, type, questions, lexis } = req.body;
+    const { audioId, title, type, questions, lexis, preview, difficulty } = req.body;
+
+    console.log('[POST /api/tests] Creating test with preview:', preview ? preview.length + ' activities' : 'none');
 
     // Skip audio verification for transcript-only tests (audioId starts with "transcript-")
     const isTranscriptOnly = audioId && audioId.startsWith('transcript-');
@@ -359,10 +369,13 @@ app.post('/api/tests', async (req, res) => {
       title,
       type,
       questions,
-      lexis: lexis || []
+      lexis: lexis || [],
+      preview: preview || [],
+      difficulty: difficulty || null
     });
 
     await test.save();
+    console.log('[POST /api/tests] Saved test has preview:', test.preview ? test.preview.length + ' activities' : 'none');
     res.status(201).json(test);
   } catch (error) {
     console.error('Create test error:', error);
@@ -373,8 +386,9 @@ app.post('/api/tests', async (req, res) => {
 // Update test
 app.put('/api/tests/:id', async (req, res) => {
   try {
-    const { title, type, questions, lexis, lexisAudio } = req.body;
+    const { title, type, questions, lexis, lexisAudio, preview, difficulty } = req.body;
 
+    console.log('[SERVER PUT /api/tests/:id] Received preview:', preview ? preview.length + ' activities' : 'undefined');
     console.log('[SERVER PUT /api/tests/:id] Received lexisAudio:', lexisAudio ? { engine: lexisAudio.engine, urlLength: lexisAudio.url?.length } : 'undefined');
 
     const updateData = {
@@ -395,6 +409,17 @@ app.put('/api/tests/:id', async (req, res) => {
       console.log('[SERVER PUT /api/tests/:id] Adding lexisAudio to updateData');
     }
 
+    // Only update preview if provided
+    if (preview !== undefined) {
+      updateData.preview = preview;
+      console.log('[SERVER PUT /api/tests/:id] Adding preview to updateData');
+    }
+
+    // Only update difficulty if provided
+    if (difficulty !== undefined) {
+      updateData.difficulty = difficulty;
+    }
+
     const test = await ListeningTest.findByIdAndUpdate(
       req.params.id,
       updateData,
@@ -405,6 +430,7 @@ app.put('/api/tests/:id', async (req, res) => {
       return res.status(404).json({ error: 'Test not found' });
     }
 
+    console.log('[SERVER PUT /api/tests/:id] Saved test has preview:', test.preview ? test.preview.length + ' activities' : 'none');
     console.log('[SERVER PUT /api/tests/:id] Saved test has lexisAudio:', test.lexisAudio ? { engine: test.lexisAudio.engine, urlLength: test.lexisAudio.url?.length } : 'undefined');
     res.json(test);
   } catch (error) {

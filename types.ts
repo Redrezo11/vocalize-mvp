@@ -155,6 +155,34 @@ export interface LexisAudio {
   wordAudios?: { [wordId: string]: WordAudio };  // Per-word audio files
 }
 
+// Preview Activity Types (pre-listening warm-up)
+export type PreviewActivityType = 'prediction' | 'wordAssociation' | 'trueFalse';
+
+export interface PredictionItem {
+  id: string;
+  question: string;                // Personal/opinion question
+  questionArabic?: string;         // Arabic translation
+  options: string[];               // 2-3 short answer options (no correct answer)
+}
+
+export interface WordAssociationItem {
+  id: string;
+  word: string;                    // Word to display
+  inDialogue: boolean;             // true if word appears in transcript
+}
+
+export interface TrueFalseItem {
+  id: string;
+  statement: string;               // Statement about dialogue content
+  statementArabic?: string;        // Arabic translation
+  correctAnswer: boolean;          // true or false
+}
+
+export interface PreviewActivity {
+  type: PreviewActivityType;
+  items: PredictionItem[] | WordAssociationItem[] | TrueFalseItem[];
+}
+
 export interface ListeningTest {
   id: string;
   audioId: string;
@@ -163,6 +191,8 @@ export interface ListeningTest {
   questions: TestQuestion[];
   lexis?: LexisItem[];             // Optional vocabulary items
   lexisAudio?: LexisAudio;         // Generated vocabulary audio
+  preview?: PreviewActivity[];     // Pre-listening preview activities
+  difficulty?: string;             // CEFR level (A1, A2, B1, B2, C1)
   createdAt: string;
   updatedAt: string;
 }

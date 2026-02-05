@@ -4,6 +4,7 @@ import { CheckCircleIcon } from './Icons';
 import { ClassroomTheme } from './Settings';
 import { LexisMatchGame } from './LexisMatchGame';
 import { LexisGapFillGame } from './LexisGapFillGame';
+import { PreviewPhase } from './PreviewPhase';
 
 interface StudentTestProps {
   test: ListeningTest;
@@ -12,30 +13,35 @@ interface StudentTestProps {
   onExitPreview?: () => void;
 }
 
-// SessionStorage key for tracking completed lexis games per test
-const getGamesCompletedKey = (testId: string) => `lexis-games-done-${testId}`;
+// SessionStorage key for tracking completed pre-test activities per test
+const getActivitiesCompletedKey = (testId: string) => `test-activities-done-${testId}`;
 
-type LexisPhase = 'match' | 'gapfill' | 'done';
+// Test phase: match → gapfill → preview → questions
+type TestPhase = 'match' | 'gapfill' | 'preview' | 'questions';
 
-const getInitialLexisPhase = (test: ListeningTest, isPreview: boolean): LexisPhase => {
+const getInitialTestPhase = (test: ListeningTest, isPreview: boolean): TestPhase => {
   // For preview mode, always start fresh - don't check sessionStorage
-  // For students (not preview), check sessionStorage to skip completed games
+  // For students (not preview), check sessionStorage to skip completed activities
   if (!isPreview) {
-    const storageKey = getGamesCompletedKey(test.id);
+    const storageKey = getActivitiesCompletedKey(test.id);
     try {
       if (sessionStorage.getItem(storageKey) === 'true') {
-        return 'done';
+        return 'questions';
       }
     } catch { /* sessionStorage unavailable */ }
   }
 
+  // Check what activities are available
   const hasMatch = test.lexis && test.lexis.some(item => item.definitionArabic);
   if (hasMatch) return 'match';
 
   const hasGapFill = test.lexis && test.lexis.some(item => item.example);
   if (hasGapFill) return 'gapfill';
 
-  return 'done';
+  const hasPreview = test.preview && test.preview.length > 0;
+  if (hasPreview) return 'preview';
+
+  return 'questions';
 };
 
 export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light', isPreview = false, onExitPreview }) => {
@@ -45,32 +51,45 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [score, setScore] = useState<number | null>(null);
 
-  // Single state machine for lexis game phase, initialized from sessionStorage (unless preview)
-  const [lexisPhase, setLexisPhase] = useState<LexisPhase>(() => getInitialLexisPhase(test, isPreview));
+  // Single state machine for test phase: match → gapfill → preview → questions
+  const [testPhase, setTestPhase] = useState<TestPhase>(() => getInitialTestPhase(test, isPreview));
 
+  // Check what activities are available
   const hasLexisGapFillGame = test.lexis && test.lexis.some(item => item.example);
+  const hasPreviewActivities = test.preview && test.preview.length > 0;
 
   // In preview mode, don't persist to sessionStorage
-  const markGamesDone = useCallback(() => {
+  const markActivitiesDone = useCallback(() => {
     if (isPreview) return; // Don't persist in preview mode
     try {
-      sessionStorage.setItem(getGamesCompletedKey(test.id), 'true');
+      sessionStorage.setItem(getActivitiesCompletedKey(test.id), 'true');
     } catch { /* sessionStorage unavailable */ }
   }, [test.id, isPreview]);
 
   const advanceFromMatch = useCallback(() => {
     if (hasLexisGapFillGame) {
-      setLexisPhase('gapfill');
+      setTestPhase('gapfill');
+    } else if (hasPreviewActivities) {
+      setTestPhase('preview');
     } else {
-      setLexisPhase('done');
-      markGamesDone();
+      setTestPhase('questions');
+      markActivitiesDone();
     }
-  }, [hasLexisGapFillGame, markGamesDone]);
+  }, [hasLexisGapFillGame, hasPreviewActivities, markActivitiesDone]);
 
   const advanceFromGapFill = useCallback(() => {
-    setLexisPhase('done');
-    markGamesDone();
-  }, [markGamesDone]);
+    if (hasPreviewActivities) {
+      setTestPhase('preview');
+    } else {
+      setTestPhase('questions');
+      markActivitiesDone();
+    }
+  }, [hasPreviewActivities, markActivitiesDone]);
+
+  const advanceFromPreview = useCallback(() => {
+    setTestPhase('questions');
+    markActivitiesDone();
+  }, [markActivitiesDone]);
 
   const updateAnswer = (questionId: string, answer: string) => {
     if (isSubmitted) return;
@@ -120,8 +139,8 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
   const totalQuestions = test.questions.length;
   const progressPercent = (answeredCount / totalQuestions) * 100;
 
-  // Show Lexis Match Game first (English ↔ Arabic)
-  if (lexisPhase === 'match' && test.lexis) {
+  // Phase 1: Show Lexis Match Game first (English ↔ Arabic)
+  if (testPhase === 'match' && test.lexis) {
     return (
       <LexisMatchGame
         lexis={test.lexis}
@@ -132,8 +151,8 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
     );
   }
 
-  // Show Gap-Fill Game second (fill in the blank with vocab)
-  if (lexisPhase === 'gapfill' && test.lexis) {
+  // Phase 2: Show Gap-Fill Game second (fill in the blank with vocab)
+  if (testPhase === 'gapfill' && test.lexis) {
     return (
       <LexisGapFillGame
         lexis={test.lexis}
@@ -143,6 +162,20 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
       />
     );
   }
+
+  // Phase 3: Show Preview Activities (prediction, word association, true/false)
+  if (testPhase === 'preview' && test.preview && test.preview.length > 0) {
+    return (
+      <PreviewPhase
+        activities={test.preview}
+        theme={theme}
+        onComplete={advanceFromPreview}
+        onSkip={advanceFromPreview}
+      />
+    );
+  }
+
+  // Phase 4: Questions (main test)
 
   return (
     <div className={`min-h-screen flex flex-col ${isDark ? 'bg-slate-900' : 'bg-slate-50'}`}>
