@@ -4,17 +4,24 @@ import { XIcon } from './Icons';
 export type CEFRLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1';
 export type ContentMode = 'standard' | 'halal' | 'elsd';
 export type ClassroomTheme = 'light' | 'dark';
+export type ContentModel = 'gpt-5-mini' | 'gpt-5.2';
 
 export interface AppSettings {
   difficultyLevel: CEFRLevel;
   contentMode: ContentMode;
   classroomTheme: ClassroomTheme;
+  // JAM generation defaults
+  targetDuration: number; // 5-30 minutes
+  contentModel: ContentModel;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
   difficultyLevel: 'B1',
   contentMode: 'standard',
   classroomTheme: 'light',
+  // JAM generation defaults
+  targetDuration: 10, // 10 minutes default
+  contentModel: 'gpt-5-mini',
 };
 
 const CEFR_LEVELS: { value: CEFRLevel; label: string; shortLabel: string; description: string }[] = [
@@ -249,6 +256,73 @@ export const Settings: React.FC<SettingsProps> = ({
                   </div>
                 </div>
               </div>
+
+              {/* JAM Generation Defaults - Desktop only */}
+              <div className="hidden lg:block lg:mt-6">
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  JAM Generation Defaults
+                </label>
+                <p className="text-xs text-slate-500 mb-4">
+                  Default settings for quick test generation
+                </p>
+                <div className="space-y-4 bg-slate-50 rounded-xl p-4 border border-slate-200">
+                  {/* AI Model */}
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-2">AI Model</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => setLocalSettings({ ...localSettings, contentModel: 'gpt-5-mini' })}
+                        className={`p-2 rounded-lg text-left border-2 transition-all ${
+                          localSettings.contentModel === 'gpt-5-mini'
+                            ? 'border-indigo-500 bg-indigo-50'
+                            : 'border-slate-200 hover:border-slate-300 bg-white'
+                        }`}
+                      >
+                        <div className="flex justify-between items-center">
+                          <span className="font-medium text-slate-800 text-xs">GPT-5 Mini</span>
+                          <span className="text-xs font-bold text-indigo-600">&lt;$0.001</span>
+                        </div>
+                      </button>
+                      <button
+                        onClick={() => setLocalSettings({ ...localSettings, contentModel: 'gpt-5.2' })}
+                        className={`p-2 rounded-lg text-left border-2 transition-all ${
+                          localSettings.contentModel === 'gpt-5.2'
+                            ? 'border-indigo-500 bg-indigo-50'
+                            : 'border-slate-200 hover:border-slate-300 bg-white'
+                        }`}
+                      >
+                        <div className="flex justify-between items-center">
+                          <span className="font-medium text-slate-800 text-xs">GPT-5.2</span>
+                          <span className="text-xs font-bold text-indigo-600">&lt;$0.01</span>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+                  {/* Test Duration */}
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">
+                      Test Duration: {localSettings.targetDuration} min
+                    </label>
+                    <input
+                      type="range"
+                      min="5"
+                      max="30"
+                      step="5"
+                      value={localSettings.targetDuration}
+                      onChange={(e) => setLocalSettings({ ...localSettings, targetDuration: parseInt(e.target.value) })}
+                      className="w-full accent-indigo-500"
+                    />
+                    <div className="flex justify-between text-[10px] text-slate-400 mt-1">
+                      <span>5 min</span>
+                      <span>15 min</span>
+                      <span>30 min</span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-2">
+                      AI determines question and vocabulary counts based on duration and CEFR level
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Right Column: Content Guidelines */}
@@ -363,6 +437,76 @@ export const Settings: React.FC<SettingsProps> = ({
                   </div>
                   <span className="text-sm font-medium text-slate-900">Dark</span>
                   <span className="text-xs text-slate-500">Easy on the eyes</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Divider */}
+            <div className="border-t border-slate-200 my-5"></div>
+
+            {/* JAM Generation Defaults - Mobile */}
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-3">
+                JAM Generation Defaults
+              </label>
+              <p className="text-xs text-slate-500 mb-4">
+                Default settings for quick test generation
+              </p>
+              <div className="space-y-4 bg-slate-50 rounded-xl p-4 border border-slate-200">
+                {/* AI Model */}
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-2">AI Model</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => setLocalSettings({ ...localSettings, contentModel: 'gpt-5-mini' })}
+                      className={`p-2 rounded-lg text-left border-2 transition-all ${
+                        localSettings.contentModel === 'gpt-5-mini'
+                          ? 'border-indigo-500 bg-indigo-50'
+                          : 'border-slate-200 hover:border-slate-300 bg-white'
+                      }`}
+                    >
+                      <div className="flex justify-between items-center">
+                        <span className="font-medium text-slate-800 text-xs">GPT-5 Mini</span>
+                        <span className="text-xs font-bold text-indigo-600">&lt;$0.001</span>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => setLocalSettings({ ...localSettings, contentModel: 'gpt-5.2' })}
+                      className={`p-2 rounded-lg text-left border-2 transition-all ${
+                        localSettings.contentModel === 'gpt-5.2'
+                          ? 'border-indigo-500 bg-indigo-50'
+                          : 'border-slate-200 hover:border-slate-300 bg-white'
+                      }`}
+                    >
+                      <div className="flex justify-between items-center">
+                        <span className="font-medium text-slate-800 text-xs">GPT-5.2</span>
+                        <span className="text-xs font-bold text-indigo-600">&lt;$0.01</span>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+                {/* Test Duration */}
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">
+                    Test Duration: {localSettings.targetDuration} min
+                  </label>
+                  <input
+                    type="range"
+                    min="5"
+                    max="30"
+                    step="5"
+                    value={localSettings.targetDuration}
+                    onChange={(e) => setLocalSettings({ ...localSettings, targetDuration: parseInt(e.target.value) })}
+                    className="w-full accent-indigo-500"
+                  />
+                  <div className="flex justify-between text-[10px] text-slate-400 mt-1">
+                    <span>5 min</span>
+                    <span>15 min</span>
+                    <span>30 min</span>
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-2">
+                    AI determines question and vocabulary counts based on duration and CEFR level
+                  </p>
                 </div>
               </div>
             </div>

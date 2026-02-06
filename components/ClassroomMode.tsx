@@ -60,12 +60,30 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
 
   const SPEED_OPTIONS = [0.5, 0.75, 0.85, 0.9, 1] as const;
 
-  // Auto-select test when navigating from One Shot creator
+  // Track if we've already handled the current autoSelectTestId
+  const handledAutoSelectRef = useRef<string | null>(null);
+
+  // Auto-select test when navigating from One Shot creator or JAM
   useEffect(() => {
-    if (autoSelectTestId && tests.length > 0) {
+    // Skip if no autoSelectTestId or already handled this one
+    if (!autoSelectTestId || autoSelectTestId === handledAutoSelectRef.current) {
+      return;
+    }
+
+    if (tests.length > 0) {
       const test = tests.find(t => t.id === autoSelectTestId);
       if (test) {
         const audio = audioEntries.find(a => a.id === test.audioId);
+
+        // If test expects audio but it's not loaded yet, wait for audioEntries to update
+        if (test.audioId && !audio) {
+          // Audio not yet available, don't proceed - effect will re-run when audioEntries updates
+          return;
+        }
+
+        // Mark as handled BEFORE setting state to prevent re-runs
+        handledAutoSelectRef.current = autoSelectTestId;
+
         setSelectedTest(test);
         setSelectedAudio(audio || null);
         setPlayCount(0);
@@ -77,6 +95,13 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
       }
     }
   }, [autoSelectTestId, tests, audioEntries, onAutoSelectHandled]);
+
+  // Reset the handled ref when autoSelectTestId is cleared
+  useEffect(() => {
+    if (!autoSelectTestId) {
+      handledAutoSelectRef.current = null;
+    }
+  }, [autoSelectTestId]);
 
   // Get audio for a test
   const getAudioForTest = (test: ListeningTest): SavedAudio | undefined => {

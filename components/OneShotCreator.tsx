@@ -14,12 +14,13 @@ interface OneShotCreatorProps {
 }
 
 // --- Processing stages ---
-type ProcessingStage = 'idle' | 'parsing' | 'generating-audio' | 'saving-audio' | 'creating-test' | 'done' | 'error';
+type ProcessingStage = 'idle' | 'parsing' | 'generating-audio' | 'audio_failed' | 'saving-audio' | 'creating-test' | 'done' | 'error';
 
 const STAGE_CONFIG: Record<ProcessingStage, { label: string; labelAr: string; progress: number }> = {
   idle: { label: '', labelAr: '', progress: 0 },
   parsing: { label: 'Parsing response...', labelAr: 'جاري التحليل...', progress: 10 },
   'generating-audio': { label: 'Generating audio...', labelAr: 'جاري إنشاء الصوت...', progress: 40 },
+  audio_failed: { label: 'Audio generation failed', labelAr: 'فشل إنشاء الصوت', progress: 40 },
   'saving-audio': { label: 'Saving audio...', labelAr: 'جاري حفظ الصوت...', progress: 70 },
   'creating-test': { label: 'Creating test...', labelAr: 'جاري إنشاء الاختبار...', progress: 85 },
   done: { label: 'Complete!', labelAr: 'تم!', progress: 100 },
@@ -37,7 +38,8 @@ const CEFR_DESCRIPTIONS: Record<CEFRLevel, string> = {
   'C1': 'Advanced - Nuanced language, idiomatic expressions, sophisticated topics',
 };
 
-const CEFR_PROMPT_GUIDELINES: Record<CEFRLevel, string> = {
+// Exported for use by JamButton
+export const CEFR_PROMPT_GUIDELINES: Record<CEFRLevel, string> = {
   'A1': 'Use only basic vocabulary (500 most common words). Simple present tense only. Very short sentences (5-8 words). Speak slowly and clearly with frequent pauses.',
   'A2': 'Use common everyday vocabulary (1000 most common words). Simple past and present tenses. Short sentences (8-12 words). Clear pronunciation with some natural pausing.',
   'B1': 'Use moderately complex language. Mix of tenses including present perfect. Sentences of 10-15 words. Natural pace with some connected speech. Include common idioms.',
@@ -45,8 +47,77 @@ const CEFR_PROMPT_GUIDELINES: Record<CEFRLevel, string> = {
   'C1': 'Use sophisticated, nuanced language. Complex grammar including subjunctive and mixed conditionals. Fast natural speech with contractions and connected speech. Idiomatic and colloquial expressions.',
 };
 
+// --- Duration-based content guidelines ---
+// Exported for use by JamButton and Settings
+export const DURATION_GUIDELINES: Record<number, {
+  wordCount: string;
+  questions: string;
+  lexis: string;
+}> = {
+  5:  { wordCount: '80-120',   questions: '3-4',  lexis: '3-5' },
+  10: { wordCount: '180-220',  questions: '5-6',  lexis: '6-8' },
+  15: { wordCount: '280-320',  questions: '7-8',  lexis: '8-10' },
+  20: { wordCount: '330-380',  questions: '8-10', lexis: '10-12' },
+  30: { wordCount: '420-480',  questions: '10-12', lexis: '12-15' },
+};
+
+// CEFR-based time adjustment factors
+// Lower levels need more time per item, higher levels process faster
+export const CEFR_TIME_ADJUSTMENTS: Record<CEFRLevel, {
+  factor: number;
+  description: string;
+}> = {
+  'A1': { factor: 1.4, description: 'Students need 40% more time (slower reading, simpler content)' },
+  'A2': { factor: 1.2, description: 'Students need 20% more time' },
+  'B1': { factor: 1.0, description: 'Baseline timing' },
+  'B2': { factor: 0.85, description: 'Students process 15% faster' },
+  'C1': { factor: 0.7, description: 'Students process 30% faster, can handle more content' },
+};
+
+// Compute duration-adjusted content guidelines
+export function getDurationGuidelines(
+  targetMinutes: number,
+  cefrLevel: CEFRLevel
+): {
+  wordCount: string;
+  questionCount: string;
+  lexisCount: string;
+  explanation: string;
+} {
+  // Find nearest duration bucket (floor to nearest defined duration)
+  const durations = Object.keys(DURATION_GUIDELINES).map(Number).sort((a, b) => a - b);
+  let baseDuration = durations[0];
+  for (const d of durations) {
+    if (d <= targetMinutes) baseDuration = d;
+    else break;
+  }
+
+  const base = DURATION_GUIDELINES[baseDuration];
+  const adjustment = CEFR_TIME_ADJUSTMENTS[cefrLevel];
+
+  // Apply CEFR adjustment: lower levels = fewer items (more time per item)
+  // Higher levels = more items (less time per item)
+  const adjustFactor = 1 / adjustment.factor;
+
+  const [qMin, qMax] = base.questions.split('-').map(Number);
+  const [lMin, lMax] = base.lexis.split('-').map(Number);
+
+  const adjustedQMin = Math.max(2, Math.round(qMin * adjustFactor));
+  const adjustedQMax = Math.max(3, Math.round(qMax * adjustFactor));
+  const adjustedLMin = Math.max(2, Math.round(lMin * adjustFactor));
+  const adjustedLMax = Math.max(3, Math.round(lMax * adjustFactor));
+
+  return {
+    wordCount: base.wordCount,
+    questionCount: `${adjustedQMin}-${adjustedQMax}`,
+    lexisCount: `${adjustedLMin}-${adjustedLMax}`,
+    explanation: adjustment.description,
+  };
+}
+
 // --- Gemini voice reference (embedded for template) ---
-const GEMINI_VOICES_REFERENCE = `
+// Exported for use by JamButton
+export const GEMINI_VOICES_REFERENCE = `
 FEMALE VOICES:
 - Aoede: Breezy, relaxed, casual dialogues
 - Kore: Firm, confident, teachers/authority
@@ -93,7 +164,8 @@ function blobToBase64(blob: Blob): Promise<string> {
   });
 }
 
-interface OneShotPayload {
+// Exported for use by JamButton
+export interface OneShotPayload {
   title: string;
   difficulty: CEFRLevel;
   transcript: string;
@@ -121,7 +193,8 @@ interface OneShotPayload {
   }>;
 }
 
-function validatePayload(jsonText: string): OneShotPayload {
+// Exported for use by JamButton
+export function validatePayload(jsonText: string): OneShotPayload {
   // Strip markdown code fences
   let cleaned = jsonText.trim();
   if (cleaned.startsWith('```')) {
@@ -168,7 +241,12 @@ const getPreviewActivities = (difficulty: CEFRLevel): string => {
 };
 
 // --- Build guidelines template ---
-function buildTemplate(difficulty: CEFRLevel, contentMode: ContentMode): string {
+// Exported for use by JamButton
+export function buildTemplate(
+  difficulty: CEFRLevel,
+  contentMode: ContentMode,
+  targetDuration: number = 10
+): string {
   const contentGuidelines = contentMode === 'halal'
     ? `\nCONTENT RESTRICTIONS (Halal mode):\n- No references to alcohol, pork, gambling, dating, or romantic relationships\n- Topics should be family-friendly and culturally appropriate\n- Avoid slang related to prohibited topics\n`
     : contentMode === 'elsd'
@@ -177,12 +255,20 @@ function buildTemplate(difficulty: CEFRLevel, contentMode: ContentMode): string 
 
   const previewActivities = getPreviewActivities(difficulty);
 
+  // Get duration-adjusted content guidelines
+  const durationInfo = getDurationGuidelines(targetDuration, difficulty);
+
   return `# One-Shot EFL Listening Test Generator
 
 ## Your Task
-Create a COMPLETE listening test package: a dialogue transcript, voice assignments, comprehension questions, vocabulary items, and preview activities.
+Create a COMPLETE listening test package designed for approximately ${targetDuration} minutes of student activity time.
 
 ## Target Level: ${difficulty} - ${CEFR_DESCRIPTIONS[difficulty]}
+
+## Duration Planning
+- Target total duration: ${targetDuration} minutes
+- CEFR level: ${difficulty} (${durationInfo.explanation})
+- Calibrate content amounts for ${difficulty} students who ${difficulty === 'A1' || difficulty === 'A2' ? 'need more processing time per item' : difficulty === 'C1' ? 'process quickly and can handle more content' : 'have moderate processing speed'}
 
 ### Language Guidelines for ${difficulty}:
 ${CEFR_PROMPT_GUIDELINES[difficulty]}
@@ -248,25 +334,27 @@ Return a SINGLE JSON object. No markdown fences, no explanation — ONLY valid J
 
 ## Dialogue Guidelines
 - Use exactly 2 speakers with contrasting voice types
-- Target ~180-220 words (about 1.5 minutes of audio)
+- Target approximately ${durationInfo.wordCount} words for the dialogue
 - Use "Speaker: text" format with \\n\\n between turns
 - Include natural fillers (um, well, you know) for realism
 - No stage directions, sound effects, or meta-commentary
 - Just pure dialogue text
 
 ## Question Guidelines
-- Generate 5-8 multiple-choice comprehension questions
+- Generate ${durationInfo.questionCount} multiple-choice comprehension questions
 - Each question must have exactly 4 options
 - correctAnswer must match one option exactly (character-for-character)
 - Test comprehension: main ideas, specific details, speaker attitudes, and inferences
 - Include explanations in English and Arabic for wrong answers
+- Quantity calibrated for ${targetDuration}-minute test at ${difficulty} level
 
 ## Vocabulary Guidelines
-- Select 5-12 key vocabulary items from the dialogue
+- Select ${durationInfo.lexisCount} key vocabulary items from the dialogue
 - Focus on words ${difficulty} learners would need to learn
 - definitionArabic: Just the Arabic word/phrase (e.g., "travel" → "يسافر")
 - hintArabic: Arabic translation of the English definition
 - Include part of speech for each item
+- Quantity calibrated for ${targetDuration}-minute test at ${difficulty} level
 
 ## Preview Activities Guidelines (Pre-Listening Warm-up)
 Generate exactly 2 preview activities: ${previewActivities}
@@ -307,13 +395,20 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
   onComplete,
 }) => {
   const [difficulty, setDifficulty] = useState<CEFRLevel>(defaultDifficulty);
+  const [targetDuration, setTargetDuration] = useState(10); // Default 10 minutes
   const [pasteContent, setPasteContent] = useState('');
   const [copyFeedback, setCopyFeedback] = useState(false);
   const [stage, setStage] = useState<ProcessingStage>('idle');
   const [errorMsg, setErrorMsg] = useState('');
 
+  // Pending data for audio fallback
+  const [pendingPayload, setPendingPayload] = useState<OneShotPayload | null>(null);
+  const [pendingSpeakerMapping, setPendingSpeakerMapping] = useState<SpeakerVoiceMapping>({});
+  const [pendingAnalysis, setPendingAnalysis] = useState<{ speakers: string[] } | null>(null);
+  const [audioFailReason, setAudioFailReason] = useState<string>('');
+
   const handleCopyTemplate = useCallback(async () => {
-    const template = buildTemplate(difficulty, contentMode);
+    const template = buildTemplate(difficulty, contentMode, targetDuration);
     try {
       await navigator.clipboard.writeText(template);
       setCopyFeedback(true);
@@ -329,7 +424,7 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
       setCopyFeedback(true);
       setTimeout(() => setCopyFeedback(false), 2000);
     }
-  }, [difficulty, contentMode]);
+  }, [difficulty, contentMode, targetDuration]);
 
   const processOneShot = useCallback(async () => {
     setErrorMsg('');
@@ -356,76 +451,96 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
       speakerMapping[speaker] = voice;
     }
 
+    // Store pending data for fallback
+    setPendingPayload(payload);
+    setPendingSpeakerMapping(speakerMapping);
+    setPendingAnalysis(analysis);
+
     try {
       const apiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY;
-      if (apiKey && apiKey !== 'PLACEHOLDER_API_KEY') {
-        const { GoogleGenAI, Modality } = await import('@google/genai');
-        const ai = new GoogleGenAI({ apiKey });
+      if (!apiKey || apiKey === 'PLACEHOLDER_API_KEY') {
+        throw new Error('Gemini API key not configured');
+      }
 
-        // Build multi-speaker config
-        const speakers = Object.entries(speakerMapping);
-        const speechConfig = speakers.length === 2
-          ? {
-              multiSpeakerVoiceConfig: {
-                speakerVoiceConfigs: speakers.map(([speaker, voice]) => ({
-                  speaker,
-                  voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } },
-                })),
-              },
-            }
-          : {
-              voiceConfig: {
-                prebuiltVoiceConfig: { voiceName: speakers[0]?.[1] || 'Puck' },
-              },
-            };
+      const { GoogleGenAI, Modality } = await import('@google/genai');
+      const ai = new GoogleGenAI({ apiKey });
 
-        const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash-preview-tts',
-          contents: payload.transcript,
-          config: {
-            responseModalities: [Modality.AUDIO],
-            speechConfig,
-          },
-        });
-
-        const audioData = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-        if (audioData) {
-          // PCM to WAV conversion
-          const pcmBytes = Uint8Array.from(atob(audioData), c => c.charCodeAt(0));
-          const sampleRate = 24000;
-          const numChannels = 1;
-          const bitsPerSample = 16;
-          const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
-          const blockAlign = numChannels * (bitsPerSample / 8);
-          const dataSize = pcmBytes.length;
-          const buffer = new ArrayBuffer(44 + dataSize);
-          const view = new DataView(buffer);
-
-          const writeString = (offset: number, str: string) => {
-            for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+      // Build multi-speaker config
+      const speakers = Object.entries(speakerMapping);
+      const speechConfig = speakers.length === 2
+        ? {
+            multiSpeakerVoiceConfig: {
+              speakerVoiceConfigs: speakers.map(([speaker, voice]) => ({
+                speaker,
+                voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } },
+              })),
+            },
+          }
+        : {
+            voiceConfig: {
+              prebuiltVoiceConfig: { voiceName: speakers[0]?.[1] || 'Puck' },
+            },
           };
 
-          writeString(0, 'RIFF');
-          view.setUint32(4, 36 + dataSize, true);
-          writeString(8, 'WAVE');
-          writeString(12, 'fmt ');
-          view.setUint32(16, 16, true);
-          view.setUint16(20, 1, true);
-          view.setUint16(22, numChannels, true);
-          view.setUint32(24, sampleRate, true);
-          view.setUint32(28, byteRate, true);
-          view.setUint16(32, blockAlign, true);
-          view.setUint16(34, bitsPerSample, true);
-          writeString(36, 'data');
-          view.setUint32(40, dataSize, true);
-          new Uint8Array(buffer, 44).set(pcmBytes);
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash-preview-tts',
+        contents: payload.transcript,
+        config: {
+          responseModalities: [Modality.AUDIO],
+          speechConfig,
+        },
+      });
 
-          audioBlob = new Blob([buffer], { type: 'audio/wav' });
-        }
+      const audioData = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+      if (!audioData) {
+        throw new Error('No audio data returned from Gemini');
       }
+
+      // PCM to WAV conversion
+      const pcmBytes = Uint8Array.from(atob(audioData), c => c.charCodeAt(0));
+      const sampleRate = 24000;
+      const numChannels = 1;
+      const bitsPerSample = 16;
+      const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+      const blockAlign = numChannels * (bitsPerSample / 8);
+      const dataSize = pcmBytes.length;
+      const buffer = new ArrayBuffer(44 + dataSize);
+      const view = new DataView(buffer);
+
+      const writeString = (offset: number, str: string) => {
+        for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+      };
+
+      writeString(0, 'RIFF');
+      view.setUint32(4, 36 + dataSize, true);
+      writeString(8, 'WAVE');
+      writeString(12, 'fmt ');
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true);
+      view.setUint16(22, numChannels, true);
+      view.setUint32(24, sampleRate, true);
+      view.setUint32(28, byteRate, true);
+      view.setUint16(32, blockAlign, true);
+      view.setUint16(34, bitsPerSample, true);
+      writeString(36, 'data');
+      view.setUint32(40, dataSize, true);
+      new Uint8Array(buffer, 44).set(pcmBytes);
+
+      audioBlob = new Blob([buffer], { type: 'audio/wav' });
     } catch (err) {
-      console.warn('[OneShot] Audio generation failed, continuing as transcript-only:', err);
-      // Continue without audio
+      console.error('[OneShot] Gemini TTS failed:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Gemini TTS failed';
+
+      // Check if it's a quota/rate limit error
+      const isQuotaError = errorMessage.toLowerCase().includes('quota') ||
+                          errorMessage.toLowerCase().includes('rate') ||
+                          errorMessage.toLowerCase().includes('limit') ||
+                          errorMessage.includes('429') ||
+                          errorMessage.includes('503');
+
+      setAudioFailReason(isQuotaError ? 'Gemini quota exceeded' : errorMessage);
+      setStage('audio_failed');
+      return; // Exit and wait for user to choose fallback
     }
 
     // Stage 3: Save audio entry
@@ -520,9 +635,168 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
     }
   }, [pasteContent, onComplete]);
 
+  // Generate audio with OpenAI TTS (fallback)
+  const generateOpenAIAudio = async (transcript: string): Promise<Blob> => {
+    const apiKey = (import.meta as any).env?.VITE_OPENAI_API_KEY;
+    if (!apiKey || apiKey === 'PLACEHOLDER_API_KEY') {
+      throw new Error('OpenAI API key not configured');
+    }
+
+    // Strip speaker labels for single-voice narration
+    const cleanTranscript = transcript
+      .split('\n')
+      .map(line => {
+        const colonIndex = line.indexOf(':');
+        if (colonIndex > 0 && colonIndex < 30) {
+          return line.substring(colonIndex + 1).trim();
+        }
+        return line;
+      })
+      .filter(line => line.trim())
+      .join(' ');
+
+    const response = await fetch('https://api.openai.com/v1/audio/speech', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'tts-1',
+        input: cleanTranscript,
+        voice: 'alloy',
+        response_format: 'mp3',
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error?.message || `OpenAI TTS error: ${response.status}`);
+    }
+
+    return response.blob();
+  };
+
+  // Continue with save after getting audio (shared by Gemini and fallbacks)
+  const continueWithAudio = async (audioBlob: Blob | null) => {
+    if (!pendingPayload || !pendingAnalysis) return;
+
+    setStage('saving-audio');
+    let audioEntry: SavedAudio;
+    try {
+      let audioData: string | null = null;
+      if (audioBlob) {
+        audioData = await blobToBase64(audioBlob);
+      }
+
+      const response = await fetch(`${API_BASE}/audio-entries`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: pendingPayload.title,
+          transcript: pendingPayload.transcript,
+          audio_data: audioData,
+          engine: audioBlob ? EngineType.GEMINI : EngineType.BROWSER,
+          speaker_mapping: pendingSpeakerMapping,
+          speakers: pendingAnalysis.speakers,
+          is_transcript_only: !audioBlob,
+          difficulty: pendingPayload.difficulty,
+        }),
+      });
+
+      if (!response.ok) throw new Error('Failed to save audio');
+      const data = await response.json();
+      audioEntry = {
+        id: data._id,
+        title: data.title,
+        transcript: data.transcript,
+        audioUrl: data.audio_data ? `data:audio/wav;base64,${data.audio_data}` : null,
+        engine: data.engine || EngineType.BROWSER,
+        speakerMapping: data.speaker_mapping || {},
+        speakers: data.speakers || [],
+        isTranscriptOnly: data.is_transcript_only || false,
+        difficulty: data.difficulty,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at,
+      };
+    } catch (err) {
+      setErrorMsg(`Failed to save: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      setStage('error');
+      return;
+    }
+
+    // Create test
+    setStage('creating-test');
+    try {
+      const testData = {
+        audioId: audioEntry.id,
+        title: pendingPayload.title,
+        type: 'listening-comprehension',
+        difficulty: pendingPayload.difficulty,
+        questions: pendingPayload.questions.map(q => ({
+          ...q,
+          id: generateId(),
+        })),
+        lexis: pendingPayload.lexis.length > 0
+          ? pendingPayload.lexis.map(l => ({
+              ...l,
+              id: generateId(),
+            }))
+          : undefined,
+        preview: pendingPayload.preview && pendingPayload.preview.length > 0
+          ? pendingPayload.preview.map(activity => ({
+              type: activity.type,
+              items: activity.items.map((item: any) => ({
+                ...item,
+                id: generateId(),
+              })),
+            }))
+          : undefined,
+      };
+
+      const response = await fetch(`${API_BASE}/tests`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(testData),
+      });
+
+      if (!response.ok) throw new Error('Failed to create test');
+      const savedTest = await response.json();
+
+      setStage('done');
+      onComplete({ audioEntry, test: savedTest });
+    } catch (err) {
+      setErrorMsg(`Failed to create test: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      setStage('error');
+    }
+  };
+
+  // Handle OpenAI TTS fallback
+  const handleOpenAIFallback = async () => {
+    if (!pendingPayload) return;
+
+    setStage('generating-audio');
+    setErrorMsg('');
+
+    try {
+      const audioBlob = await generateOpenAIAudio(pendingPayload.transcript);
+      await continueWithAudio(audioBlob);
+    } catch (err) {
+      console.error('[OneShot] OpenAI TTS also failed:', err);
+      const errorMessage = err instanceof Error ? err.message : 'OpenAI TTS failed';
+      setAudioFailReason(`Both Gemini and OpenAI failed. Last error: ${errorMessage}`);
+      setStage('audio_failed');
+    }
+  };
+
+  // Handle transcript-only fallback
+  const handleTranscriptOnlyFallback = async () => {
+    await continueWithAudio(null);
+  };
+
   if (!isOpen) return null;
 
-  const isProcessing = stage !== 'idle' && stage !== 'error' && stage !== 'done';
+  const isProcessing = stage !== 'idle' && stage !== 'error' && stage !== 'done' && stage !== 'audio_failed';
   const stageInfo = STAGE_CONFIG[stage];
 
   return (
@@ -575,6 +849,28 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
                       </button>
                     ))}
                   </div>
+                </div>
+                <div className="mb-4">
+                  <label className="text-sm text-slate-600 mb-2 block">
+                    Duration: <span className="font-bold text-rose-600">{targetDuration} min</span>
+                  </label>
+                  <input
+                    type="range"
+                    min="5"
+                    max="30"
+                    step="5"
+                    value={targetDuration}
+                    onChange={(e) => setTargetDuration(parseInt(e.target.value))}
+                    className="w-full accent-rose-500"
+                  />
+                  <div className="flex justify-between text-xs text-slate-400 mt-1">
+                    <span>5 min</span>
+                    <span>15 min</span>
+                    <span>30 min</span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-2 text-center">
+                    AI determines question/vocab counts based on duration + {difficulty} level
+                  </p>
                 </div>
                 <button
                   onClick={handleCopyTemplate}
@@ -684,6 +980,54 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
                 <button
                   onClick={onClose}
                   className="px-6 py-3 bg-slate-200 text-slate-700 rounded-xl font-medium hover:bg-slate-300 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Audio generation failed - show fallback options */}
+          {stage === 'audio_failed' && (
+            <div className="space-y-6 py-4">
+              <div className="text-center">
+                <div className="text-5xl mb-4">&#128266;</div>
+                <h3 className="text-lg font-bold text-amber-700">Audio Generation Failed</h3>
+                <p className="text-sm text-amber-600 mt-2 max-w-md mx-auto">{audioFailReason}</p>
+              </div>
+
+              <div className="space-y-3">
+                {/* OpenAI TTS fallback button - show if Gemini failed but we haven't tried OpenAI yet */}
+                {!audioFailReason.includes('OpenAI') && (
+                  <button
+                    onClick={handleOpenAIFallback}
+                    className="w-full py-4 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-xl font-bold text-base hover:from-emerald-400 hover:to-teal-400 transition-all active:scale-[0.98]"
+                  >
+                    &#127908; Try OpenAI TTS Instead
+                  </button>
+                )}
+
+                {/* Transcript-only option - last resort */}
+                <button
+                  onClick={handleTranscriptOnlyFallback}
+                  className="w-full py-4 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-xl font-bold text-base hover:from-amber-400 hover:to-orange-400 transition-all active:scale-[0.98]"
+                >
+                  &#128196; Save With Transcript Only
+                </button>
+                <p className="text-xs text-slate-500 text-center">
+                  The test will be created without audio. Students will see the transcript.
+                </p>
+
+                {/* Cancel button */}
+                <button
+                  onClick={() => {
+                    setStage('idle');
+                    setPendingPayload(null);
+                    setPendingSpeakerMapping({});
+                    setPendingAnalysis(null);
+                    setAudioFailReason('');
+                  }}
+                  className="w-full py-3 bg-slate-200 text-slate-700 rounded-xl font-medium hover:bg-slate-300 transition-colors"
                 >
                   Cancel
                 </button>

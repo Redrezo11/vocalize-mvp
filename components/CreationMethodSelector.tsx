@@ -1,6 +1,6 @@
 import React from 'react';
 
-export type CreationMethod = 'audio' | 'transcript' | 'import' | 'oneshot';
+export type CreationMethod = 'audio' | 'transcript' | 'import' | 'oneshot' | 'jam';
 
 interface CreationMethodSelectorProps {
   isOpen: boolean;
@@ -38,6 +38,15 @@ const ImportIcon = ({ className }: { className?: string }) => (
 const ZapIcon = ({ className }: { className?: string }) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+  </svg>
+);
+
+const RocketIcon = ({ className }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" />
+    <path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" />
+    <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0" />
+    <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" />
   </svg>
 );
 
@@ -84,6 +93,15 @@ export const CreationMethodSelector: React.FC<CreationMethodSelectorProps> = ({
       gradient: 'from-rose-500 to-pink-500',
       hoverGradient: 'hover:from-rose-400 hover:to-pink-400',
       shadow: 'shadow-rose-500/30',
+    },
+    {
+      id: 'jam' as CreationMethod,
+      title: 'JAM',
+      description: 'One-click AI generation',
+      icon: RocketIcon,
+      gradient: 'from-red-600 to-red-800',
+      hoverGradient: 'hover:from-red-500 hover:to-red-700',
+      shadow: 'shadow-red-500/40',
     },
   ];
 

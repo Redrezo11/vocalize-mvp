@@ -289,7 +289,7 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
                           key={optIndex}
                           onClick={() => updateAnswer(question.id, option)}
                           disabled={isSubmitted}
-                          className={`flex items-center gap-2 px-2.5 py-2 rounded-lg border text-left text-sm transition-all ${
+                          className={`flex items-start gap-2 px-2.5 py-2 rounded-lg border text-left text-sm transition-all ${
                             isSubmitted
                               ? isCorrectAnswer
                                 ? isDark ? 'border-green-600 bg-green-900/40' : 'border-green-400 bg-green-100'
@@ -314,7 +314,7 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
                           }`}>
                             {letter}
                           </span>
-                          <span className={`flex-1 text-sm leading-tight truncate ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>{option}</span>
+                          <span className={`flex-1 text-sm leading-snug ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>{option}</span>
                           {isSubmitted && isCorrectAnswer && (
                             <CheckCircleIcon className="w-4 h-4 text-green-500 flex-shrink-0" />
                           )}

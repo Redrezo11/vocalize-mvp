@@ -23,6 +23,7 @@ const ClassroomMode = lazy(() => import('./components/ClassroomMode').then(m => 
 const StudentTest = lazy(() => import('./components/StudentTest').then(m => ({ default: m.StudentTest })));
 const TranscriptMode = lazy(() => import('./components/TranscriptMode').then(m => ({ default: m.TranscriptMode })));
 const OneShotCreator = lazy(() => import('./components/OneShotCreator').then(m => ({ default: m.OneShotCreator })));
+const JamButton = lazy(() => import('./components/JamButton').then(m => ({ default: m.JamButton })));
 
 // Preload functions for components
 const preloadClassroom = () => import('./components/ClassroomMode');
@@ -90,6 +91,9 @@ const App: React.FC = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [showImportWizard, setShowImportWizard] = useState(false);
   const [showOneShotCreator, setShowOneShotCreator] = useState(false);
+  const [showJamButton, setShowJamButton] = useState(false);
+  const [jamDifficulty, setJamDifficulty] = useState<import('./components/Settings').CEFRLevel>('B1');
+  const [jamSettings, setJamSettings] = useState<{ targetDuration: number; contentMode: import('./components/Settings').ContentMode; contentModel?: import('./components/HomePage').ContentModel } | null>(null);
   const [autoSelectTestId, setAutoSelectTestId] = useState<string | null>(null);
   const settingsHook = useSettings();
 
@@ -541,6 +545,9 @@ const App: React.FC = () => {
       case 'oneshot':
         setShowOneShotCreator(true);
         break;
+      case 'jam':
+        setShowJamButton(true);
+        break;
     }
   };
 
@@ -602,6 +609,33 @@ const App: React.FC = () => {
   // Handle one-shot completion - add test to state and navigate to classroom
   const handleOneShotComplete = useCallback((result: { audioEntry: SavedAudio; test: any }) => {
     setShowOneShotCreator(false);
+
+    // Map server response to ListeningTest
+    const newTest: ListeningTest = {
+      ...result.test,
+      id: result.test._id || result.test.id,
+      createdAt: result.test.created_at,
+      updatedAt: result.test.updated_at,
+      questions: result.test.questions?.map((q: any) => ({ ...q, id: q._id || Math.random().toString(36).substring(2, 11) })) || [],
+      lexis: result.test.lexis?.map((l: any) => ({ ...l, id: l._id || Math.random().toString(36).substring(2, 11) })),
+      lexisAudio: result.test.lexisAudio,
+    };
+
+    // Add to allTests
+    setAllTests(prev => [newTest, ...prev]);
+    setAllTestsLastFetched(0);
+
+    // Refresh audio storage so classroom can find the audio entry
+    audioStorage.loadAll();
+
+    // Navigate to classroom and auto-select the new test
+    setAutoSelectTestId(newTest.id);
+    setCurrentView('classroom');
+  }, [audioStorage]);
+
+  // Handle Jam Button completion - same flow as one-shot
+  const handleJamComplete = useCallback((result: { audioEntry: SavedAudio; test: any }) => {
+    setShowJamButton(false);
 
     // Map server response to ListeningTest
     const newTest: ListeningTest = {
@@ -1073,10 +1107,25 @@ const App: React.FC = () => {
     </nav>
   );
 
+  // Handle JAM generation from homepage
+  const handleJamGenerate = (
+    difficulty: import('./components/Settings').CEFRLevel,
+    settings?: { targetDuration: number; contentMode: import('./components/Settings').ContentMode; contentModel?: import('./components/HomePage').ContentModel }
+  ) => {
+    setJamDifficulty(difficulty);
+    setJamSettings(settings || null);
+    setShowJamButton(true);
+  };
+
   // Home page view - creation method selector
   const renderHome = () => (
     <HomePage
       onSelect={handleHomeMethodSelect}
+      onJamGenerate={handleJamGenerate}
+      defaultDifficulty={settingsHook.settings.difficultyLevel}
+      defaultContentMode={settingsHook.settings.contentMode}
+      defaultTargetDuration={settingsHook.settings.targetDuration}
+      defaultContentModel={settingsHook.settings.contentModel}
     />
   );
 
@@ -1539,6 +1588,39 @@ const App: React.FC = () => {
           onComplete={handleOneShotComplete}
         />
       </Suspense>
+
+      {/* Jam Button Modal */}
+      {showJamButton && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-8 shadow-2xl relative">
+            <button
+              onClick={() => setShowJamButton(false)}
+              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-600 transition-colors"
+            >
+              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+            <Suspense fallback={<InlineSpinner />}>
+              <JamButton
+                defaultDifficulty={jamDifficulty}
+                contentMode={jamSettings?.contentMode || settingsHook.settings.contentMode}
+                defaultProfile={jamSettings ? {
+                  targetDuration: jamSettings.targetDuration,
+                  contentModel: jamSettings.contentModel,
+                } : undefined}
+                autoStart={true}
+                onComplete={handleJamComplete}
+                onError={(error) => {
+                  console.error('[JamButton] Error:', error);
+                  alert(error);
+                }}
+              />
+            </Suspense>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
