@@ -69,6 +69,9 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
         setSelectedTest(test);
         setSelectedAudio(audio || null);
         setPlayCount(0);
+        setIsPlaying(false);  // Reset play state for new presentation
+        setCurrentTime(0);
+        setDuration(0);
         setView('present');
         onAutoSelectHandled?.();
       }
@@ -330,6 +333,9 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
     setSelectedTest(test);
     setSelectedAudio(audio || null);
     setPlayCount(0);
+    setIsPlaying(false);  // Reset play state for new presentation
+    setCurrentTime(0);
+    setDuration(0);
     setView('present');
   };
 
@@ -482,12 +488,13 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
           }
           break;
         case 'Escape':
-          setView('select');
-          setSelectedTest(null);
-          setSelectedAudio(null);
           if (audioRef.current) {
             audioRef.current.pause();
           }
+          setIsPlaying(false);  // Explicitly reset play state
+          setView('select');
+          setSelectedTest(null);
+          setSelectedAudio(null);
           break;
       }
     };
@@ -760,12 +767,13 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
             <div className="flex items-center justify-between mb-4">
               <button
                 onClick={() => {
-                  setView('select');
-                  setSelectedTest(null);
-                  setSelectedAudio(null);
                   if (audioRef.current) {
                     audioRef.current.pause();
                   }
+                  setIsPlaying(false);  // Explicitly reset play state
+                  setView('select');
+                  setSelectedTest(null);
+                  setSelectedAudio(null);
                 }}
                 className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors"
               >
