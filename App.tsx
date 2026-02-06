@@ -76,6 +76,12 @@ const App: React.FC = () => {
   const [studentTestId, setStudentTestId] = useState<string | null>(null);
   const [studentTest, setStudentTest] = useState<ListeningTest | null>(null);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
+  // Student test loading - detect URL param on initial render to show loading immediately
+  const [isLoadingStudentTest, setIsLoadingStudentTest] = useState<boolean>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.has('student-test');
+  });
+  const [studentTestError, setStudentTestError] = useState<string | null>(null);
   const [isSavingTranscript, setIsSavingTranscript] = useState(false);
   const [lastPromptDifficulty, setLastPromptDifficulty] = useState<string | null>(null);
 
@@ -956,26 +962,36 @@ const App: React.FC = () => {
   // Load test for student view
   const loadStudentTest = async (testId: string) => {
     try {
+      setStudentTestError(null);
       const response = await fetch(`${API_BASE}/tests/${testId}`);
-      if (response.ok) {
-        const t = await response.json();
-        const test: ListeningTest = {
-          ...t,
-          id: t._id,
-          questions: t.questions.map((q: { _id?: string; questionText: string; options?: string[]; correctAnswer: string; explanation?: string }) => ({
-            ...q,
-            id: q._id || Math.random().toString(36).substring(2, 11)
-          })),
-          lexis: t.lexis?.map((l: { _id?: string; term: string; definition: string; definitionArabic?: string; example?: string; partOfSpeech?: string }) => ({
-            ...l,
-            id: l._id || Math.random().toString(36).substring(2, 11)
-          })),
-        };
-        setStudentTest(test);
-        setCurrentView('student-test');
+      if (!response.ok) {
+        if (response.status === 404) {
+          setStudentTestError('Test not found. Please check the link and try again.');
+        } else {
+          setStudentTestError('Failed to load test. Please try again.');
+        }
+        return;
       }
+      const t = await response.json();
+      const test: ListeningTest = {
+        ...t,
+        id: t._id,
+        questions: t.questions.map((q: { _id?: string; questionText: string; options?: string[]; correctAnswer: string; explanation?: string }) => ({
+          ...q,
+          id: q._id || Math.random().toString(36).substring(2, 11)
+        })),
+        lexis: t.lexis?.map((l: { _id?: string; term: string; definition: string; definitionArabic?: string; example?: string; partOfSpeech?: string }) => ({
+          ...l,
+          id: l._id || Math.random().toString(36).substring(2, 11)
+        })),
+      };
+      setStudentTest(test);
+      setCurrentView('student-test');
     } catch (error) {
       console.error('Failed to load student test:', error);
+      setStudentTestError('Network error. Please check your connection and try again.');
+    } finally {
+      setIsLoadingStudentTest(false);
     }
   };
 
@@ -1442,6 +1458,44 @@ const App: React.FC = () => {
       </Suspense>
     );
   };
+
+  // Student test loading - show student-friendly loading screen (prevents seeing teacher interface)
+  if (isLoadingStudentTest) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <h2 className="text-xl font-semibold text-slate-700 mb-2">Loading your test...</h2>
+          <p className="text-slate-500">Please wait a moment</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Student test error - show friendly error screen (prevents seeing teacher interface)
+  if (studentTestError) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50">
+        <div className="text-center max-w-md px-4">
+          <div className="text-5xl mb-4">&#128533;</div>
+          <h2 className="text-xl font-semibold text-slate-700 mb-2">Oops!</h2>
+          <p className="text-slate-600 mb-6">{studentTestError}</p>
+          <button
+            onClick={() => {
+              setStudentTestError(null);
+              if (studentTestId) {
+                setIsLoadingStudentTest(true);
+                loadStudentTest(studentTestId);
+              }
+            }}
+            className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-500 transition-colors"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // Student test view (accessed via URL or preview)
   if (currentView === 'student-test' && studentTest) {
