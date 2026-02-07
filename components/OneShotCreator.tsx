@@ -117,34 +117,49 @@ export function getDurationGuidelines(
 
 // --- Gemini voice reference (embedded for template) ---
 // Exported for use by JamButton
+// Based on docs/VOICE_ASSIGNMENT_GUIDE.md — all 30 Gemini voices with explicit gender tags
 export const GEMINI_VOICES_REFERENCE = `
-FEMALE VOICES:
-- Aoede: Breezy, relaxed, casual dialogues
-- Kore: Firm, confident, teachers/authority
-- Leda: Youthful, curious, students/teenagers
-- Zephyr: Bright, optimistic, cheerful characters
-- Autonoe: Warm, nurturing, mothers/counselors
-- Callirhoe: Gentle, patient, children's content
-- Despina: Smooth, polished, business/professional
-- Erinome: Clear, articulate, educational content
+## FEMALE Voices (use ONLY for female characters):
+- Aoede (Female): Breezy — casual narration, friendly neighbor, relaxed host
+- Kore (Female): Firm — teacher, manager, news anchor, authority figure
+- Leda (Female): Youthful — teenager, young adult, student
+- Zephyr (Female): Bright — cheerful host, motivational, children's content
+- Autonoe (Female): Warm — mother figure, counselor, mentor
+- Callirhoe (Female): Gentle — caregiver, meditation guide, soft narrator
+- Despina (Female): Smooth — business presenter, sophisticated host
+- Erinome (Female): Clear — lecturer, tutor, documentary narrator
+- Gacrux (Female): Mature — executive, elder, experienced professional
+- Laomedeia (Female): Calm — wellness guide, therapist, mindfulness
+- Pulcherrima (Female): Elegant — gala host, art curator, formal settings
+- Sulafat (Female): Serene — nature documentary, peaceful content
+- Vindemiatrix (Female): Refined — museum guide, literary reader
+- Achernar (Female): Soft — confidant, bedtime narrator, poetry
 
-MALE VOICES:
-- Puck: Upbeat, energetic, young characters
-- Charon: Informative, knowledgeable, educational narration
-- Fenrir: Excitable, high-energy, action/sports
-- Orus: Firm, commanding, authority figures
-- Achird: Friendly, warm, helpful guides
-- Algieba: Smooth, polished, business professionals
-- Alnilam: Firm, formal, official announcements
-- Umbriel: Relaxed, laid-back, casual conversations
-- Zubenelgenubi: Casual, everyday, informal settings
+## MALE Voices (use ONLY for male characters):
+- Charon (Male): Informative — professor, historian, science explainer
+- Achird (Male): Friendly — helpful guide, customer service, neighbor
+- Orus (Male): Firm — military commander, CEO, serious announcer
+- Fenrir (Male): Excitable — adventure narrator, gaming, thriller
+- Puck (Male): Upbeat — game show host, sports commentator
+- Algenib (Male): Gravelly — detective, cowboy, weathered veteran
+- Algieba (Male): Smooth — radio DJ, luxury brand, suave character
+- Alnilam (Male): Firm — lawyer, judge, formal announcer
+- Enceladus (Male): Breathy — romantic lead, thriller narrator
+- Iapetus (Male): Deep — movie trailer, villain, authoritative
+- Rasalgethi (Male): Lively — talk show host, podcast, entertainer
+- Sadachbia (Male): Clear — news reader, technical explainer
+- Sadaltager (Male): Knowledgeable — expert, consultant, academic
+- Schedar (Male): Professional — corporate training, business news
+- Umbriel (Male): Relaxed — podcast host, casual guide
+- Zubenelgenubi (Male): Casual — friend, everyday conversation
 
-PAIRING GUIDE:
-- Teacher + Student: Kore + Puck or Charon + Leda
-- Friends chatting: Aoede + Zephyr or Umbriel + Zubenelgenubi
-- Boss + Employee: Orus + Achird or Despina + Zephyr
-- Expert + Learner: Charon + Leda or Erinome + Puck
-- Customer service: Achird + Zubenelgenubi or Autonoe + Aoede
+PAIRING GUIDE (always pair one FEMALE + one MALE voice):
+- Teacher + Student: Kore (Female) + Achird (Male) or Charon (Male) + Leda (Female)
+- Friends chatting: Aoede (Female) + Umbriel (Male) or Zephyr (Female) + Zubenelgenubi (Male)
+- Boss + Employee: Orus (Male) + Despina (Female) or Kore (Female) + Achird (Male)
+- Expert + Learner: Erinome (Female) + Fenrir (Male) or Charon (Male) + Leda (Female)
+- Customer service: Achird (Male) + Autonoe (Female) or Despina (Female) + Zubenelgenubi (Male)
+- Professional: Schedar (Male) + Despina (Female) or Sadaltager (Male) + Erinome (Female)
 `.trim();
 
 // --- Helpers ---
@@ -379,9 +394,13 @@ Generate exactly 2 preview activities: ${previewActivities}
 
 IMPORTANT: Preview content must NOT duplicate or rephrase the comprehension questions.
 
-## Voice Selection
-- Pick 2 voices that create good contrast (e.g., one male + one female)
-- Match voice personality to the character's role in the dialogue
+## Voice Selection Rules (CRITICAL)
+- ALWAYS assign one FEMALE voice and one MALE voice for contrast
+- Female characters MUST use a voice from the FEMALE voices list above
+- Male characters MUST use a voice from the MALE voices list above
+- NEVER assign a Female voice to a male character or vice versa
+- Match voice personality to the character's role (see archetypes above)
+- Vary your selections — do not always default to the same voices
 
 Now generate the complete test as a single JSON object:`;
 }

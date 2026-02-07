@@ -551,7 +551,7 @@ export const JamButton: React.FC<JamButtonProps> = ({
         body: JSON.stringify({
           model: profile.contentModel,
           input: prompt,
-          reasoning: { effort: 'low' },
+          reasoning: { effort: 'high' },
         }),
       });
 
