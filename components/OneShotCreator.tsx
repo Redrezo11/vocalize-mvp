@@ -31,20 +31,20 @@ const STAGE_CONFIG: Record<ProcessingStage, { label: string; labelAr: string; pr
 const CEFR_LEVELS: CEFRLevel[] = ['A1', 'A2', 'B1', 'B2', 'C1'];
 
 const CEFR_DESCRIPTIONS: Record<CEFRLevel, string> = {
-  'A1': 'Beginner - Basic phrases, simple present tense, very common vocabulary',
-  'A2': 'Elementary - Simple sentences, past tense, everyday topics',
-  'B1': 'Intermediate - Connected speech, opinions, familiar topics',
-  'B2': 'Upper-Intermediate - Complex ideas, abstract topics, natural speech',
-  'C1': 'Advanced - Nuanced language, idiomatic expressions, sophisticated topics',
+  'A1': 'Beginner - Very common vocabulary, simple clear language',
+  'A2': 'Elementary - Everyday vocabulary, straightforward language',
+  'B1': 'Intermediate - Broader vocabulary, expressing opinions and experiences',
+  'B2': 'Upper-Intermediate - Wide vocabulary, complex ideas, natural speech',
+  'C1': 'Advanced - Rich vocabulary, idiomatic expressions, nuanced language',
 };
 
 // Exported for use by JamButton
 export const CEFR_PROMPT_GUIDELINES: Record<CEFRLevel, string> = {
-  'A1': 'Use only basic vocabulary (500 most common words). Simple present tense only. Very short sentences (5-8 words). Speak slowly and clearly with frequent pauses.',
-  'A2': 'Use common everyday vocabulary (1000 most common words). Simple past and present tenses. Short sentences (8-12 words). Clear pronunciation with some natural pausing.',
-  'B1': 'Use moderately complex language. Mix of tenses including present perfect. Sentences of 10-15 words. Natural pace with some connected speech. Include common idioms.',
-  'B2': 'Use complex sentence structures. All tenses including conditionals and passive voice. Natural speech rate. Include abstract vocabulary and some idiomatic expressions.',
-  'C1': 'Use sophisticated, nuanced language. Complex grammar including subjunctive and mixed conditionals. Fast natural speech with contractions and connected speech. Idiomatic and colloquial expressions.',
+  'A1': 'Use the 500 most common English words. Keep sentences clear and easy to follow. Grammar must be correct and natural — do NOT artificially restrict tenses. Speak at a measured, clear pace.',
+  'A2': 'Use the 1000 most common English words. Sentences should be straightforward but grammatically complete and natural. Include common phrasal verbs and collocations.',
+  'B1': 'Use moderately varied vocabulary (~2000 words). Natural grammar — use whatever tenses fit the conversation. Include common idioms and connectors (however, although, despite).',
+  'B2': 'Use a wide vocabulary including abstract and academic words. Fully natural grammar with complex sentences where appropriate. Include idiomatic expressions and nuanced word choices.',
+  'C1': 'Use sophisticated, nuanced vocabulary including low-frequency words and field-specific terms. Fully natural speech with contractions, connected speech, colloquialisms, and subtle humor or irony.',
 };
 
 // --- Duration-based content guidelines ---
