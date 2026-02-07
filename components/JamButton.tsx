@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { CEFRLevel, ContentMode } from './Settings';
 import { EngineType, SavedAudio, ListeningTest, SpeakerVoiceMapping } from '../types';
 import { parseDialogue } from '../utils/parser';
-import { buildTemplate, validatePayload, OneShotPayload, GEMINI_VOICES_REFERENCE } from './OneShotCreator';
+import { buildDialoguePrompt, buildTestContentPrompt, validatePayload, OneShotPayload } from './OneShotCreator';
 
 const API_BASE = '/api';
 
@@ -260,6 +260,7 @@ export const JamButton: React.FC<JamButtonProps> = ({
   const [stage, setStage] = useState<JamStage>('idle');
   const [progress, setProgress] = useState(0);
   const [errorMsg, setErrorMsg] = useState('');
+  const [generatingLabel, setGeneratingLabel] = useState('');
 
   // Pending data for audio fallback (when Gemini fails)
   const [pendingPayload, setPendingPayload] = useState<OneShotPayload | null>(null);
@@ -530,19 +531,20 @@ export const JamButton: React.FC<JamButtonProps> = ({
 
   const handleJam = async () => {
     setStage('generating');
-    setProgress(STAGE_CONFIG.generating.progress);
+    setProgress(10);
     setErrorMsg('');
+    setGeneratingLabel('Generating dialogue...');
 
     try {
-      // --- Stage 1: Generate content with GPT-5-mini ---
       const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
       if (!apiKey || apiKey === 'PLACEHOLDER_API_KEY') {
         throw new Error('OpenAI API key not configured');
       }
 
-      const prompt = buildTemplate(profile.difficulty, profile.contentMode, profile.targetDuration);
+      // --- Call 1: Generate dialogue + voice assignments (creative, high reasoning) ---
+      const dialoguePrompt = buildDialoguePrompt(profile.difficulty, profile.contentMode, profile.targetDuration);
 
-      const response = await fetch('https://api.openai.com/v1/responses', {
+      const dialogueResponse = await fetch('https://api.openai.com/v1/responses', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -550,53 +552,123 @@ export const JamButton: React.FC<JamButtonProps> = ({
         },
         body: JSON.stringify({
           model: profile.contentModel,
-          input: prompt,
+          instructions: dialoguePrompt.instructions,
+          input: dialoguePrompt.input,
           reasoning: { effort: 'high' },
         }),
       });
 
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        throw new Error(error.error?.message || `OpenAI API error: ${response.status}`);
+      if (!dialogueResponse.ok) {
+        const error = await dialogueResponse.json().catch(() => ({}));
+        throw new Error(error.error?.message || `Dialogue API error: ${dialogueResponse.status}`);
       }
 
-      const data = await response.json();
-      const messageOutput = data.output?.find((o: { type: string }) => o.type === 'message');
-      const text = messageOutput?.content?.[0]?.text || '';
+      const dialogueData = await dialogueResponse.json();
+      const dialogueOutput = dialogueData.output?.find((o: { type: string }) => o.type === 'message');
+      const dialogueText = dialogueOutput?.content?.[0]?.text || '';
 
-      // Extract and validate JSON
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        throw new Error('No valid JSON found in AI response');
+      const dialogueJsonMatch = dialogueText.match(/\{[\s\S]*\}/);
+      if (!dialogueJsonMatch) {
+        throw new Error('No valid JSON found in dialogue response');
       }
 
-      const payload = validatePayload(jsonMatch[0]);
+      let dialogueResult: { title: string; difficulty: string; transcript: string; voiceAssignments: Record<string, string> };
+      try {
+        dialogueResult = JSON.parse(dialogueJsonMatch[0]);
+      } catch {
+        throw new Error('Failed to parse dialogue JSON');
+      }
+
+      if (!dialogueResult.title || !dialogueResult.transcript || !dialogueResult.voiceAssignments) {
+        throw new Error('Dialogue response missing required fields (title, transcript, voiceAssignments)');
+      }
+
+      // --- Call 2: Generate test content (analytical, medium reasoning) ---
+      setProgress(35);
+      setGeneratingLabel('Creating test questions...');
+
+      const testPrompt = buildTestContentPrompt(
+        { title: dialogueResult.title, transcript: dialogueResult.transcript, difficulty: profile.difficulty },
+        profile.contentMode,
+        profile.targetDuration
+      );
+
+      const testResponse = await fetch('https://api.openai.com/v1/responses', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: profile.contentModel,
+          instructions: testPrompt.instructions,
+          input: testPrompt.input,
+          reasoning: { effort: 'medium' },
+        }),
+      });
+
+      if (!testResponse.ok) {
+        const error = await testResponse.json().catch(() => ({}));
+        throw new Error(error.error?.message || `Test content API error: ${testResponse.status}`);
+      }
+
+      const testData = await testResponse.json();
+      const testOutput = testData.output?.find((o: { type: string }) => o.type === 'message');
+      const testText = testOutput?.content?.[0]?.text || '';
+
+      const testJsonMatch = testText.match(/\{[\s\S]*\}/);
+      if (!testJsonMatch) {
+        throw new Error('No valid JSON found in test content response');
+      }
+
+      let testResult: { questions: any[]; lexis: any[]; preview: any[] };
+      try {
+        testResult = JSON.parse(testJsonMatch[0]);
+      } catch {
+        throw new Error('Failed to parse test content JSON');
+      }
+
+      if (!testResult.questions || !Array.isArray(testResult.questions)) {
+        throw new Error('Test content response missing questions array');
+      }
+
+      // --- Merge into single payload and validate ---
+      const mergedPayload: OneShotPayload = validatePayload(JSON.stringify({
+        title: dialogueResult.title,
+        difficulty: dialogueResult.difficulty || profile.difficulty,
+        transcript: dialogueResult.transcript,
+        voiceAssignments: dialogueResult.voiceAssignments,
+        questions: testResult.questions,
+        lexis: testResult.lexis || [],
+        preview: testResult.preview || [],
+      }));
+
+      setGeneratingLabel('');
 
       // --- Stage 2: Generate audio with Gemini TTS ---
       setStage('audio');
-      setProgress(STAGE_CONFIG.audio.progress);
+      setProgress(50);
 
       // Parse dialogue to get speakers
-      const analysis = parseDialogue(payload.transcript);
+      const analysis = parseDialogue(mergedPayload.transcript);
       const speakerMapping: SpeakerVoiceMapping = {};
-      for (const [speaker, voice] of Object.entries(payload.voiceAssignments || {})) {
+      for (const [speaker, voice] of Object.entries(mergedPayload.voiceAssignments || {})) {
         speakerMapping[speaker] = voice;
       }
 
       // Store pending data in case audio fails
-      setPendingPayload(payload);
+      setPendingPayload(mergedPayload);
       setPendingSpeakerMapping(speakerMapping);
       setPendingAnalysis(analysis);
 
       // Try Gemini TTS first
       let wavBase64: string;
       try {
-        wavBase64 = await generateGeminiAudio(payload.transcript, speakerMapping);
+        wavBase64 = await generateGeminiAudio(mergedPayload.transcript, speakerMapping);
       } catch (geminiError) {
         console.error('[JamButton] Gemini TTS failed:', geminiError);
         const errorMessage = geminiError instanceof Error ? geminiError.message : 'Gemini TTS failed';
 
-        // Check if it's a quota/rate limit error
         const isQuotaError = errorMessage.toLowerCase().includes('quota') ||
                             errorMessage.toLowerCase().includes('rate') ||
                             errorMessage.toLowerCase().includes('limit') ||
@@ -605,12 +677,12 @@ export const JamButton: React.FC<JamButtonProps> = ({
 
         setAudioFailReason(isQuotaError ? 'Gemini quota exceeded' : errorMessage);
         setStage('audio_failed');
-        return; // Exit and wait for user to choose fallback
+        return;
       }
 
       // --- Stage 3: Save entry and test ---
       await saveEntryAndTest(
-        payload,
+        mergedPayload,
         wavBase64,
         EngineType.GEMINI,
         speakerMapping,
@@ -691,7 +763,9 @@ export const JamButton: React.FC<JamButtonProps> = ({
 
         {/* Status label */}
         <div className="text-center">
-          <div className="text-sm font-medium text-slate-600">{stageConfig.label}</div>
+          <div className="text-sm font-medium text-slate-600">
+            {stage === 'generating' && generatingLabel ? generatingLabel : stageConfig.label}
+          </div>
         </div>
 
         {/* Error message */}
@@ -817,7 +891,9 @@ export const JamButton: React.FC<JamButtonProps> = ({
           {/* Progress indicator */}
           {stage !== 'idle' && stage !== 'error' && (
             <div className="text-center w-full">
-              <div className="text-sm text-slate-600 mb-2">{stageConfig.label}</div>
+              <div className="text-sm text-slate-600 mb-2">
+                {stage === 'generating' && generatingLabel ? generatingLabel : stageConfig.label}
+              </div>
               <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-gradient-to-r from-red-500 to-red-600 rounded-full transition-all duration-500"

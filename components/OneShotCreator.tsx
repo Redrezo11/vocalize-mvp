@@ -405,6 +405,225 @@ IMPORTANT: Preview content must NOT duplicate or rephrase the comprehension ques
 Now generate the complete test as a single JSON object:`;
 }
 
+// --- Two-call prompt builders for JamButton pipeline ---
+// These split the work into focused calls for better quality with smaller models
+
+// Helper: content mode restrictions text
+function getContentRestrictions(contentMode: ContentMode): string {
+  if (contentMode === 'halal') {
+    return `\nCONTENT RESTRICTIONS (Halal mode):\n- No references to alcohol, pork, gambling, dating, or romantic relationships\n- Topics should be family-friendly and culturally appropriate\n- Avoid slang related to prohibited topics\n`;
+  }
+  if (contentMode === 'elsd') {
+    return `\nCONTENT RESTRICTIONS (ELSD - KSU University standards):\n- Academic and professionally appropriate content only\n- No controversial political, religious, or social topics\n- Focus on educational, practical, and workplace scenarios\n`;
+  }
+  return '';
+}
+
+/**
+ * Call 1: Focused dialogue generation prompt.
+ * Returns { instructions, input } for the Responses API.
+ */
+export function buildDialoguePrompt(
+  difficulty: CEFRLevel,
+  contentMode: ContentMode,
+  targetDuration: number
+): { instructions: string; input: string } {
+  const durationInfo = getDurationGuidelines(targetDuration, difficulty);
+  const contentRestrictions = getContentRestrictions(contentMode);
+
+  const instructions = `You are an expert dialogue scriptwriter for EFL (English as a Foreign Language) listening exercises. You create natural, engaging conversations between two speakers that sound like real people talking. Your dialogues are creative, topically varied, and perfectly calibrated to the target language proficiency level. You never produce generic or robotic exchanges.`;
+
+  const input = `# Generate a Dialogue for an EFL Listening Exercise
+
+## Target Level: ${difficulty} - ${CEFR_DESCRIPTIONS[difficulty]}
+
+### Language Guidelines for ${difficulty}:
+${CEFR_PROMPT_GUIDELINES[difficulty]}
+${contentRestrictions}
+## Duration & Length
+- Target duration: ${targetDuration} minutes of student activity
+- Dialogue word count: approximately ${durationInfo.wordCount} words
+
+## Available TTS Voices (Gemini)
+${GEMINI_VOICES_REFERENCE}
+
+## Dialogue Quality Standards
+- Choose an engaging, SPECIFIC topic (NOT generic small talk)
+  - Good examples: "Negotiating a deadline extension with a professor", "Debating whether to adopt a rescue dog", "Planning a surprise birthday party that's going wrong"
+  - Bad examples: "Two people talking about their day", "A conversation about weather"
+- Give each speaker a DISTINCT personality:
+  - Different speaking styles (one more formal, one more casual; one verbose, one concise)
+  - Different attitudes or perspectives on the topic
+  - Use real character names (e.g., "Sarah", "Marcus"), NOT "Speaker1/Speaker2"
+- Create a natural conversation arc:
+  - Opening: jump straight into the situation (NOT "Hello, how are you?")
+  - Middle: develop the topic with genuine back-and-forth, disagreements, discoveries
+  - End: reach a natural resolution, decision, or conclusion
+- Vary turn lengths realistically:
+  - Mix short reactions ("Really? That's surprising.") with longer explanations
+  - NOT every turn should be the same length
+- Include natural speech features appropriate for ${difficulty} level:
+  - Fillers: "um", "well", "you know", "I mean"
+  - Self-corrections: "It was Monday — no wait, Tuesday"
+  - Reactions: "Oh!", "Hmm", "Right, right"
+  - Backchanneling and overlapping ideas
+- AVOID:
+  - Robotic, equal-length ping-pong exchanges
+  - Characters that sound identical
+  - Exposition dumps disguised as dialogue
+  - Starting with greetings or pleasantries
+  - Overly educational or "textbook" sounding exchanges
+
+## Voice Selection Rules (CRITICAL)
+- ALWAYS assign one FEMALE voice and one MALE voice for contrast
+- Female characters MUST use a voice from the FEMALE voices list above
+- Male characters MUST use a voice from the MALE voices list above
+- NEVER assign a Female voice to a male character or vice versa
+- Match voice personality to the character's role (see archetypes above)
+- Vary your selections — do not always default to the same voices
+
+## Output Format
+
+Return a SINGLE JSON object with ONLY these fields. No markdown fences, no explanation — ONLY valid JSON.
+
+{
+  "title": "Descriptive title for the listening exercise",
+  "difficulty": "${difficulty}",
+  "transcript": "CharName1: First line of dialogue.\\n\\nCharName2: Response line.\\n\\nCharName1: Another line.",
+  "voiceAssignments": {
+    "CharName1": "VoiceName",
+    "CharName2": "VoiceName"
+  }
+}
+
+Use "Speaker: text" format with \\n\\n between turns. No stage directions, sound effects, or meta-commentary — just pure dialogue text.
+
+Now generate the dialogue as a single JSON object:`;
+
+  return { instructions, input };
+}
+
+/**
+ * Call 2: Test content generation prompt (questions, lexis, preview).
+ * Takes the dialogue from Call 1 as input context.
+ */
+export function buildTestContentPrompt(
+  dialogue: { title: string; transcript: string; difficulty: CEFRLevel },
+  contentMode: ContentMode,
+  targetDuration: number
+): { instructions: string; input: string } {
+  const durationInfo = getDurationGuidelines(targetDuration, dialogue.difficulty);
+  const contentRestrictions = getContentRestrictions(contentMode);
+  const previewActivities = getPreviewActivities(dialogue.difficulty);
+
+  const instructions = `You are an expert EFL (English as a Foreign Language) test designer. Given a dialogue transcript, you create pedagogically sound comprehension questions, vocabulary exercises, and preview activities calibrated to the student's CEFR level. Your questions test genuine comprehension — main ideas, inferences, speaker attitudes — not just surface-level recall.`;
+
+  const input = `# Generate Test Content for an EFL Listening Exercise
+
+## Context
+A dialogue has already been created. Your job is to generate the test content (questions, vocabulary, and preview activities) based on this specific dialogue.
+
+## Target Level: ${dialogue.difficulty} - ${CEFR_DESCRIPTIONS[dialogue.difficulty]}
+${contentRestrictions}
+## The Dialogue
+
+Title: "${dialogue.title}"
+
+${dialogue.transcript}
+
+## Question Guidelines
+- Generate ${durationInfo.questionCount} multiple-choice comprehension questions about the dialogue above
+- Each question must have exactly 4 options
+- correctAnswer must match one option exactly (character-for-character)
+- Test comprehension at multiple levels:
+  - Main ideas and overall theme
+  - Specific details mentioned by speakers
+  - Speaker attitudes, opinions, and emotions
+  - Inferences and implied meaning
+- Include explanations in English and Arabic for why the correct answer is right
+- Questions should require actually listening to/reading the dialogue to answer (not guessable)
+
+## Vocabulary Guidelines
+- Select ${durationInfo.lexisCount} key vocabulary items FROM the dialogue above
+- Focus on words ${dialogue.difficulty} learners would benefit from learning
+- definitionArabic: Just the Arabic word/phrase (e.g., "travel" → "يسافر")
+- hintArabic: Arabic translation of the English definition
+- Include part of speech for each item
+
+## Preview Activities Guidelines (Pre-Listening Warm-up)
+Generate exactly 2 preview activities: ${previewActivities}
+
+### Prediction Questions (if included)
+- 2-3 personal/opinion questions connecting the topic to the student's life
+- Include Arabic translation for each question
+- 2-3 short answer options per question
+- No correct answer — these are purely for engagement and schema activation
+
+### Word Association (if included)
+- 8-10 words total
+- 4-5 words that actually appear in the transcript (inDialogue: true)
+- 4-5 plausible distractor words NOT in the transcript (inDialogue: false)
+
+### True/False Predictions (if included)
+- 3-4 statements about the dialogue content
+- Mix of true and false statements
+- Include correctAnswer boolean for each
+- Include Arabic translation for each statement
+
+IMPORTANT: Preview content must NOT duplicate or rephrase the comprehension questions.
+
+## Output Format
+
+Return a SINGLE JSON object with ONLY these fields. No markdown fences, no explanation — ONLY valid JSON.
+
+{
+  "questions": [
+    {
+      "questionText": "What did the speakers discuss?",
+      "options": ["Option A", "Option B", "Option C", "Option D"],
+      "correctAnswer": "Option B",
+      "explanation": "English explanation of why this is correct",
+      "explanationArabic": "شرح بالعربية"
+    }
+  ],
+  "lexis": [
+    {
+      "term": "vocabulary word",
+      "definition": "Clear English definition for ${dialogue.difficulty} learners",
+      "definitionArabic": "كلمة عربية",
+      "hintArabic": "شرح التعريف بالعربية",
+      "explanation": "Why this word matters or how it's used",
+      "explanationArabic": "شرح مختصر بالعربية",
+      "example": "Example sentence using the word",
+      "partOfSpeech": "noun/verb/adjective/adverb/phrase"
+    }
+  ],
+  "preview": [
+    {
+      "type": "prediction",
+      "items": [
+        {
+          "question": "Personal question about the topic",
+          "questionArabic": "سؤال شخصي بالعربية",
+          "options": ["Short answer 1", "Short answer 2", "Short answer 3"]
+        }
+      ]
+    },
+    {
+      "type": "wordAssociation",
+      "items": [
+        { "word": "word from dialogue", "inDialogue": true },
+        { "word": "distractor word", "inDialogue": false }
+      ]
+    }
+  ]
+}
+
+Now generate the test content as a single JSON object:`;
+
+  return { instructions, input };
+}
+
 // --- Component ---
 export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
   isOpen,
