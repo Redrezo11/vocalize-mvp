@@ -389,8 +389,8 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
           })}
         </div>
 
-        {/* Follow-Up Questions (after submission, not in preview mode) */}
-        {isSubmitted && !isPreview && (
+        {/* Follow-Up Discussion Questions (after submission) */}
+        {isSubmitted && (
           <FollowUpQuestions
             sessionLog={sessionLog.current}
             audioId={test.audioId}
