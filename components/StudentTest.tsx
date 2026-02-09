@@ -52,6 +52,7 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [score, setScore] = useState<number | null>(null);
+  const [showDiscussion, setShowDiscussion] = useState(false);
 
   // Single state machine for test phase: match → gapfill → preview → questions
   const [testPhase, setTestPhase] = useState<TestPhase>(() => getInitialTestPhase(test, isPreview));
@@ -149,10 +150,12 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
     return userAnswer === correctAnswer ? 'correct' : 'incorrect';
   };
 
-  const handleRetry = () => {
-    setAnswers({});
-    setIsSubmitted(false);
-    setScore(null);
+  const handleStartDiscussion = () => {
+    setShowDiscussion(true);
+  };
+
+  const handleBackFromDiscussion = () => {
+    setShowDiscussion(false);
   };
 
   const answeredCount = Object.keys(answers).length;
@@ -196,6 +199,20 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
   }
 
   // Phase 4: Questions (main test)
+
+  // Full-screen discussion mode (after clicking "Continue to Discussion")
+  if (isSubmitted && showDiscussion) {
+    return (
+      <FollowUpQuestions
+        sessionLog={sessionLog.current}
+        audioId={test.audioId}
+        test={test}
+        contentModel={contentModel}
+        theme={theme}
+        onBack={handleBackFromDiscussion}
+      />
+    );
+  }
 
   return (
     <div className={`min-h-screen flex flex-col ${isDark ? 'bg-slate-900' : 'bg-slate-50'}`}>
@@ -256,10 +273,10 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
               </span>
             </div>
             <button
-              onClick={handleRetry}
+              onClick={handleStartDiscussion}
               className="px-3 py-1 bg-white/20 rounded text-sm font-medium hover:bg-white/30"
             >
-              Try Again
+              Discussion
             </button>
           </div>
         </div>
@@ -388,17 +405,6 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
             );
           })}
         </div>
-
-        {/* Follow-Up Discussion Questions (after submission) */}
-        {isSubmitted && (
-          <FollowUpQuestions
-            sessionLog={sessionLog.current}
-            audioId={test.audioId}
-            test={test}
-            contentModel={contentModel}
-            theme={theme}
-          />
-        )}
 
         {/* Bottom padding for safe area */}
         <div className="h-4" />

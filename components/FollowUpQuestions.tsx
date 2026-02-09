@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ListeningTest, TestSessionLog, FollowUpQuestion, FollowUpFeedbackItem } from '../types';
 import { ClassroomTheme, ContentModel } from './Settings';
 
@@ -8,15 +8,30 @@ interface FollowUpQuestionsProps {
   test: ListeningTest;
   contentModel: ContentModel;
   theme?: ClassroomTheme;
+  onBack: () => void;
 }
 
-type FollowUpPhase = 'idle' | 'generating' | 'answering' | 'evaluating' | 'complete';
+type FollowUpPhase = 'generating' | 'answering' | 'evaluating' | 'feedback' | 'done';
 
 const TYPE_LABELS: Record<FollowUpQuestion['type'], { label: string; color: string; darkColor: string }> = {
   connect: { label: 'Connect', color: 'bg-blue-100 text-blue-700', darkColor: 'bg-blue-900/50 text-blue-300' },
   compare: { label: 'Compare', color: 'bg-violet-100 text-violet-700', darkColor: 'bg-violet-900/50 text-violet-300' },
   judge: { label: 'Judge', color: 'bg-rose-100 text-rose-700', darkColor: 'bg-rose-900/50 text-rose-300' },
 };
+
+// Sentence starter chips per question type
+const SENTENCE_STARTERS: Record<FollowUpQuestion['type'], string[]> = {
+  connect: ['I think...', 'In my life...', 'This reminds me of...'],
+  compare: ['The difference is...', 'I noticed that...', 'This is similar to...'],
+  judge: ['I agree because...', 'I disagree because...', 'In my opinion...'],
+};
+
+// Show chips for A1-B1 only
+function shouldShowChips(difficulty?: string): boolean {
+  if (!difficulty) return true; // default to showing
+  const level = difficulty.toUpperCase();
+  return level.startsWith('A') || level === 'B1';
+}
 
 // Build a concise summary of what the student got wrong across all phases
 function buildWeaknessSummary(log: TestSessionLog): string {
@@ -168,29 +183,85 @@ TONE RULES:
 Return valid JSON only:
 {"feedback":[{"questionId":"q1","acknowledge":"...","connectToTest":"...","extendThinking":"...","vocabularyWord":"...","vocabularyDefinition":"...","vocabularySentence":"..."},{"questionId":"q2",...},{"questionId":"q3",...}]}`;
 
+// Step dots component
+const StepDots: React.FC<{ total: number; current: number; isDark: boolean }> = ({ total, current, isDark }) => (
+  <div className="flex items-center gap-2">
+    {Array.from({ length: total }, (_, i) => (
+      <div
+        key={i}
+        className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${
+          i < current
+            ? 'bg-indigo-500'
+            : i === current
+            ? 'bg-indigo-500 scale-125'
+            : isDark ? 'bg-slate-600' : 'bg-slate-300'
+        }`}
+      />
+    ))}
+  </div>
+);
+
+// Accordion section for feedback
+const FeedbackSection: React.FC<{
+  title: string;
+  icon: string;
+  content: string;
+  defaultOpen?: boolean;
+  borderColor: string;
+  isDark: boolean;
+}> = ({ title, icon, content, defaultOpen = false, borderColor, isDark }) => {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+
+  return (
+    <div className={`rounded-lg border-l-4 ${borderColor} overflow-hidden ${isDark ? 'bg-slate-700/50' : 'bg-white'}`}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className={`w-full px-3 py-2.5 flex items-center justify-between text-left ${isDark ? 'hover:bg-slate-700' : 'hover:bg-slate-50'}`}
+      >
+        <span className={`text-sm font-medium ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
+          {icon} {title}
+        </span>
+        <span className={`text-xs transition-transform duration-300 ${isOpen ? 'rotate-180' : ''} ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+          ▼
+        </span>
+      </button>
+      <div
+        className={`transition-all duration-300 ease-in-out overflow-hidden ${isOpen ? 'max-h-40 opacity-100' : 'max-h-0 opacity-0'}`}
+      >
+        <div className={`px-3 pb-3 text-sm ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+          {content}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
   sessionLog,
   audioId,
   test,
   contentModel,
   theme = 'light',
+  onBack,
 }) => {
   const isDark = theme === 'dark';
-  const [phase, setPhase] = useState<FollowUpPhase>('idle');
+  const [phase, setPhase] = useState<FollowUpPhase>('generating');
   const [questions, setQuestions] = useState<FollowUpQuestion[]>([]);
   const [answers, setAnswers] = useState<{ [id: string]: string }>({});
   const [feedback, setFeedback] = useState<FollowUpFeedbackItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<string>('');
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const generatedRef = useRef(false);
 
   const model = contentModel === 'gpt-5.2' ? 'gpt-5.2' : 'gpt-5-mini';
+  const showChips = shouldShowChips(test.difficulty);
 
-  const handleGenerate = async () => {
+  const handleGenerate = useCallback(async () => {
     setPhase('generating');
     setError(null);
 
     try {
-      // Fetch transcript on first use
       let currentTranscript = transcript;
       if (!currentTranscript) {
         currentTranscript = await fetchTranscript(audioId);
@@ -223,13 +294,21 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
       if (qs.length === 0) throw new Error('No questions generated');
 
       setQuestions(qs);
+      setCurrentIndex(0);
       setPhase('answering');
     } catch (err) {
       console.error('[FollowUp] Generate error:', err);
       setError(err instanceof Error ? err.message : 'Failed to generate questions');
-      setPhase('idle');
     }
-  };
+  }, [audioId, model, sessionLog, test, transcript]);
+
+  // Auto-generate on mount
+  useEffect(() => {
+    if (!generatedRef.current) {
+      generatedRef.current = true;
+      handleGenerate();
+    }
+  }, [handleGenerate]);
 
   const handleEvaluate = async () => {
     setPhase('evaluating');
@@ -264,7 +343,8 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
       const fb: FollowUpFeedbackItem[] = parsed.feedback || [];
 
       setFeedback(fb);
-      setPhase('complete');
+      setCurrentIndex(0);
+      setPhase('feedback');
     } catch (err) {
       console.error('[FollowUp] Evaluate error:', err);
       setError(err instanceof Error ? err.message : 'Failed to evaluate answers');
@@ -272,203 +352,386 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
     }
   };
 
-  const answeredCount = Object.values(answers).filter((a): a is string => typeof a === 'string' && a.trim().length > 0).length;
+  const handleChipTap = (starter: string) => {
+    const currentQ = questions[currentIndex];
+    if (!currentQ) return;
+    const current = answers[currentQ.id] || '';
+    // Only insert if textarea is empty or starts with existing starter
+    if (current.trim() === '' || SENTENCE_STARTERS[currentQ.type]?.some(s => current.startsWith(s))) {
+      setAnswers(prev => ({ ...prev, [currentQ.id]: starter }));
+    } else {
+      // Append at cursor position (simple: prepend if not empty)
+      setAnswers(prev => ({ ...prev, [currentQ.id]: starter + ' ' + current }));
+    }
+  };
 
-  // Idle — show start button
-  if (phase === 'idle') {
-    return (
-      <div className="px-3 pb-4">
-        <div className={`rounded-xl p-4 text-center ${isDark ? 'bg-slate-800 border border-slate-700' : 'bg-indigo-50 border border-indigo-200'}`}>
-          <p className={`text-sm mb-1 font-medium ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-            Discussion Questions
-          </p>
-          <p className={`text-sm mb-3 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-            Think deeper about what you heard. 3 open-ended questions based on your results.
-          </p>
-          <button
-            onClick={handleGenerate}
-            className="px-6 py-2.5 rounded-xl font-semibold text-sm bg-gradient-to-r from-indigo-500 to-purple-500 text-white hover:from-indigo-400 hover:to-purple-400 transition-all"
-          >
-            Start Discussion
-          </button>
-          {error && (
-            <p className="mt-2 text-sm text-red-500">{error}</p>
-          )}
-        </div>
-      </div>
-    );
-  }
+  const currentAnswer = questions[currentIndex] ? (answers[questions[currentIndex].id] || '') : '';
+  const hasCurrentAnswer = currentAnswer.trim().length > 0;
+  const isLastQuestion = currentIndex === questions.length - 1;
 
-  // Loading states
+  // Full-screen layout wrapper
+  const FullScreen: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+    <div className={`min-h-screen flex flex-col ${isDark ? 'bg-slate-900' : 'bg-gradient-to-br from-indigo-50 to-purple-50'}`}>
+      {children}
+    </div>
+  );
+
+  // Loading state (generating or evaluating)
   if (phase === 'generating' || phase === 'evaluating') {
     return (
-      <div className="px-3 pb-4">
-        <div className={`rounded-xl p-6 text-center ${isDark ? 'bg-slate-800' : 'bg-white border border-slate-200'}`}>
-          <div className="inline-block w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mb-3" />
-          <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-            {phase === 'generating' ? 'Creating discussion questions...' : 'Reading your responses...'}
-          </p>
+      <FullScreen>
+        {/* Back button */}
+        <div className={`px-4 py-3 ${isDark ? 'bg-slate-800' : 'bg-white/80 backdrop-blur'}`}>
+          <button onClick={onBack} className={`text-sm font-medium ${isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-700'}`}>
+            ← Back to Results
+          </button>
         </div>
-      </div>
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <div className="inline-block w-8 h-8 border-3 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4" />
+            <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+              {phase === 'generating' ? 'Creating discussion questions...' : 'Reading your responses...'}
+            </p>
+            {error && (
+              <div className="mt-4">
+                <p className="text-sm text-red-500 mb-2">{error}</p>
+                <button
+                  onClick={handleGenerate}
+                  className="px-4 py-2 rounded-lg text-sm font-medium bg-indigo-500 text-white hover:bg-indigo-400"
+                >
+                  Try Again
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </FullScreen>
     );
   }
 
-  // Answering phase
+  // Answering phase — one question per screen
   if (phase === 'answering') {
+    const currentQ = questions[currentIndex];
+    if (!currentQ) return null;
+    const typeInfo = TYPE_LABELS[currentQ.type] || TYPE_LABELS.connect;
+    const starters = SENTENCE_STARTERS[currentQ.type] || SENTENCE_STARTERS.connect;
+
     return (
-      <div className="px-3 pb-4 space-y-3">
-        <div className={`rounded-xl p-3 ${isDark ? 'bg-indigo-900/30 border border-indigo-700' : 'bg-indigo-50 border border-indigo-200'}`}>
-          <p className={`text-sm font-semibold text-center ${isDark ? 'text-indigo-300' : 'text-indigo-700'}`}>
-            Discussion Questions
-          </p>
-          <p className={`text-xs text-center mt-1 ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
+      <FullScreen>
+        {/* Header */}
+        <div className={`sticky top-0 z-20 ${isDark ? 'bg-slate-800 border-b border-slate-700' : 'bg-white/90 backdrop-blur border-b border-indigo-100'}`}>
+          <div className="px-4 py-3 flex items-center justify-between">
+            <button onClick={onBack} className={`text-sm font-medium ${isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-700'}`}>
+              ← Results
+            </button>
+            <StepDots total={questions.length} current={currentIndex} isDark={isDark} />
+            <span className={`text-xs font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+              {currentIndex + 1}/{questions.length}
+            </span>
+          </div>
+        </div>
+
+        {/* Main content */}
+        <div className="flex-1 flex flex-col p-4 max-w-lg mx-auto w-full">
+          {/* Question */}
+          <div className="mb-4">
+            <div className="flex items-center gap-2 mb-2">
+              <span className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+                isDark ? 'bg-indigo-600 text-white' : 'bg-indigo-500 text-white'
+              }`}>
+                {currentIndex + 1}
+              </span>
+              <span className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded ${isDark ? typeInfo.darkColor : typeInfo.color}`}>
+                {typeInfo.label}
+              </span>
+            </div>
+            <p className={`text-base leading-relaxed ${isDark ? 'text-white' : 'text-slate-800'}`}>
+              {currentQ.question}
+            </p>
+            {currentQ.questionArabic && (
+              <p className={`text-sm mt-2 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} dir="rtl">
+                {currentQ.questionArabic}
+              </p>
+            )}
+          </div>
+
+          {/* Sentence starter chips (A1-B1 only) */}
+          {showChips && (
+            <div className="mb-3">
+              <p className={`text-xs mb-1.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} dir="rtl">
+                اضغط على عبارة لبدء إجابتك ↓
+              </p>
+              <p className={`text-xs mb-2 ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>
+                Tap a phrase to start your answer
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {starters.map((starter) => (
+                  <button
+                    key={starter}
+                    onClick={() => handleChipTap(starter)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all active:scale-95 chip-pulse ${
+                      isDark
+                        ? 'bg-indigo-900/40 text-indigo-300 border-indigo-700 hover:bg-indigo-800/50'
+                        : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'
+                    }`}
+                  >
+                    {starter}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Auto-growing textarea */}
+          <div className="mb-2 grid">
+            <textarea
+              value={currentAnswer}
+              onChange={(e) => setAnswers(prev => ({ ...prev, [currentQ.id]: e.target.value.slice(0, 300) }))}
+              placeholder="Write your thoughts..."
+              className={`[grid-area:1/1] w-full px-3 py-3 rounded-xl border text-sm resize-none overflow-hidden min-h-[84px] ${
+                isDark
+                  ? 'bg-slate-800 border-slate-600 text-white placeholder-slate-500 focus:border-indigo-500'
+                  : 'bg-white border-slate-200 placeholder-slate-400 focus:border-indigo-500'
+              } focus:outline-none`}
+            />
+            <div className="[grid-area:1/1] invisible whitespace-pre-wrap px-3 py-3 text-sm min-h-[84px]">
+              {currentAnswer + ' '}
+            </div>
+          </div>
+
+          {/* Character count */}
+          <div className="flex justify-end mb-4">
+            <span className={`text-xs ${
+              currentAnswer.length > 280
+                ? 'text-red-500'
+                : currentAnswer.length > 240
+                ? 'text-amber-500'
+                : isDark ? 'text-slate-600' : 'text-slate-400'
+            }`}>
+              {currentAnswer.length}/300
+            </span>
+          </div>
+
+          {error && (
+            <p className="text-sm text-red-500 text-center mb-3">{error}</p>
+          )}
+
+          {/* No wrong answers hint */}
+          <p className={`text-xs text-center mb-4 ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>
             There are no wrong answers — share your thoughts!
           </p>
         </div>
 
-        {questions.map((q, idx) => {
-          const typeInfo = TYPE_LABELS[q.type] || TYPE_LABELS.connect;
-          return (
-            <div key={q.id} className={`rounded-xl border p-3 ${isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-white'}`}>
-              <div className="flex items-start gap-2 mb-2">
-                <span className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                  isDark ? 'bg-indigo-600 text-white' : 'bg-indigo-500 text-white'
-                }`}>
-                  {idx + 1}
-                </span>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded ${isDark ? typeInfo.darkColor : typeInfo.color}`}>
-                      {typeInfo.label}
-                    </span>
-                  </div>
-                  <p className={`text-sm leading-snug ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
-                    {q.question}
-                  </p>
-                  {q.questionArabic && (
-                    <p className={`text-sm mt-1 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} dir="rtl">
-                      {q.questionArabic}
-                    </p>
-                  )}
-                </div>
-              </div>
-              <textarea
-                value={answers[q.id] || ''}
-                onChange={(e) => setAnswers(prev => ({ ...prev, [q.id]: e.target.value }))}
-                placeholder="Write your thoughts..."
-                rows={3}
-                className={`w-full px-3 py-2 rounded-lg border text-sm resize-y ${
-                  isDark ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-500 focus:border-indigo-500' : 'bg-slate-50 border-slate-200 placeholder-slate-400 focus:border-indigo-500'
-                } focus:outline-none`}
-              />
-            </div>
-          );
-        })}
+        {/* Bottom navigation */}
+        <div className={`sticky bottom-0 p-4 ${isDark ? 'bg-slate-800 border-t border-slate-700' : 'bg-white/90 backdrop-blur border-t border-indigo-100'}`}>
+          <div className="flex gap-3 max-w-lg mx-auto">
+            {currentIndex > 0 && (
+              <button
+                onClick={() => setCurrentIndex(prev => prev - 1)}
+                className={`px-4 py-3 rounded-xl font-medium text-sm ${
+                  isDark ? 'bg-slate-700 text-slate-300 hover:bg-slate-600' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                Previous
+              </button>
+            )}
+            <button
+              onClick={() => {
+                if (isLastQuestion) {
+                  handleEvaluate();
+                } else {
+                  setCurrentIndex(prev => prev + 1);
+                }
+              }}
+              disabled={!hasCurrentAnswer}
+              className={`flex-1 py-3 rounded-xl font-semibold text-sm transition-all ${
+                hasCurrentAnswer
+                  ? 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white hover:from-indigo-400 hover:to-purple-400'
+                  : isDark
+                  ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                  : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+              }`}
+            >
+              {isLastQuestion ? 'Submit All' : 'Next'}
+            </button>
+          </div>
+        </div>
 
-        {error && (
-          <p className="text-sm text-red-500 text-center">{error}</p>
-        )}
-
-        <button
-          onClick={handleEvaluate}
-          disabled={answeredCount === 0}
-          className={`w-full py-3 rounded-xl font-semibold text-sm transition-all ${
-            answeredCount > 0
-              ? 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white hover:from-indigo-400 hover:to-purple-400'
-              : isDark
-              ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
-              : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-          }`}
-        >
-          Submit Responses ({answeredCount}/{questions.length})
-        </button>
-      </div>
+        {/* Pulse animation for chips */}
+        <style>{`
+          .chip-pulse {
+            animation: chipPulse 1.5s ease-in-out 3;
+          }
+          @keyframes chipPulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(99,102,241,0.4); }
+            50% { box-shadow: 0 0 0 6px rgba(99,102,241,0); }
+          }
+        `}</style>
+      </FullScreen>
     );
   }
 
-  // Complete — show 4-component feedback
-  return (
-    <div className="px-3 pb-4 space-y-3">
-      <div className={`rounded-xl p-3 ${isDark ? 'bg-indigo-900/30 border border-indigo-700' : 'bg-indigo-50 border border-indigo-200'}`}>
-        <p className={`text-sm font-semibold text-center ${isDark ? 'text-indigo-300' : 'text-indigo-700'}`}>
-          Discussion Feedback
-        </p>
-      </div>
+  // Feedback phase — one question at a time with accordion
+  if (phase === 'feedback') {
+    const currentQ = questions[currentIndex];
+    if (!currentQ) return null;
+    const fb = feedback.find(f => f.questionId === currentQ.id);
+    const typeInfo = TYPE_LABELS[currentQ.type] || TYPE_LABELS.connect;
+    const isLastFeedback = currentIndex === questions.length - 1;
 
-      {questions.map((q, idx) => {
-        const fb = feedback.find(f => f.questionId === q.id);
-        const typeInfo = TYPE_LABELS[q.type] || TYPE_LABELS.connect;
+    return (
+      <FullScreen>
+        {/* Header */}
+        <div className={`sticky top-0 z-20 ${isDark ? 'bg-slate-800 border-b border-slate-700' : 'bg-white/90 backdrop-blur border-b border-indigo-100'}`}>
+          <div className="px-4 py-3 flex items-center justify-between">
+            <span className={`text-sm font-semibold ${isDark ? 'text-indigo-300' : 'text-indigo-700'}`}>
+              Feedback
+            </span>
+            <StepDots total={questions.length} current={currentIndex} isDark={isDark} />
+            <span className={`text-xs font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+              {currentIndex + 1}/{questions.length}
+            </span>
+          </div>
+        </div>
 
-        return (
-          <div key={q.id} className={`rounded-xl border p-3 ${
-            isDark ? 'border-indigo-800 bg-slate-800' : 'border-indigo-200 bg-white'
-          }`}>
-            {/* Question header */}
-            <div className="flex items-start gap-2 mb-2">
-              <span className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+        {/* Main content */}
+        <div className="flex-1 overflow-y-auto p-4 max-w-lg mx-auto w-full">
+          {/* Question */}
+          <div className="mb-3">
+            <div className="flex items-center gap-2 mb-2">
+              <span className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
                 isDark ? 'bg-indigo-600 text-white' : 'bg-indigo-500 text-white'
               }`}>
-                {idx + 1}
+                {currentIndex + 1}
               </span>
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded ${isDark ? typeInfo.darkColor : typeInfo.color}`}>
-                    {typeInfo.label}
-                  </span>
-                </div>
-                <p className={`text-sm leading-snug ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
-                  {q.question}
-                </p>
-              </div>
+              <span className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded ${isDark ? typeInfo.darkColor : typeInfo.color}`}>
+                {typeInfo.label}
+              </span>
             </div>
-
-            {/* Student's answer */}
-            <div className={`ml-8 mb-2 text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-              <p className="italic">"{answers[q.id] || '(no answer)'}"</p>
-            </div>
-
-            {/* 4-component feedback */}
-            {fb && (
-              <div className="ml-8 space-y-2">
-                {/* Acknowledge & Recast */}
-                <div className={`text-sm ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                  <p>{fb.acknowledge}</p>
-                </div>
-
-                {/* Connect to Test */}
-                <div className={`text-sm ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                  <p>{fb.connectToTest}</p>
-                </div>
-
-                {/* Extend Thinking */}
-                <div className={`text-sm italic ${isDark ? 'text-indigo-300' : 'text-indigo-600'}`}>
-                  <p>{fb.extendThinking}</p>
-                </div>
-
-                {/* Vocabulary Reinforcement */}
-                {fb.vocabularyWord && (
-                  <div className={`rounded-lg p-2.5 ${isDark ? 'bg-slate-700/80' : 'bg-indigo-50'}`}>
-                    <p className={`text-xs font-semibold uppercase mb-1 ${isDark ? 'text-indigo-400' : 'text-indigo-500'}`}>
-                      Vocabulary
-                    </p>
-                    <p className={`text-sm ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
-                      <span className="font-bold">{fb.vocabularyWord}</span>
-                      {fb.vocabularyDefinition && (
-                        <span className={`${isDark ? 'text-slate-400' : 'text-slate-500'}`}> — {fb.vocabularyDefinition}</span>
-                      )}
-                    </p>
-                    {fb.vocabularySentence && (
-                      <p className={`text-sm mt-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                        "{fb.vocabularySentence}"
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
+            <p className={`text-sm leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+              {currentQ.question}
+            </p>
           </div>
-        );
-      })}
-    </div>
+
+          {/* Student's answer */}
+          <div className={`mb-4 p-3 rounded-lg ${isDark ? 'bg-slate-800' : 'bg-white'}`}>
+            <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Your answer:</p>
+            <p className={`text-sm italic ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+              "{answers[currentQ.id] || '(no answer)'}"
+            </p>
+          </div>
+
+          {/* Feedback sections */}
+          {fb && (
+            <div className="space-y-2">
+              <FeedbackSection
+                title="What You Said"
+                icon="💬"
+                content={fb.acknowledge}
+                defaultOpen={true}
+                borderColor="border-blue-400"
+                isDark={isDark}
+              />
+              <FeedbackSection
+                title="Connection"
+                icon="🔗"
+                content={fb.connectToTest}
+                defaultOpen={false}
+                borderColor="border-purple-400"
+                isDark={isDark}
+              />
+              <FeedbackSection
+                title="Think Further"
+                icon="💡"
+                content={fb.extendThinking}
+                defaultOpen={false}
+                borderColor="border-indigo-400"
+                isDark={isDark}
+              />
+
+              {/* Vocabulary — always visible */}
+              {fb.vocabularyWord && (
+                <div className={`rounded-lg border-l-4 border-teal-400 p-3 ${isDark ? 'bg-slate-700/50' : 'bg-teal-50'}`}>
+                  <p className={`text-xs font-semibold uppercase mb-1 ${isDark ? 'text-teal-400' : 'text-teal-600'}`}>
+                    📖 Vocabulary
+                  </p>
+                  <p className={`text-sm ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
+                    <span className="font-bold">{fb.vocabularyWord}</span>
+                    {fb.vocabularyDefinition && (
+                      <span className={`${isDark ? 'text-slate-400' : 'text-slate-500'}`}> — {fb.vocabularyDefinition}</span>
+                    )}
+                  </p>
+                  {fb.vocabularySentence && (
+                    <p className={`text-sm mt-1 italic ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                      "{fb.vocabularySentence}"
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Bottom navigation */}
+        <div className={`sticky bottom-0 p-4 ${isDark ? 'bg-slate-800 border-t border-slate-700' : 'bg-white/90 backdrop-blur border-t border-indigo-100'}`}>
+          <div className="flex gap-3 max-w-lg mx-auto">
+            {currentIndex > 0 && (
+              <button
+                onClick={() => setCurrentIndex(prev => prev - 1)}
+                className={`px-4 py-3 rounded-xl font-medium text-sm ${
+                  isDark ? 'bg-slate-700 text-slate-300 hover:bg-slate-600' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                Previous
+              </button>
+            )}
+            <button
+              onClick={() => {
+                if (isLastFeedback) {
+                  setPhase('done');
+                } else {
+                  setCurrentIndex(prev => prev + 1);
+                }
+              }}
+              className="flex-1 py-3 rounded-xl font-semibold text-sm bg-gradient-to-r from-indigo-500 to-purple-500 text-white hover:from-indigo-400 hover:to-purple-400 transition-all"
+            >
+              {isLastFeedback ? 'Finish' : 'Next'}
+            </button>
+          </div>
+        </div>
+      </FullScreen>
+    );
+  }
+
+  // Done — completion screen
+  return (
+    <FullScreen>
+      <div className="flex-1 flex items-center justify-center p-6">
+        <div className="text-center max-w-sm">
+          <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${
+            isDark ? 'bg-indigo-600' : 'bg-indigo-500'
+          }`}>
+            <span className="text-2xl text-white">✓</span>
+          </div>
+          <h2 className={`text-xl font-bold mb-2 ${isDark ? 'text-white' : 'text-slate-800'}`}>
+            Discussion Complete
+          </h2>
+          <p className={`text-sm mb-6 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+            You reflected on {questions.length} questions about the listening dialogue.
+            Keep thinking about these ideas — great discussions build understanding!
+          </p>
+          <button
+            onClick={onBack}
+            className={`px-6 py-3 rounded-xl font-semibold text-sm transition-all ${
+              isDark
+                ? 'bg-slate-700 text-slate-200 hover:bg-slate-600'
+                : 'bg-indigo-500 text-white hover:bg-indigo-400'
+            }`}
+          >
+            Back to Results
+          </button>
+        </div>
+      </div>
+    </FullScreen>
   );
 };
