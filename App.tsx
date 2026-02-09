@@ -143,8 +143,11 @@ const App: React.FC = () => {
   }, [elevenTTS.voices]);
 
   // Persist navigation state to sessionStorage so tab suspension doesn't lose it
+  // Don't persist 'student-test' — it requires in-memory test data that can't survive remount.
+  // URL-param access re-fetches on mount; preview mode should fall back to classroom.
   useEffect(() => {
-    sessionStorage.setItem('df_currentView', currentView);
+    const viewToSave = currentView === 'student-test' ? 'classroom' : currentView;
+    sessionStorage.setItem('df_currentView', viewToSave);
   }, [currentView]);
 
   useEffect(() => {
