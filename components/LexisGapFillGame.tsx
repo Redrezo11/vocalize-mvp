@@ -1,12 +1,12 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { LexisItem } from '../types';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { LexisItem, GapFillPhaseResult, GapFillPhaseItemResult } from '../types';
 import { ClassroomTheme } from './Settings';
 
 interface LexisGapFillGameProps {
   lexis: LexisItem[];
   theme?: ClassroomTheme;
-  onComplete: () => void;
-  onSkip: () => void;
+  onComplete: (results: GapFillPhaseResult) => void;
+  onSkip: (results: GapFillPhaseResult) => void;
 }
 
 interface GapFillQuestion {
@@ -87,6 +87,15 @@ export const LexisGapFillGame: React.FC<LexisGapFillGameProps> = ({
   const [answeredQuestions, setAnsweredQuestions] = useState<Set<string>>(new Set());
   const [viewingLastFeedback, setViewingLastFeedback] = useState(false);
 
+  // Session log tracking
+  const itemResults = useRef<GapFillPhaseItemResult[]>([]);
+  const hintUsedPerQuestion = useRef<Set<string>>(new Set());
+
+  const buildResults = (completed: boolean): GapFillPhaseResult => ({
+    completed,
+    items: itemResults.current,
+  });
+
   const currentQuestion = questions[currentIndex];
   const totalQuestions = questions.length;
   const progressPercent = totalQuestions > 0 ? (answeredQuestions.size / totalQuestions) * 100 : 0;
@@ -97,7 +106,7 @@ export const LexisGapFillGame: React.FC<LexisGapFillGameProps> = ({
   useEffect(() => {
     if (isComplete && allCorrect) {
       const timer = setTimeout(() => {
-        onComplete();
+        onComplete(buildResults(true));
       }, 1500);
       return () => clearTimeout(timer);
     }
@@ -113,6 +122,15 @@ export const LexisGapFillGame: React.FC<LexisGapFillGameProps> = ({
     if (isCorrect) {
       setCorrectCount(prev => prev + 1);
     }
+
+    // Log item result
+    itemResults.current.push({
+      lexisItemId: currentQuestion.id,
+      term: currentQuestion.correctAnswer,
+      selectedAnswer: answer,
+      correct: isCorrect,
+      usedHint: hintUsedPerQuestion.current.has(currentQuestion.id),
+    });
 
     setAnsweredQuestions(prev => new Set([...prev, currentQuestion.id]));
 
@@ -154,6 +172,9 @@ export const LexisGapFillGame: React.FC<LexisGapFillGameProps> = ({
     setCorrectCount(0);
     setAnsweredQuestions(new Set());
     setViewingLastFeedback(false);
+    // Clear session log tracking for fresh retry
+    itemResults.current = [];
+    hintUsedPerQuestion.current.clear();
   };
 
   // If no questions with examples, skip this game
@@ -163,7 +184,7 @@ export const LexisGapFillGame: React.FC<LexisGapFillGameProps> = ({
         <div className={`text-center max-w-md ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
           <p className="mb-4">No example sentences available for vocabulary practice.</p>
           <button
-            onClick={onSkip}
+            onClick={() => onSkip(buildResults(false))}
             className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700"
           >
             Continue to Questions
@@ -193,7 +214,7 @@ export const LexisGapFillGame: React.FC<LexisGapFillGameProps> = ({
               Try Again
             </button>
             <button
-              onClick={onSkip}
+              onClick={() => onSkip(buildResults(false))}
               className={`px-6 py-3 rounded-xl font-medium ${
                 isDark
                   ? 'bg-slate-700 text-slate-300 hover:bg-slate-600'
@@ -259,7 +280,7 @@ export const LexisGapFillGame: React.FC<LexisGapFillGameProps> = ({
               <div className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Question</div>
             </div>
             <button
-              onClick={onSkip}
+              onClick={() => onSkip(buildResults(false))}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                 isDark
                   ? 'bg-slate-700 text-slate-300 hover:bg-slate-600'
@@ -299,7 +320,7 @@ export const LexisGapFillGame: React.FC<LexisGapFillGameProps> = ({
           <div className="mb-6">
             {!showHint ? (
               <button
-                onClick={() => setShowHint(true)}
+                onClick={() => { setShowHint(true); hintUsedPerQuestion.current.add(currentQuestion.id); }}
                 className={`w-full p-3 rounded-xl text-base font-medium transition-all duration-200 border-2 border-dashed ${
                   isDark
                     ? 'border-slate-600 text-slate-400 hover:border-amber-500/50 hover:text-amber-400 hover:bg-amber-900/10'

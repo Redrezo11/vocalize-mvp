@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { SavedAudio, EngineType, ListeningTest } from '../types';
-import { PlayIcon, TrashIcon, PlusIcon, FileAudioIcon, FileTextIcon, ClipboardIcon, EditIcon } from './Icons';
+import { PlayIcon, TrashIcon, PlusIcon, FileAudioIcon, FileTextIcon, ClipboardIcon, EditIcon, SquareIcon, CheckSquareIcon } from './Icons';
 import { CreationMethodSelector, CreationMethod } from './CreationMethodSelector';
 import { ImportWizard, ImportData } from './ImportWizard';
 
@@ -21,6 +21,8 @@ interface AudioLibraryProps {
   onImportComplete: (data: ImportData) => void;
   onViewDetail: (audio: SavedAudio) => void;
   onViewTest?: (test: ListeningTest) => void;
+  onBatchDelete?: (audios: SavedAudio[]) => Promise<void>;
+  onBatchDeleteTests?: (tests: ListeningTest[]) => Promise<void>;
 }
 
 const formatDate = (dateStr: string): string => {
@@ -64,11 +66,19 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
   onImportComplete,
   onViewDetail,
   onViewTest,
+  onBatchDelete,
+  onBatchDeleteTests,
 }) => {
   console.log('[AudioLibrary] Rendering with initialTab =', initialTab);
   const [activeTab, setActiveTab] = useState<LibraryTab>(initialTab);
   const [showMethodSelector, setShowMethodSelector] = useState(false);
   const [showImportWizard, setShowImportWizard] = useState(false);
+
+  // Batch selection state
+  const [isSelecting, setIsSelecting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const handleMethodSelect = (method: CreationMethod) => {
     setShowMethodSelector(false);
@@ -99,6 +109,13 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
     setActiveTab(initialTab);
   }, [initialTab]);
 
+  // Clear selection when tab changes
+  useEffect(() => {
+    setIsSelecting(false);
+    setSelectedIds(new Set());
+    setShowDeleteConfirm(false);
+  }, [activeTab]);
+
   // Separate audio entries from transcript-only entries
   const audioEntries = useMemo(
     () => savedAudios.filter(a => !a.isTranscriptOnly),
@@ -110,6 +127,58 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
   );
 
   const currentEntries = activeTab === 'audio' ? audioEntries : activeTab === 'transcripts' ? transcriptEntries : [];
+
+  // Selection helpers
+  const currentItemCount = activeTab === 'tests' ? tests.length : currentEntries.length;
+  const allSelected = selectedIds.size > 0 && selectedIds.size === currentItemCount;
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    if (activeTab === 'tests') {
+      setSelectedIds(new Set(tests.map(t => t.id)));
+    } else {
+      setSelectedIds(new Set(currentEntries.map(a => a.id)));
+    }
+  };
+
+  const deselectAll = () => setSelectedIds(new Set());
+
+  const exitSelectionMode = () => {
+    setIsSelecting(false);
+    setSelectedIds(new Set());
+    setShowDeleteConfirm(false);
+  };
+
+  const handleBatchDelete = async () => {
+    if (selectedIds.size === 0) return;
+    setIsDeleting(true);
+    try {
+      if (activeTab === 'tests') {
+        if (onBatchDeleteTests) {
+          const selectedTests = tests.filter(t => selectedIds.has(t.id));
+          await onBatchDeleteTests(selectedTests);
+        }
+      } else {
+        if (onBatchDelete) {
+          const selectedAudios = currentEntries.filter(a => selectedIds.has(a.id));
+          await onBatchDelete(selectedAudios);
+        }
+      }
+      exitSelectionMode();
+    } catch (err) {
+      console.error('Batch delete failed:', err);
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteConfirm(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -128,13 +197,45 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
             {audioEntries.length} audio, {transcriptEntries.length} transcripts, {tests.length} tests
           </p>
         </div>
-        <button
-          onClick={() => setShowMethodSelector(true)}
-          className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-xl font-semibold hover:from-indigo-500 hover:to-violet-500 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 shadow-lg shadow-indigo-500/30"
-        >
-          <PlusIcon className="w-4 h-4" />
-          Create New
-        </button>
+        <div className="flex items-center gap-2">
+          {isSelecting ? (
+            <>
+              <span className="text-sm text-slate-600 font-medium">
+                {selectedIds.size} selected
+              </span>
+              <button
+                onClick={allSelected ? deselectAll : selectAll}
+                className="px-4 py-2 text-sm font-medium text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all duration-200"
+              >
+                {allSelected ? 'Deselect All' : 'Select All'}
+              </button>
+              <button
+                onClick={exitSelectionMode}
+                className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition-all duration-200"
+              >
+                Cancel
+              </button>
+            </>
+          ) : (
+            <>
+              {currentItemCount > 0 && (
+                <button
+                  onClick={() => setIsSelecting(true)}
+                  className="px-4 py-2.5 text-sm font-medium text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-xl border border-slate-200 transition-all duration-200"
+                >
+                  Select
+                </button>
+              )}
+              <button
+                onClick={() => setShowMethodSelector(true)}
+                className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-xl font-semibold hover:from-indigo-500 hover:to-violet-500 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 shadow-lg shadow-indigo-500/30"
+              >
+                <PlusIcon className="w-4 h-4" />
+                Create New
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Tabs */}
@@ -206,10 +307,23 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
             {tests.map((test) => (
               <div
                 key={test.id}
-                className="bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/60 p-5 hover:border-indigo-200 hover:shadow-lg hover:shadow-indigo-500/5 hover:scale-[1.01] transition-all duration-200 cursor-pointer group"
-                onClick={() => onViewTest?.(test)}
+                className={`bg-white/80 backdrop-blur-sm rounded-2xl border p-5 transition-all duration-200 cursor-pointer group ${
+                  isSelecting && selectedIds.has(test.id)
+                    ? 'border-indigo-400 bg-indigo-50/50 shadow-md shadow-indigo-500/10'
+                    : 'border-slate-200/60 hover:border-indigo-200 hover:shadow-lg hover:shadow-indigo-500/5 hover:scale-[1.01]'
+                }`}
+                onClick={() => isSelecting ? toggleSelect(test.id) : onViewTest?.(test)}
               >
                 <div className="flex items-start justify-between gap-4">
+                  {isSelecting && (
+                    <div className="flex items-center pt-1">
+                      {selectedIds.has(test.id) ? (
+                        <CheckSquareIcon className="w-5 h-5 text-indigo-600" />
+                      ) : (
+                        <SquareIcon className="w-5 h-5 text-slate-300" />
+                      )}
+                    </div>
+                  )}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <h3 className="font-bold text-slate-900 truncate">{test.title}</h3>
@@ -232,32 +346,34 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
                       {test.questions[0]?.questionText ? truncateText(test.questions[0].questionText, 150) : 'No questions'}
                     </p>
                   </div>
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200">
-                    {onEditTest && (
+                  {!isSelecting && (
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200">
+                      {onEditTest && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onEditTest(test);
+                          }}
+                          className="p-2.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all duration-200"
+                          title="Edit"
+                        >
+                          <EditIcon className="w-4 h-4" />
+                        </button>
+                      )}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          onEditTest(test);
+                          if (confirm('Are you sure you want to delete this test?')) {
+                            onDeleteTest?.(test);
+                          }
                         }}
-                        className="p-2.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all duration-200"
-                        title="Edit"
+                        className="p-2.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200"
+                        title="Delete"
                       >
-                        <EditIcon className="w-4 h-4" />
+                        <TrashIcon className="w-4 h-4" />
                       </button>
-                    )}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (confirm('Are you sure you want to delete this test?')) {
-                          onDeleteTest?.(test);
-                        }
-                      }}
-                      className="p-2.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200"
-                      title="Delete"
-                    >
-                      <TrashIcon className="w-4 h-4" />
-                    </button>
-                  </div>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -299,10 +415,23 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
             {currentEntries.map((audio) => (
               <div
                 key={audio.id}
-                className="bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/60 p-5 hover:border-indigo-200 hover:shadow-lg hover:shadow-indigo-500/5 hover:scale-[1.01] transition-all duration-200 cursor-pointer group"
-                onClick={() => onViewDetail(audio)}
+                className={`bg-white/80 backdrop-blur-sm rounded-2xl border p-5 transition-all duration-200 cursor-pointer group ${
+                  isSelecting && selectedIds.has(audio.id)
+                    ? 'border-indigo-400 bg-indigo-50/50 shadow-md shadow-indigo-500/10'
+                    : 'border-slate-200/60 hover:border-indigo-200 hover:shadow-lg hover:shadow-indigo-500/5 hover:scale-[1.01]'
+                }`}
+                onClick={() => isSelecting ? toggleSelect(audio.id) : onViewDetail(audio)}
               >
                 <div className="flex items-start justify-between gap-4">
+                  {isSelecting && (
+                    <div className="flex items-center pt-1">
+                      {selectedIds.has(audio.id) ? (
+                        <CheckSquareIcon className="w-5 h-5 text-indigo-600" />
+                      ) : (
+                        <SquareIcon className="w-5 h-5 text-slate-300" />
+                      )}
+                    </div>
+                  )}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <h3 className="font-bold text-slate-900 truncate">{audio.title}</h3>
@@ -327,32 +456,34 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
                       {truncateText(audio.transcript, 150)}
                     </p>
                   </div>
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200">
-                    {!audio.isTranscriptOnly && (
+                  {!isSelecting && (
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200">
+                      {!audio.isTranscriptOnly && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onPlay(audio);
+                          }}
+                          className="p-2.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all duration-200"
+                          title="Play"
+                        >
+                          <PlayIcon className="w-4 h-4" />
+                        </button>
+                      )}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          onPlay(audio);
+                          if (confirm(`Are you sure you want to delete this ${audio.isTranscriptOnly ? 'transcript' : 'audio'}?`)) {
+                            onDelete(audio);
+                          }
                         }}
-                        className="p-2.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all duration-200"
-                        title="Play"
+                        className="p-2.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200"
+                        title="Delete"
                       >
-                        <PlayIcon className="w-4 h-4" />
+                        <TrashIcon className="w-4 h-4" />
                       </button>
-                    )}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (confirm(`Are you sure you want to delete this ${audio.isTranscriptOnly ? 'transcript' : 'audio'}?`)) {
-                          onDelete(audio);
-                        }
-                      }}
-                      className="p-2.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200"
-                      title="Delete"
-                    >
-                      <TrashIcon className="w-4 h-4" />
-                    </button>
-                  </div>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -373,6 +504,52 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
         onClose={() => setShowImportWizard(false)}
         onComplete={handleImportComplete}
       />
+
+      {/* Batch Action Bar */}
+      {isSelecting && selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40">
+          <div className="flex items-center gap-4 px-6 py-3 bg-slate-900 text-white rounded-2xl shadow-2xl shadow-slate-900/40">
+            <span className="text-sm font-medium">
+              {selectedIds.size} {selectedIds.size === 1 ? 'item' : 'items'} selected
+            </span>
+            <div className="w-px h-6 bg-slate-700" />
+            {showDeleteConfirm ? (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-red-300">Delete {selectedIds.size} {selectedIds.size === 1 ? 'item' : 'items'}?</span>
+                <button
+                  onClick={handleBatchDelete}
+                  disabled={isDeleting}
+                  className="px-4 py-1.5 bg-red-500 hover:bg-red-400 text-white text-sm font-semibold rounded-lg transition-all duration-200 disabled:opacity-50"
+                >
+                  {isDeleting ? (
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Deleting...
+                    </div>
+                  ) : (
+                    'Confirm'
+                  )}
+                </button>
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  disabled={isDeleting}
+                  className="px-3 py-1.5 text-slate-300 hover:text-white text-sm font-medium rounded-lg transition-all duration-200"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                className="flex items-center gap-2 px-4 py-1.5 bg-red-500/20 hover:bg-red-500 text-red-300 hover:text-white text-sm font-semibold rounded-lg transition-all duration-200"
+              >
+                <TrashIcon className="w-4 h-4" />
+                Delete
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

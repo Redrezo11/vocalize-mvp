@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { TrueFalseItem } from '../types';
+import { TrueFalseItem, PreviewTrueFalseResult } from '../types';
 import { ClassroomTheme } from './Settings';
 
 interface TrueFalseActivityProps {
   items: TrueFalseItem[];
   theme?: ClassroomTheme;
-  onComplete: () => void;
+  onComplete: (results: PreviewTrueFalseResult[]) => void;
   onSkip: () => void;
 }
 
@@ -36,7 +36,14 @@ export const TrueFalseActivity: React.FC<TrueFalseActivityProps> = ({
   const handleContinue = () => {
     setShowResult(false);
     if (isLastItem) {
-      onComplete();
+      const results: PreviewTrueFalseResult[] = items.map(item => ({
+        itemId: item.id,
+        statement: item.statement,
+        correctAnswer: item.correctAnswer,
+        studentAnswer: answers[item.id] ?? null,
+        correct: answers[item.id] === item.correctAnswer,
+      }));
+      onComplete(results);
     } else {
       setCurrentIndex(prev => prev + 1);
     }

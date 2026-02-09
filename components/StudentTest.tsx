@@ -1,16 +1,18 @@
-import React, { useState, useCallback } from 'react';
-import { ListeningTest } from '../types';
+import React, { useState, useCallback, useRef } from 'react';
+import { ListeningTest, TestSessionLog, MatchPhaseResult, GapFillPhaseResult, PreviewPhaseResult, QuestionsItemResult } from '../types';
 import { CheckCircleIcon } from './Icons';
-import { ClassroomTheme } from './Settings';
+import { ClassroomTheme, ContentModel } from './Settings';
 import { LexisMatchGame } from './LexisMatchGame';
 import { LexisGapFillGame } from './LexisGapFillGame';
 import { PreviewPhase } from './PreviewPhase';
+import { FollowUpQuestions } from './FollowUpQuestions';
 
 interface StudentTestProps {
   test: ListeningTest;
   theme?: ClassroomTheme;
   isPreview?: boolean;
   onExitPreview?: () => void;
+  contentModel?: ContentModel;
 }
 
 // SessionStorage key for tracking completed pre-test activities per test
@@ -44,7 +46,7 @@ const getInitialTestPhase = (test: ListeningTest, isPreview: boolean): TestPhase
   return 'questions';
 };
 
-export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light', isPreview = false, onExitPreview }) => {
+export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light', isPreview = false, onExitPreview, contentModel = 'gpt-5-mini' }) => {
   const isDark = theme === 'dark';
   const [answers, setAnswers] = useState<{ [questionId: string]: string }>({});
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -53,6 +55,9 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
 
   // Single state machine for test phase: match → gapfill → preview → questions
   const [testPhase, setTestPhase] = useState<TestPhase>(() => getInitialTestPhase(test, isPreview));
+
+  // Session performance log (in-memory only, for follow-up evaluation)
+  const sessionLog = useRef<TestSessionLog>({ testId: test.id });
 
   // Check what activities are available
   const hasLexisGapFillGame = test.lexis && test.lexis.some(item => item.example);
@@ -66,7 +71,8 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
     } catch { /* sessionStorage unavailable */ }
   }, [test.id, isPreview]);
 
-  const advanceFromMatch = useCallback(() => {
+  const advanceFromMatch = useCallback((results: MatchPhaseResult) => {
+    sessionLog.current.match = results;
     if (hasLexisGapFillGame) {
       setTestPhase('gapfill');
     } else if (hasPreviewActivities) {
@@ -77,7 +83,8 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
     }
   }, [hasLexisGapFillGame, hasPreviewActivities, markActivitiesDone]);
 
-  const advanceFromGapFill = useCallback(() => {
+  const advanceFromGapFill = useCallback((results: GapFillPhaseResult) => {
+    sessionLog.current.gapFill = results;
     if (hasPreviewActivities) {
       setTestPhase('preview');
     } else {
@@ -86,7 +93,8 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
     }
   }, [hasPreviewActivities, markActivitiesDone]);
 
-  const advanceFromPreview = useCallback(() => {
+  const advanceFromPreview = useCallback((results: PreviewPhaseResult) => {
+    sessionLog.current.preview = results;
     setTestPhase('questions');
     markActivitiesDone();
   }, [markActivitiesDone]);
@@ -101,16 +109,28 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
   };
 
   const handleConfirmSubmit = () => {
+    const questionResults: QuestionsItemResult[] = [];
     let correct = 0;
     test.questions.forEach(q => {
       const userAnswer = answers[q.id]?.toLowerCase().trim() || '';
       const correctAnswer = q.correctAnswer.toLowerCase().trim();
-      if (userAnswer === correctAnswer) {
-        correct++;
-      }
+      const isCorrect = userAnswer === correctAnswer;
+      if (isCorrect) correct++;
+      questionResults.push({
+        questionId: q.id,
+        questionText: q.questionText,
+        correctAnswer: q.correctAnswer,
+        studentAnswer: answers[q.id] || '',
+        correct: isCorrect,
+      });
     });
 
     const finalScore = Math.round((correct / test.questions.length) * 100);
+
+    // Store questions phase in session log
+    sessionLog.current.questions = { score: finalScore, items: questionResults };
+    console.log('[SessionLog]', sessionLog.current);
+
     setScore(finalScore);
     setIsSubmitted(true);
     setShowConfirmDialog(false);
@@ -368,6 +388,17 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
             );
           })}
         </div>
+
+        {/* Follow-Up Questions (after submission, not in preview mode) */}
+        {isSubmitted && !isPreview && (
+          <FollowUpQuestions
+            sessionLog={sessionLog.current}
+            audioId={test.audioId}
+            test={test}
+            contentModel={contentModel}
+            theme={theme}
+          />
+        )}
 
         {/* Bottom padding for safe area */}
         <div className="h-4" />

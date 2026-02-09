@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { PredictionItem } from '../types';
+import { PredictionItem, PreviewPredictionResult } from '../types';
 import { ClassroomTheme } from './Settings';
 
 interface PredictionActivityProps {
   items: PredictionItem[];
   theme?: ClassroomTheme;
-  onComplete: () => void;
+  onComplete: (results: PreviewPredictionResult[]) => void;
   onSkip: () => void;
 }
 
@@ -30,7 +30,12 @@ export const PredictionActivity: React.FC<PredictionActivityProps> = ({
 
   const handleNext = () => {
     if (isLastItem) {
-      onComplete();
+      const results: PreviewPredictionResult[] = items.map(item => ({
+        itemId: item.id,
+        question: item.question,
+        selectedOption: answers[item.id] || '',
+      }));
+      onComplete(results);
     } else {
       setCurrentIndex(prev => prev + 1);
     }

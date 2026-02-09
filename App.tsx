@@ -870,6 +870,38 @@ const App: React.FC = () => {
     }
   };
 
+  // Batch delete handlers
+  const handleBatchDelete = async (audios: SavedAudio[]) => {
+    const results = await Promise.allSettled(
+      audios.map(audio => audioStorage.remove(audio.id))
+    );
+    const failures = results.filter(r => r.status === 'rejected');
+    if (failures.length > 0) {
+      alert(`Failed to delete ${failures.length} of ${audios.length} items.`);
+    }
+  };
+
+  const handleBatchDeleteTests = async (testsToDelete: ListeningTest[]) => {
+    const results = await Promise.allSettled(
+      testsToDelete.map(async (test) => {
+        const response = await fetch(`${API_BASE}/tests/${test.id}`, {
+          method: 'DELETE',
+        });
+        if (!response.ok) throw new Error(`Failed to delete test ${test.id}`);
+        return test.id;
+      })
+    );
+    const deletedIds = results
+      .filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled')
+      .map(r => r.value);
+    setAllTests(prev => prev.filter(t => !deletedIds.includes(t.id)));
+    setAllTestsLastFetched(0);
+    const failures = results.filter(r => r.status === 'rejected');
+    if (failures.length > 0) {
+      alert(`Failed to delete ${failures.length} of ${testsToDelete.length} tests.`);
+    }
+  };
+
   // Transcript-only mode handlers
   const handleSaveTranscript = async (title: string, transcript: string, speakers: string[]) => {
     setIsSavingTranscript(true);
@@ -1352,6 +1384,8 @@ const App: React.FC = () => {
           onImportComplete={handleImportComplete}
           onViewDetail={handleViewDetail}
           onViewTest={handleViewTestFromLibrary}
+          onBatchDelete={handleBatchDelete}
+          onBatchDeleteTests={handleBatchDeleteTests}
         />
       </Suspense>
     </main>
@@ -1507,6 +1541,7 @@ const App: React.FC = () => {
           theme={settingsHook.settings.classroomTheme}
           isPreview={isPreviewMode}
           onExitPreview={handleExitPreview}
+          contentModel={settingsHook.settings.contentModel}
         />
       </Suspense>
     );

@@ -203,3 +203,99 @@ export interface TestAttempt {
   score?: number;
   completedAt?: string;
 }
+
+// === Session Performance Log Types ===
+
+export interface MatchPhaseItemResult {
+  lexisItemId: string;
+  term: string;
+  attemptsBeforeMatch: number;
+  matched: boolean;
+}
+
+export interface MatchPhaseResult {
+  completed: boolean;
+  totalAttempts: number;
+  items: MatchPhaseItemResult[];
+}
+
+export interface GapFillPhaseItemResult {
+  lexisItemId: string;
+  term: string;
+  selectedAnswer: string;
+  correct: boolean;
+  usedHint: boolean;
+}
+
+export interface GapFillPhaseResult {
+  completed: boolean;
+  items: GapFillPhaseItemResult[];
+}
+
+export interface PreviewPredictionResult {
+  itemId: string;
+  question: string;
+  selectedOption: string;
+}
+
+export interface PreviewWordAssocResult {
+  itemId: string;
+  word: string;
+  inDialogue: boolean;
+  studentSelected: boolean;
+  correct: boolean;
+}
+
+export interface PreviewTrueFalseResult {
+  itemId: string;
+  statement: string;
+  correctAnswer: boolean;
+  studentAnswer: boolean | null;
+  correct: boolean;
+}
+
+export interface PreviewPhaseResult {
+  completed: boolean;
+  prediction?: PreviewPredictionResult[];
+  wordAssociation?: PreviewWordAssocResult[];
+  trueFalse?: PreviewTrueFalseResult[];
+}
+
+export interface QuestionsItemResult {
+  questionId: string;
+  questionText: string;
+  correctAnswer: string;
+  studentAnswer: string;
+  correct: boolean;
+}
+
+export interface QuestionsPhaseResult {
+  score: number;
+  items: QuestionsItemResult[];
+}
+
+export interface TestSessionLog {
+  testId: string;
+  match?: MatchPhaseResult;
+  gapFill?: GapFillPhaseResult;
+  preview?: PreviewPhaseResult;
+  questions?: QuestionsPhaseResult;
+}
+
+// Follow-up discussion questions (post-test, Bloom's taxonomy progression)
+export interface FollowUpQuestion {
+  id: string;
+  type: 'connect' | 'compare' | 'judge';
+  question: string;
+  questionArabic?: string;
+}
+
+export interface FollowUpFeedbackItem {
+  questionId: string;
+  acknowledge: string;
+  connectToTest: string;
+  extendThinking: string;
+  vocabularyWord: string;
+  vocabularyDefinition: string;
+  vocabularySentence: string;
+}

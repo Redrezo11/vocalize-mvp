@@ -1,11 +1,11 @@
 import React, { useState, useMemo } from 'react';
-import { WordAssociationItem } from '../types';
+import { WordAssociationItem, PreviewWordAssocResult } from '../types';
 import { ClassroomTheme } from './Settings';
 
 interface WordAssociationActivityProps {
   items: WordAssociationItem[];
   theme?: ClassroomTheme;
-  onComplete: () => void;
+  onComplete: (results: PreviewWordAssocResult[]) => void;
   onSkip: () => void;
 }
 
@@ -195,7 +195,16 @@ export const WordAssociationActivity: React.FC<WordAssociationActivityProps> = (
           </div>
         ) : (
           <button
-            onClick={onComplete}
+            onClick={() => {
+              const results: PreviewWordAssocResult[] = items.map(item => ({
+                itemId: item.id,
+                word: item.word,
+                inDialogue: item.inDialogue,
+                studentSelected: selectedWords.has(item.word),
+                correct: item.inDialogue === selectedWords.has(item.word),
+              }));
+              onComplete(results);
+            }}
             className="w-full py-3 rounded-xl font-semibold bg-gradient-to-r from-teal-500 to-cyan-500 text-white"
           >
             Continue to Listening

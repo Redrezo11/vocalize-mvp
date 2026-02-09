@@ -1,5 +1,8 @@
-import React, { useState, useCallback } from 'react';
-import { PreviewActivity, PredictionItem, WordAssociationItem, TrueFalseItem } from '../types';
+import React, { useState, useCallback, useRef } from 'react';
+import {
+  PreviewActivity, PredictionItem, WordAssociationItem, TrueFalseItem,
+  PreviewPhaseResult, PreviewPredictionResult, PreviewWordAssocResult, PreviewTrueFalseResult,
+} from '../types';
 import { ClassroomTheme } from './Settings';
 import { PredictionActivity } from './PredictionActivity';
 import { WordAssociationActivity } from './WordAssociationActivity';
@@ -8,8 +11,8 @@ import { TrueFalseActivity } from './TrueFalseActivity';
 interface PreviewPhaseProps {
   activities: PreviewActivity[];
   theme?: ClassroomTheme;
-  onComplete: () => void;
-  onSkip: () => void;
+  onComplete: (results: PreviewPhaseResult) => void;
+  onSkip: (results: PreviewPhaseResult) => void;
 }
 
 export const PreviewPhase: React.FC<PreviewPhaseProps> = ({
@@ -19,22 +22,45 @@ export const PreviewPhase: React.FC<PreviewPhaseProps> = ({
   onSkip,
 }) => {
   const [currentActivityIndex, setCurrentActivityIndex] = useState(0);
+  const previewResults = useRef<PreviewPhaseResult>({ completed: false });
 
   const currentActivity = activities[currentActivityIndex];
   const isLastActivity = currentActivityIndex === activities.length - 1;
 
-  const handleActivityComplete = useCallback(() => {
+  const handlePredictionComplete = useCallback((results: PreviewPredictionResult[]) => {
+    previewResults.current.prediction = results;
     if (isLastActivity) {
-      onComplete();
+      previewResults.current.completed = true;
+      onComplete(previewResults.current);
+    } else {
+      setCurrentActivityIndex(prev => prev + 1);
+    }
+  }, [isLastActivity, onComplete]);
+
+  const handleWordAssocComplete = useCallback((results: PreviewWordAssocResult[]) => {
+    previewResults.current.wordAssociation = results;
+    if (isLastActivity) {
+      previewResults.current.completed = true;
+      onComplete(previewResults.current);
+    } else {
+      setCurrentActivityIndex(prev => prev + 1);
+    }
+  }, [isLastActivity, onComplete]);
+
+  const handleTrueFalseComplete = useCallback((results: PreviewTrueFalseResult[]) => {
+    previewResults.current.trueFalse = results;
+    if (isLastActivity) {
+      previewResults.current.completed = true;
+      onComplete(previewResults.current);
     } else {
       setCurrentActivityIndex(prev => prev + 1);
     }
   }, [isLastActivity, onComplete]);
 
   const handleActivitySkip = useCallback(() => {
-    // Skipping an activity advances to the next one
     if (isLastActivity) {
-      onComplete();
+      previewResults.current.completed = true;
+      onComplete(previewResults.current);
     } else {
       setCurrentActivityIndex(prev => prev + 1);
     }
@@ -42,12 +68,12 @@ export const PreviewPhase: React.FC<PreviewPhaseProps> = ({
 
   // Handle skip all preview
   const handleSkipAll = useCallback(() => {
-    onSkip();
+    onSkip(previewResults.current);
   }, [onSkip]);
 
   if (!currentActivity || activities.length === 0) {
     // No activities, just complete
-    onComplete();
+    onComplete(previewResults.current);
     return null;
   }
 
@@ -58,7 +84,7 @@ export const PreviewPhase: React.FC<PreviewPhaseProps> = ({
         <PredictionActivity
           items={currentActivity.items as PredictionItem[]}
           theme={theme}
-          onComplete={handleActivityComplete}
+          onComplete={handlePredictionComplete}
           onSkip={isLastActivity ? handleSkipAll : handleActivitySkip}
         />
       );
@@ -68,7 +94,7 @@ export const PreviewPhase: React.FC<PreviewPhaseProps> = ({
         <WordAssociationActivity
           items={currentActivity.items as WordAssociationItem[]}
           theme={theme}
-          onComplete={handleActivityComplete}
+          onComplete={handleWordAssocComplete}
           onSkip={isLastActivity ? handleSkipAll : handleActivitySkip}
         />
       );
@@ -78,14 +104,14 @@ export const PreviewPhase: React.FC<PreviewPhaseProps> = ({
         <TrueFalseActivity
           items={currentActivity.items as TrueFalseItem[]}
           theme={theme}
-          onComplete={handleActivityComplete}
+          onComplete={handleTrueFalseComplete}
           onSkip={isLastActivity ? handleSkipAll : handleActivitySkip}
         />
       );
 
     default:
       // Unknown activity type, skip to next
-      handleActivityComplete();
+      handleActivitySkip();
       return null;
   }
 };

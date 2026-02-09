@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { LexisItem } from '../types';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { LexisItem, MatchPhaseResult } from '../types';
 import { ClassroomTheme } from './Settings';
 
 interface LexisMatchGameProps {
   lexis: LexisItem[];
   theme?: ClassroomTheme;
-  onComplete: () => void;
-  onSkip: () => void;
+  onComplete: (results: MatchPhaseResult) => void;
+  onSkip: (results: MatchPhaseResult) => void;
 }
 
 interface Card {
@@ -63,6 +63,22 @@ export const LexisMatchGame: React.FC<LexisMatchGameProps> = ({
   const [incorrectPair, setIncorrectPair] = useState<[string, string] | null>(null);
   const [attempts, setAttempts] = useState(0);
 
+  // Track wrong-guess count per pair for session log
+  const pairAttemptCounts = useRef<Map<string, number>>(new Map());
+
+  const buildResults = (completed: boolean): MatchPhaseResult => ({
+    completed,
+    totalAttempts: attempts,
+    items: lexis
+      .filter(item => item.definitionArabic)
+      .map(item => ({
+        lexisItemId: item.id,
+        term: item.term,
+        attemptsBeforeMatch: pairAttemptCounts.current.get(item.id) || 0,
+        matched: matchedPairs.has(item.id),
+      })),
+  });
+
   const totalPairs = cards.length / 2;
   const matchedCount = matchedPairs.size;
   const progressPercent = totalPairs > 0 ? (matchedCount / totalPairs) * 100 : 0;
@@ -73,7 +89,7 @@ export const LexisMatchGame: React.FC<LexisMatchGameProps> = ({
     if (isComplete) {
       // Small delay before calling complete to show final state
       const timer = setTimeout(() => {
-        onComplete();
+        onComplete(buildResults(true));
       }, 1500);
       return () => clearTimeout(timer);
     }
@@ -107,7 +123,10 @@ export const LexisMatchGame: React.FC<LexisMatchGameProps> = ({
         setMatchedPairs(prev => new Set([...prev, firstCard.pairId]));
         setSelectedCard(null);
       } else {
-        // No match - show error briefly
+        // No match - track wrong guesses per pair
+        pairAttemptCounts.current.set(firstCard.pairId, (pairAttemptCounts.current.get(firstCard.pairId) || 0) + 1);
+        pairAttemptCounts.current.set(clickedCard.pairId, (pairAttemptCounts.current.get(clickedCard.pairId) || 0) + 1);
+        // Show error briefly
         setIncorrectPair([selectedCard, cardId]);
         setTimeout(() => {
           setIncorrectPair(null);
@@ -131,7 +150,7 @@ export const LexisMatchGame: React.FC<LexisMatchGameProps> = ({
         <div className={`text-center max-w-md ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
           <p className="mb-4">No vocabulary items with translations available for this test.</p>
           <button
-            onClick={onSkip}
+            onClick={() => onSkip(buildResults(false))}
             className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700"
           >
             Continue to Questions
@@ -170,7 +189,7 @@ export const LexisMatchGame: React.FC<LexisMatchGameProps> = ({
               <div className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Matched</div>
             </div>
             <button
-              onClick={onSkip}
+              onClick={() => onSkip(buildResults(false))}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                 isDark
                   ? 'bg-slate-700 text-slate-300 hover:bg-slate-600'
