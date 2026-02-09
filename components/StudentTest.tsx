@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { ListeningTest, TestSessionLog, MatchPhaseResult, GapFillPhaseResult, PreviewPhaseResult, QuestionsItemResult } from '../types';
 import { CheckCircleIcon } from './Icons';
 import { ClassroomTheme, ContentModel } from './Settings';
@@ -17,6 +17,18 @@ interface StudentTestProps {
 
 // SessionStorage key for tracking completed pre-test activities per test
 const getActivitiesCompletedKey = (testId: string) => `test-activities-done-${testId}`;
+
+// SessionStorage key for full session state persistence across tab suspension
+const getSessionKey = (testId: string) => `st_${testId}`;
+
+interface SavedSessionState {
+  testPhase: TestPhase;
+  answers: { [questionId: string]: string };
+  isSubmitted: boolean;
+  score: number | null;
+  showDiscussion: boolean;
+  sessionLog: TestSessionLog;
+}
 
 // Test phase: match → gapfill → preview → questions
 type TestPhase = 'match' | 'gapfill' | 'preview' | 'questions';
@@ -48,14 +60,26 @@ const getInitialTestPhase = (test: ListeningTest, isPreview: boolean): TestPhase
 
 export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light', isPreview = false, onExitPreview, contentModel = 'gpt-5-mini' }) => {
   const isDark = theme === 'dark';
-  const [answers, setAnswers] = useState<{ [questionId: string]: string }>({});
-  const [isSubmitted, setIsSubmitted] = useState(false);
+
+  // Try to restore session state from sessionStorage (survives tab suspension)
+  const savedState = useMemo<SavedSessionState | null>(() => {
+    try {
+      const raw = sessionStorage.getItem(getSessionKey(test.id));
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return null;
+  }, [test.id]);
+
+  const [answers, setAnswers] = useState<{ [questionId: string]: string }>(savedState?.answers || {});
+  const [isSubmitted, setIsSubmitted] = useState(savedState?.isSubmitted || false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
-  const [score, setScore] = useState<number | null>(null);
-  const [showDiscussion, setShowDiscussion] = useState(false);
+  const [score, setScore] = useState<number | null>(savedState?.score ?? null);
+  const [showDiscussion, setShowDiscussion] = useState(savedState?.showDiscussion || false);
 
   // Single state machine for test phase: match → gapfill → preview → questions
-  const [testPhase, setTestPhase] = useState<TestPhase>(() => getInitialTestPhase(test, isPreview));
+  const [testPhase, setTestPhase] = useState<TestPhase>(
+    savedState?.testPhase || (() => getInitialTestPhase(test, isPreview))
+  );
 
   // Pre-fetch transcript on mount so it's ready when discussion starts
   const [transcript, setTranscript] = useState('');
@@ -68,8 +92,19 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
     }
   }, [test.audioId]);
 
-  // Session performance log (in-memory only, for follow-up evaluation)
-  const sessionLog = useRef<TestSessionLog>({ testId: test.id });
+  // Session performance log — restore from saved state if available
+  const sessionLog = useRef<TestSessionLog>(savedState?.sessionLog || { testId: test.id });
+
+  // Persist session state to sessionStorage on changes (survives tab suspension)
+  useEffect(() => {
+    const state: SavedSessionState = {
+      testPhase, answers, isSubmitted, score, showDiscussion,
+      sessionLog: sessionLog.current,
+    };
+    try {
+      sessionStorage.setItem(getSessionKey(test.id), JSON.stringify(state));
+    } catch {}
+  }, [testPhase, answers, isSubmitted, score, showDiscussion, test.id]);
 
   // Check what activities are available
   const hasLexisGapFillGame = test.lexis && test.lexis.some(item => item.example);

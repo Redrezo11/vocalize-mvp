@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { ListeningTest, TestSessionLog, FollowUpQuestion, FollowUpFeedbackItem } from '../types';
 import { ClassroomTheme, ContentModel } from './Settings';
 
@@ -25,6 +25,18 @@ const SENTENCE_STARTERS: Record<FollowUpQuestion['type'], string[]> = {
   compare: ['The difference is...', 'I noticed that...', 'This is similar to...'],
   judge: ['I agree because...', 'I disagree because...', 'In my opinion...'],
 };
+
+// SessionStorage key for discussion state persistence across tab suspension
+const getDiscSessionKey = (testId: string) => `st_${testId}_disc`;
+
+interface SavedDiscussionState {
+  phase: FollowUpPhase;
+  questions: FollowUpQuestion[];
+  answers: { [id: string]: string };
+  feedback: FollowUpFeedbackItem[];
+  currentIndex: number;
+  feedbackLang: 'en' | 'ar';
+}
 
 // Show chips for A1-B1 only
 function shouldShowChips(difficulty?: string): boolean {
@@ -373,14 +385,29 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
   onBack,
 }) => {
   const isDark = theme === 'dark';
-  const [phase, setPhase] = useState<FollowUpPhase>('generating');
-  const [questions, setQuestions] = useState<FollowUpQuestion[]>([]);
-  const [answers, setAnswers] = useState<{ [id: string]: string }>({});
-  const [feedback, setFeedback] = useState<FollowUpFeedbackItem[]>([]);
+
+  // Try to restore discussion state from sessionStorage (survives tab suspension)
+  const savedDisc = useMemo<SavedDiscussionState | null>(() => {
+    try {
+      const raw = sessionStorage.getItem(getDiscSessionKey(test.id));
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return null;
+  }, [test.id]);
+
+  // If restoring to 'evaluating' (transient API phase), fall back to 'answering'
+  const restoredPhase = savedDisc?.phase || 'generating';
+  const [phase, setPhase] = useState<FollowUpPhase>(
+    restoredPhase === 'evaluating' ? 'answering' : restoredPhase
+  );
+  const [questions, setQuestions] = useState<FollowUpQuestion[]>(savedDisc?.questions || []);
+  const [answers, setAnswers] = useState<{ [id: string]: string }>(savedDisc?.answers || {});
+  const [feedback, setFeedback] = useState<FollowUpFeedbackItem[]>(savedDisc?.feedback || []);
   const [error, setError] = useState<string | null>(null);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [feedbackLang, setFeedbackLang] = useState<'en' | 'ar'>('en');
-  const generatedRef = useRef(false);
+  const [currentIndex, setCurrentIndex] = useState(savedDisc?.currentIndex || 0);
+  const [feedbackLang, setFeedbackLang] = useState<'en' | 'ar'>(savedDisc?.feedbackLang || 'en');
+  // Skip auto-generate if we restored to a non-generating phase
+  const generatedRef = useRef(!!savedDisc && savedDisc.phase !== 'generating');
 
   const model = contentModel === 'gpt-5.2' ? 'gpt-5.2' : 'gpt-5-mini';
   const showChips = shouldShowChips(test.difficulty);
@@ -432,6 +459,16 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
       handleGenerate();
     }
   }, [handleGenerate]);
+
+  // Persist discussion state to sessionStorage on changes (survives tab suspension)
+  useEffect(() => {
+    const state: SavedDiscussionState = {
+      phase, questions, answers, feedback, currentIndex, feedbackLang,
+    };
+    try {
+      sessionStorage.setItem(getDiscSessionKey(test.id), JSON.stringify(state));
+    } catch {}
+  }, [phase, questions, answers, feedback, currentIndex, feedbackLang, test.id]);
 
   const handleEvaluate = async () => {
     setPhase('evaluating');
@@ -831,6 +868,8 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
               onClick={() => {
                 if (isLastFeedback) {
                   setPhase('done');
+                  // Clear persisted discussion state — session complete
+                  try { sessionStorage.removeItem(getDiscSessionKey(test.id)); } catch {}
                 } else {
                   setCurrentIndex(prev => prev + 1);
                 }

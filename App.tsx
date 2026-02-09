@@ -79,10 +79,14 @@ const App: React.FC = () => {
   const [studentTestId, setStudentTestId] = useState<string | null>(null);
   const [studentTest, setStudentTest] = useState<ListeningTest | null>(null);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
-  // Student test loading - detect URL param on initial render to show loading immediately
+  // Student test loading - detect URL param or sessionStorage restore to show loading immediately
   const [isLoadingStudentTest, setIsLoadingStudentTest] = useState<boolean>(() => {
     const params = new URLSearchParams(window.location.search);
-    return params.has('student-test');
+    if (params.has('student-test')) return true;
+    // Also show loading if restoring student-test view from sessionStorage
+    const savedView = sessionStorage.getItem('df_currentView');
+    if (savedView === 'student-test' && sessionStorage.getItem('df_studentTestId')) return true;
+    return false;
   });
   const [studentTestError, setStudentTestError] = useState<string | null>(null);
   const [isSavingTranscript, setIsSavingTranscript] = useState(false);
@@ -143,12 +147,27 @@ const App: React.FC = () => {
   }, [elevenTTS.voices]);
 
   // Persist navigation state to sessionStorage so tab suspension doesn't lose it
-  // Don't persist 'student-test' — it requires in-memory test data that can't survive remount.
-  // URL-param access re-fetches on mount; preview mode should fall back to classroom.
   useEffect(() => {
-    const viewToSave = currentView === 'student-test' ? 'classroom' : currentView;
-    sessionStorage.setItem('df_currentView', viewToSave);
+    sessionStorage.setItem('df_currentView', currentView);
   }, [currentView]);
+
+  // Persist student test ID so we can re-fetch on tab restore
+  useEffect(() => {
+    if (studentTest) {
+      sessionStorage.setItem('df_studentTestId', studentTest.id);
+    } else {
+      sessionStorage.removeItem('df_studentTestId');
+    }
+  }, [studentTest]);
+
+  // Persist preview mode flag
+  useEffect(() => {
+    if (isPreviewMode) {
+      sessionStorage.setItem('df_isPreviewMode', 'true');
+    } else {
+      sessionStorage.removeItem('df_isPreviewMode');
+    }
+  }, [isPreviewMode]);
 
   useEffect(() => {
     if (selectedAudio) {
@@ -1072,16 +1091,37 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Preview student view
+  // Restore student test from sessionStorage (when no URL param)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('student-test')) return; // URL param path handles itself
+
+    const savedView = sessionStorage.getItem('df_currentView');
+    const savedTestId = sessionStorage.getItem('df_studentTestId');
+    if (savedView === 'student-test' && savedTestId) {
+      setIsPreviewMode(sessionStorage.getItem('df_isPreviewMode') === 'true');
+      loadStudentTest(savedTestId);
+    }
+  }, []);
+
+  // Preview student view — clear previous session state so preview starts fresh
   const handlePreviewStudentView = (test: ListeningTest) => {
+    sessionStorage.removeItem(`st_${test.id}`);
+    sessionStorage.removeItem(`st_${test.id}_disc`);
     setStudentTest(test);
     setIsPreviewMode(true);
     setPreviewKey(prev => prev + 1); // Force remount to reset lexis games
     setCurrentView('student-test');
   };
 
-  // Exit preview
+  // Exit preview — clear persisted session state
   const handleExitPreview = () => {
+    if (studentTest) {
+      sessionStorage.removeItem(`st_${studentTest.id}`);
+      sessionStorage.removeItem(`st_${studentTest.id}_disc`);
+    }
+    sessionStorage.removeItem('df_studentTestId');
+    sessionStorage.removeItem('df_isPreviewMode');
     setIsPreviewMode(false);
     setCurrentView('classroom');
   };
