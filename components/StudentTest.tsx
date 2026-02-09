@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { ListeningTest, TestSessionLog, MatchPhaseResult, GapFillPhaseResult, PreviewPhaseResult, QuestionsItemResult } from '../types';
 import { CheckCircleIcon } from './Icons';
 import { ClassroomTheme, ContentModel } from './Settings';
@@ -56,6 +56,17 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
 
   // Single state machine for test phase: match → gapfill → preview → questions
   const [testPhase, setTestPhase] = useState<TestPhase>(() => getInitialTestPhase(test, isPreview));
+
+  // Pre-fetch transcript on mount so it's ready when discussion starts
+  const [transcript, setTranscript] = useState('');
+  useEffect(() => {
+    if (test.audioId) {
+      fetch(`/api/audio-entries/${test.audioId}`)
+        .then(r => r.ok ? r.json() : null)
+        .then(data => { if (data?.transcript) setTranscript(data.transcript); })
+        .catch(() => {}); // Silent fail — FollowUpQuestions has its own fallback
+    }
+  }, [test.audioId]);
 
   // Session performance log (in-memory only, for follow-up evaluation)
   const sessionLog = useRef<TestSessionLog>({ testId: test.id });
@@ -205,7 +216,7 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
     return (
       <FollowUpQuestions
         sessionLog={sessionLog.current}
-        audioId={test.audioId}
+        transcript={transcript}
         test={test}
         contentModel={contentModel}
         theme={theme}

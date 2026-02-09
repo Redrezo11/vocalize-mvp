@@ -4,7 +4,7 @@ import { ClassroomTheme, ContentModel } from './Settings';
 
 interface FollowUpQuestionsProps {
   sessionLog: TestSessionLog;
-  audioId: string;
+  transcript: string;
   test: ListeningTest;
   contentModel: ContentModel;
   theme?: ClassroomTheme;
@@ -98,11 +98,14 @@ function buildVocabulary(test: ListeningTest) {
   }));
 }
 
-async function callOpenAI(model: string, instructions: string, input: string): Promise<string> {
+async function callOpenAI(model: string, instructions: string, input: string, reasoning?: { effort: string }): Promise<string> {
   const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
   if (!apiKey || apiKey === 'PLACEHOLDER_API_KEY') {
     throw new Error('OpenAI API key not configured');
   }
+
+  const body: Record<string, unknown> = { model, instructions, input };
+  if (reasoning) body.reasoning = reasoning;
 
   const response = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
@@ -110,12 +113,7 @@ async function callOpenAI(model: string, instructions: string, input: string): P
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${apiKey}`,
     },
-    body: JSON.stringify({
-      model,
-      instructions,
-      input,
-      reasoning: { effort: 'medium' },
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {
@@ -126,13 +124,6 @@ async function callOpenAI(model: string, instructions: string, input: string): P
   const data = await response.json();
   const messageOutput = data.output?.find((o: { type: string }) => o.type === 'message');
   return messageOutput?.content?.[0]?.text || '';
-}
-
-async function fetchTranscript(audioId: string): Promise<string> {
-  const response = await fetch(`/api/audio-entries/${audioId}`);
-  if (!response.ok) throw new Error('Failed to fetch transcript');
-  const data = await response.json();
-  return data.transcript || '';
 }
 
 const GENERATE_INSTRUCTIONS = `You are an EFL post-listening discussion specialist. Your job is to generate exactly 3 open-ended discussion questions about a listening dialogue the student just completed.
@@ -201,6 +192,115 @@ const StepDots: React.FC<{ total: number; current: number; isDark: boolean }> = 
   </div>
 );
 
+// Progress stages for generating and evaluating
+const GENERATE_STAGES = [
+  { threshold: 0, label: 'Preparing your results...' },
+  { threshold: 15, label: 'Analyzing your answers...' },
+  { threshold: 40, label: 'Creating discussion questions...' },
+  { threshold: 75, label: 'Almost ready...' },
+];
+
+const EVALUATE_STAGES = [
+  { threshold: 0, label: 'Reading your responses...' },
+  { threshold: 15, label: 'Generating feedback...' },
+  { threshold: 40, label: 'Crafting personalized insights...' },
+  { threshold: 75, label: 'Almost ready...' },
+];
+
+// Animated progress loader with timed stages
+const ProgressLoader: React.FC<{
+  mode: 'generating' | 'evaluating';
+  isDark: boolean;
+  error: string | null;
+  onRetry: () => void;
+  onBack: () => void;
+}> = ({ mode, isDark, error, onRetry, onBack }) => {
+  const [progress, setProgress] = useState(0);
+  const startTime = useRef(Date.now());
+  const stages = mode === 'generating' ? GENERATE_STAGES : EVALUATE_STAGES;
+
+  useEffect(() => {
+    startTime.current = Date.now();
+    setProgress(0);
+    const interval = setInterval(() => {
+      const elapsed = (Date.now() - startTime.current) / 1000;
+      // Non-linear easing: fast start, slow crawl
+      let p: number;
+      if (elapsed < 0.8) p = (elapsed / 0.8) * 15;                    // 0-15% in 0.8s
+      else if (elapsed < 3) p = 15 + ((elapsed - 0.8) / 2.2) * 25;    // 15-40% in 2.2s
+      else if (elapsed < 8) p = 40 + ((elapsed - 3) / 5) * 35;        // 40-75% in 5s
+      else if (elapsed < 20) p = 75 + ((elapsed - 8) / 12) * 15;      // 75-90% in 12s
+      else p = 90 + Math.min((elapsed - 20) / 30, 1) * 5;             // 90-95% crawl
+      setProgress(Math.min(p, 95));
+    }, 100);
+    return () => clearInterval(interval);
+  }, [mode]);
+
+  // Determine current stage label
+  const currentLabel = [...stages].reverse().find(s => progress >= s.threshold)?.label || stages[0].label;
+  // Determine which step (0-2) for the dots
+  const stepIndex = progress < 15 ? 0 : progress < 75 ? 1 : 2;
+
+  return (
+    <>
+      {/* Back button */}
+      <div className={`px-4 py-3 ${isDark ? 'bg-slate-800' : 'bg-white/80 backdrop-blur'}`}>
+        <button onClick={onBack} className={`text-sm font-medium ${isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-700'}`}>
+          ← Back to Results
+        </button>
+      </div>
+      <div className="flex-1 flex items-center justify-center">
+        <div className="w-full max-w-xs text-center px-4">
+          {/* Progress bar */}
+          <div className={`h-2 rounded-full overflow-hidden mb-4 ${isDark ? 'bg-slate-700' : 'bg-slate-200'}`}>
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-300 ease-out"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+
+          {/* Status text */}
+          <p className={`text-sm font-medium mb-4 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+            {currentLabel}
+          </p>
+
+          {/* Step dots */}
+          <div className="flex items-center justify-center gap-3 mb-2">
+            {['Prepare', 'Generate', 'Done'].map((label, i) => (
+              <div key={label} className="flex flex-col items-center gap-1">
+                <div className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${
+                  i < stepIndex
+                    ? 'bg-indigo-500'
+                    : i === stepIndex
+                    ? 'bg-indigo-500 scale-125'
+                    : isDark ? 'bg-slate-600' : 'bg-slate-300'
+                }`} />
+                <span className={`text-[10px] ${
+                  i <= stepIndex
+                    ? isDark ? 'text-indigo-400' : 'text-indigo-600'
+                    : isDark ? 'text-slate-600' : 'text-slate-400'
+                }`}>{label}</span>
+              </div>
+            ))}
+          </div>
+
+          {error && (
+            <div className="mt-4">
+              <p className="text-sm text-red-500 mb-2">{error}</p>
+              <button
+                onClick={onRetry}
+                className="px-4 py-2 rounded-lg text-sm font-medium bg-indigo-500 text-white hover:bg-indigo-400"
+              >
+                Try Again
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+};
+
 // Accordion section for feedback
 const FeedbackSection: React.FC<{
   title: string;
@@ -238,7 +338,7 @@ const FeedbackSection: React.FC<{
 
 export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
   sessionLog,
-  audioId,
+  transcript: transcriptProp,
   test,
   contentModel,
   theme = 'light',
@@ -250,7 +350,6 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
   const [answers, setAnswers] = useState<{ [id: string]: string }>({});
   const [feedback, setFeedback] = useState<FollowUpFeedbackItem[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [transcript, setTranscript] = useState<string>('');
   const [currentIndex, setCurrentIndex] = useState(0);
   const generatedRef = useRef(false);
 
@@ -262,12 +361,6 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
     setError(null);
 
     try {
-      let currentTranscript = transcript;
-      if (!currentTranscript) {
-        currentTranscript = await fetchTranscript(audioId);
-        setTranscript(currentTranscript);
-      }
-
       const weaknesses = buildWeaknessSummary(sessionLog);
       const mcqResults = buildMCQResults(sessionLog);
       const vocabulary = buildVocabulary(test);
@@ -275,13 +368,14 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
 
       const input = JSON.stringify({
         difficulty: test.difficulty || 'B1',
-        transcript: currentTranscript.slice(0, 3000),
+        transcript: (transcriptProp || '').slice(0, 3000),
         mcqResults,
         mcqScore,
         vocabulary,
         weaknessSummary: weaknesses,
       });
 
+      // No reasoning for generation — speed over depth
       const text = await callOpenAI(model, GENERATE_INSTRUCTIONS, input);
       console.log('[FollowUp] Generate response:', text);
 
@@ -300,7 +394,7 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
       console.error('[FollowUp] Generate error:', err);
       setError(err instanceof Error ? err.message : 'Failed to generate questions');
     }
-  }, [audioId, model, sessionLog, test, transcript]);
+  }, [model, sessionLog, test, transcriptProp]);
 
   // Auto-generate on mount
   useEffect(() => {
@@ -327,13 +421,14 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
 
       const input = JSON.stringify({
         difficulty: test.difficulty || 'B1',
-        transcript: transcript.slice(0, 3000),
+        transcript: (transcriptProp || '').slice(0, 3000),
         questionsAndAnswers,
         mcqResults,
         vocabulary,
       });
 
-      const text = await callOpenAI(model, EVALUATE_INSTRUCTIONS, input);
+      // Low reasoning for evaluation — needs some thought for quality feedback
+      const text = await callOpenAI(model, EVALUATE_INSTRUCTIONS, input, { effort: 'low' });
       console.log('[FollowUp] Evaluate response:', text);
 
       const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -380,31 +475,13 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
   if (phase === 'generating' || phase === 'evaluating') {
     return (
       <FullScreen>
-        {/* Back button */}
-        <div className={`px-4 py-3 ${isDark ? 'bg-slate-800' : 'bg-white/80 backdrop-blur'}`}>
-          <button onClick={onBack} className={`text-sm font-medium ${isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-700'}`}>
-            ← Back to Results
-          </button>
-        </div>
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center">
-            <div className="inline-block w-8 h-8 border-3 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4" />
-            <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-              {phase === 'generating' ? 'Creating discussion questions...' : 'Reading your responses...'}
-            </p>
-            {error && (
-              <div className="mt-4">
-                <p className="text-sm text-red-500 mb-2">{error}</p>
-                <button
-                  onClick={handleGenerate}
-                  className="px-4 py-2 rounded-lg text-sm font-medium bg-indigo-500 text-white hover:bg-indigo-400"
-                >
-                  Try Again
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
+        <ProgressLoader
+          mode={phase}
+          isDark={isDark}
+          error={error}
+          onRetry={handleGenerate}
+          onBack={onBack}
+        />
       </FullScreen>
     );
   }
