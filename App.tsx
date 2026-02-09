@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef, lazy, Suspense } from 'react';
 import { useBrowserTTS } from './hooks/useBrowserTTS';
 import { useGeminiTTS } from './hooks/useGeminiTTS';
 import { useElevenLabsTTS } from './hooks/useElevenLabsTTS';
@@ -78,14 +78,29 @@ const App: React.FC = () => {
   const [previewKey, setPreviewKey] = useState(0); // Key to force StudentTest remount on preview
   const [studentTestId, setStudentTestId] = useState<string | null>(null);
   const [studentTest, setStudentTest] = useState<ListeningTest | null>(null);
-  const [isPreviewMode, setIsPreviewMode] = useState(false);
+  // Restore preview mode from sessionStorage (only when no URL param — QR code students are never in preview)
+  const [isPreviewMode, setIsPreviewMode] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('student-test')) return false;
+    const savedView = sessionStorage.getItem('df_currentView');
+    if (savedView === 'student-test' && sessionStorage.getItem('df_studentTestId')) {
+      return sessionStorage.getItem('df_isPreviewMode') === 'true';
+    }
+    return false;
+  });
+  // Capture restore test ID synchronously before effects can erase sessionStorage
+  const pendingRestoreTestId = useRef<string | null>(null);
   // Student test loading - detect URL param or sessionStorage restore to show loading immediately
   const [isLoadingStudentTest, setIsLoadingStudentTest] = useState<boolean>(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.has('student-test')) return true;
     // Also show loading if restoring student-test view from sessionStorage
     const savedView = sessionStorage.getItem('df_currentView');
-    if (savedView === 'student-test' && sessionStorage.getItem('df_studentTestId')) return true;
+    const savedTestId = sessionStorage.getItem('df_studentTestId');
+    if (savedView === 'student-test' && savedTestId) {
+      pendingRestoreTestId.current = savedTestId; // Capture before effects erase it
+      return true;
+    }
     return false;
   });
   const [studentTestError, setStudentTestError] = useState<string | null>(null);
@@ -1045,11 +1060,14 @@ const App: React.FC = () => {
     }
   };
 
-  // Load test for student view
+  // Load test for student view (with timeout to prevent infinite spinner on Android)
   const loadStudentTest = async (testId: string) => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
     try {
       setStudentTestError(null);
-      const response = await fetch(`${API_BASE}/tests/${testId}`);
+      const response = await fetch(`${API_BASE}/tests/${testId}`, { signal: controller.signal });
+      clearTimeout(timeout);
       if (!response.ok) {
         if (response.status === 404) {
           setStudentTestError('Test not found. Please check the link and try again.');
@@ -1074,8 +1092,13 @@ const App: React.FC = () => {
       setStudentTest(test);
       setCurrentView('student-test');
     } catch (error) {
+      clearTimeout(timeout);
       console.error('Failed to load student test:', error);
-      setStudentTestError('Network error. Please check your connection and try again.');
+      setStudentTestError(
+        error instanceof DOMException && error.name === 'AbortError'
+          ? 'Loading timed out. Please check your connection and try again.'
+          : 'Network error. Please check your connection and try again.'
+      );
     } finally {
       setIsLoadingStudentTest(false);
     }
@@ -1091,16 +1114,11 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Restore student test from sessionStorage (when no URL param)
+  // Restore student test from sessionStorage (uses ref captured synchronously before effects erased it)
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.has('student-test')) return; // URL param path handles itself
-
-    const savedView = sessionStorage.getItem('df_currentView');
-    const savedTestId = sessionStorage.getItem('df_studentTestId');
-    if (savedView === 'student-test' && savedTestId) {
-      setIsPreviewMode(sessionStorage.getItem('df_isPreviewMode') === 'true');
-      loadStudentTest(savedTestId);
+    if (pendingRestoreTestId.current) {
+      loadStudentTest(pendingRestoreTestId.current);
+      pendingRestoreTestId.current = null;
     }
   }, []);
 
