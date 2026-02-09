@@ -336,6 +336,13 @@ const FeedbackSection: React.FC<{
   );
 };
 
+// Full-screen layout wrapper — defined outside component to avoid remount on every render
+const FullScreen: React.FC<{ isDark: boolean; children: React.ReactNode }> = ({ isDark, children }) => (
+  <div className={`min-h-screen flex flex-col ${isDark ? 'bg-slate-900' : 'bg-gradient-to-br from-indigo-50 to-purple-50'}`}>
+    {children}
+  </div>
+);
+
 export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
   sessionLog,
   transcript: transcriptProp,
@@ -464,17 +471,10 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
   const hasCurrentAnswer = currentAnswer.trim().length > 0;
   const isLastQuestion = currentIndex === questions.length - 1;
 
-  // Full-screen layout wrapper
-  const FullScreen: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-    <div className={`min-h-screen flex flex-col ${isDark ? 'bg-slate-900' : 'bg-gradient-to-br from-indigo-50 to-purple-50'}`}>
-      {children}
-    </div>
-  );
-
   // Loading state (generating or evaluating)
   if (phase === 'generating' || phase === 'evaluating') {
     return (
-      <FullScreen>
+      <FullScreen isDark={isDark}>
         <ProgressLoader
           mode={phase}
           isDark={isDark}
@@ -494,7 +494,7 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
     const starters = SENTENCE_STARTERS[currentQ.type] || SENTENCE_STARTERS.connect;
 
     return (
-      <FullScreen>
+      <FullScreen isDark={isDark}>
         {/* Header */}
         <div className={`sticky top-0 z-20 ${isDark ? 'bg-slate-800 border-b border-slate-700' : 'bg-white/90 backdrop-blur border-b border-indigo-100'}`}>
           <div className="px-4 py-3 flex items-center justify-between">
@@ -657,7 +657,7 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
     const isLastFeedback = currentIndex === questions.length - 1;
 
     return (
-      <FullScreen>
+      <FullScreen isDark={isDark}>
         {/* Header */}
         <div className={`sticky top-0 z-20 ${isDark ? 'bg-slate-800 border-b border-slate-700' : 'bg-white/90 backdrop-blur border-b border-indigo-100'}`}>
           <div className="px-4 py-3 flex items-center justify-between">
@@ -782,7 +782,7 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
 
   // Done — completion screen
   return (
-    <FullScreen>
+    <FullScreen isDark={isDark}>
       <div className="flex-1 flex items-center justify-center p-6">
         <div className="text-center max-w-sm">
           <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${
