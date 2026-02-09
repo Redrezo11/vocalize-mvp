@@ -288,6 +288,7 @@ export interface FollowUpQuestion {
   type: 'connect' | 'compare' | 'judge';
   question: string;
   questionArabic?: string;
+  starters?: string[];
 }
 
 export interface FollowUpFeedbackItem {

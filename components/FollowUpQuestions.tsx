@@ -149,8 +149,14 @@ RULES:
 - Provide Arabic translation for each question.
 - These are DISCUSSION questions — there is no single correct answer.
 
+SENTENCE STARTERS:
+- For each question, provide exactly 3 short sentence starters (3-6 words each, ending with "...") that help the student begin their answer.
+- Starters must be specific to the question content and dialogue context — not generic phrases like "I think..." or "In my opinion...".
+- For A1-A2 levels, use simple vocabulary in starters. For B1+, starters can use moderate vocabulary.
+- Starters should offer different angles or approaches to answering the question.
+
 Return valid JSON only:
-{"questions":[{"id":"q1","type":"connect","question":"...","questionArabic":"..."},{"id":"q2","type":"compare","question":"...","questionArabic":"..."},{"id":"q3","type":"judge","question":"...","questionArabic":"..."}]}`;
+{"questions":[{"id":"q1","type":"connect","question":"...","questionArabic":"...","starters":["...","...","..."]},{"id":"q2","type":"compare","question":"...","questionArabic":"...","starters":["...","...","..."]},{"id":"q3","type":"judge","question":"...","questionArabic":"...","starters":["...","...","..."]}]}`;
 
 const EVALUATE_INSTRUCTIONS = `You are a warm, encouraging EFL teacher giving feedback on student discussion answers about a listening dialogue. These are open-ended discussion questions — there is no single "correct" answer. Your job is to acknowledge the student's thinking, connect it to test content, and help them grow.
 
@@ -475,7 +481,8 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
     if (!currentQ) return;
     const current = answers[currentQ.id] || '';
     // Only insert if textarea is empty or starts with existing starter
-    if (current.trim() === '' || SENTENCE_STARTERS[currentQ.type]?.some(s => current.startsWith(s))) {
+    const currentStarters = currentQ.starters?.length ? currentQ.starters : (SENTENCE_STARTERS[currentQ.type] || []);
+    if (current.trim() === '' || currentStarters.some(s => current.startsWith(s))) {
       setAnswers(prev => ({ ...prev, [currentQ.id]: starter }));
     } else {
       // Append at cursor position (simple: prepend if not empty)
@@ -507,7 +514,7 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
     const currentQ = questions[currentIndex];
     if (!currentQ) return null;
     const typeInfo = TYPE_LABELS[currentQ.type] || TYPE_LABELS.connect;
-    const starters = SENTENCE_STARTERS[currentQ.type] || SENTENCE_STARTERS.connect;
+    const starters = currentQ.starters?.length ? currentQ.starters : (SENTENCE_STARTERS[currentQ.type] || SENTENCE_STARTERS.connect);
 
     return (
       <FullScreen isDark={isDark}>
