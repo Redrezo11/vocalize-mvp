@@ -61,6 +61,10 @@ const App: React.FC = () => {
   // Navigation state — restore from sessionStorage to survive tab suspension
   const [currentView, setCurrentView] = useState<AppView>(() => {
     const saved = sessionStorage.getItem('df_currentView');
+    // Don't restore 'student-test' without a test ID — leads to blank page
+    if (saved === 'student-test' && !sessionStorage.getItem('df_studentTestId')) {
+      return 'home';
+    }
     return (saved as AppView) || 'home';
   });
   const [libraryTab, setLibraryTab] = useState<'audio' | 'transcripts' | 'tests'>('audio');
