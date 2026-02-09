@@ -58,8 +58,11 @@ const VisualizerFallback = () => (
 const API_BASE = '/api';
 
 const App: React.FC = () => {
-  // Navigation state
-  const [currentView, setCurrentView] = useState<AppView>('home');
+  // Navigation state — restore from sessionStorage to survive tab suspension
+  const [currentView, setCurrentView] = useState<AppView>(() => {
+    const saved = sessionStorage.getItem('df_currentView');
+    return (saved as AppView) || 'home';
+  });
   const [libraryTab, setLibraryTab] = useState<'audio' | 'transcripts' | 'tests'>('audio');
   const [selectedAudio, setSelectedAudio] = useState<SavedAudio | null>(null);
   const [editingAudioId, setEditingAudioId] = useState<string | null>(null);
@@ -138,6 +141,35 @@ const App: React.FC = () => {
       return a.name.localeCompare(b.name);
     });
   }, [elevenTTS.voices]);
+
+  // Persist navigation state to sessionStorage so tab suspension doesn't lose it
+  useEffect(() => {
+    sessionStorage.setItem('df_currentView', currentView);
+  }, [currentView]);
+
+  useEffect(() => {
+    if (selectedAudio) {
+      sessionStorage.setItem('df_selectedAudioId', selectedAudio.id);
+    }
+  }, [selectedAudio]);
+
+  // Restore selectedAudio from sessionStorage after audio entries load
+  useEffect(() => {
+    if (!selectedAudio && audioStorage.savedAudios.length > 0) {
+      const savedId = sessionStorage.getItem('df_selectedAudioId');
+      if (savedId) {
+        const audio = audioStorage.savedAudios.find(a => a.id === savedId);
+        if (audio) {
+          setSelectedAudio(audio);
+        } else if (['detail', 'test-builder', 'classroom'].includes(currentView)) {
+          // Audio not found — fall back to library instead of broken view
+          setCurrentView('library');
+        }
+      } else if (['detail', 'test-builder', 'classroom'].includes(currentView)) {
+        setCurrentView('library');
+      }
+    }
+  }, [audioStorage.savedAudios]);
 
   useEffect(() => {
     if (browserTTS.voices.length > 0 && !browserConfig.voice) {

@@ -293,9 +293,14 @@ export interface FollowUpQuestion {
 export interface FollowUpFeedbackItem {
   questionId: string;
   acknowledge: string;
+  acknowledgeArabic: string;
   connectToTest: string;
+  connectToTestArabic: string;
   extendThinking: string;
+  extendThinkingArabic: string;
   vocabularyWord: string;
   vocabularyDefinition: string;
+  vocabularyDefinitionArabic: string;
   vocabularySentence: string;
+  vocabularySentenceArabic: string;
 }

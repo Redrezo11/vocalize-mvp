@@ -154,15 +154,15 @@ Return valid JSON only:
 
 const EVALUATE_INSTRUCTIONS = `You are a warm, encouraging EFL teacher giving feedback on student discussion answers about a listening dialogue. These are open-ended discussion questions — there is no single "correct" answer. Your job is to acknowledge the student's thinking, connect it to test content, and help them grow.
 
-For EACH question, provide 4 feedback components:
+For EACH question, provide 4 feedback components IN BOTH ENGLISH AND ARABIC:
 
-1. "acknowledge" — Summarize and recast the student's idea in correct, natural English. If their English has errors, gently model the correct form without pointing out the mistake. If they wrote in Arabic or mixed languages, acknowledge the effort and provide the English version of what they expressed. (2-3 sentences)
+1. "acknowledge" / "acknowledgeArabic" — Summarize and recast the student's idea in correct, natural English. If their English has errors, gently model the correct form without pointing out the mistake. If they wrote in Arabic or mixed languages, acknowledge the effort and provide the English version of what they expressed. (2-3 sentences) The Arabic version should be a natural, idiomatic Arabic translation of the English feedback.
 
-2. "connectToTest" — Link the student's answer to the listening content. If the student got a related comprehension question wrong, gently clarify that misunderstanding using their discussion answer as an entry point — but NEVER say "you got question X wrong" or reference question numbers. If they got it right, reinforce their understanding. (1-2 sentences)
+2. "connectToTest" / "connectToTestArabic" — Link the student's answer to the listening content. If the student got a related comprehension question wrong, gently clarify that misunderstanding using their discussion answer as an entry point — but NEVER say "you got question X wrong" or reference question numbers. If they got it right, reinforce their understanding. (1-2 sentences) Provide Arabic translation.
 
-3. "extendThinking" — Offer one new idea, perspective, or detail from the listening that the student didn't mention. Frame it as "You might also think about…" or "Another interesting point is…". This should genuinely add something, not repeat what they said. (1-2 sentences)
+3. "extendThinking" / "extendThinkingArabic" — Offer one new idea, perspective, or detail from the listening that the student didn't mention. Frame it as "You might also think about…" or "Another interesting point is…". This should genuinely add something, not repeat what they said. (1-2 sentences) Provide Arabic translation.
 
-4. "vocabularyWord" / "vocabularyDefinition" / "vocabularySentence" — Pick ONE word from the test's vocabulary list that is relevant to the student's answer or the question topic. Provide: the word, its definition, and a model sentence using the word in context related to the dialogue.
+4. "vocabularyWord" / "vocabularyDefinition" / "vocabularyDefinitionArabic" / "vocabularySentence" / "vocabularySentenceArabic" — Pick ONE word from the test's vocabulary list that is relevant to the student's answer or the question topic. Provide: the word (always in English), its definition in English and Arabic, and a model sentence in English and Arabic using the word in context related to the dialogue.
 
 TONE RULES:
 - NEVER use "wrong", "incorrect", "error", "mistake"
@@ -170,9 +170,10 @@ TONE RULES:
 - Be warm, specific, and encouraging — avoid empty superlatives like "Great job!" without substance
 - If the student's answer is very short or off-topic, still find something to acknowledge and build on
 - Each question's total feedback should be 65-100 words (excluding vocabulary)
+- Arabic translations should be natural and idiomatic, not word-for-word
 
 Return valid JSON only:
-{"feedback":[{"questionId":"q1","acknowledge":"...","connectToTest":"...","extendThinking":"...","vocabularyWord":"...","vocabularyDefinition":"...","vocabularySentence":"..."},{"questionId":"q2",...},{"questionId":"q3",...}]}`;
+{"feedback":[{"questionId":"q1","acknowledge":"...","acknowledgeArabic":"...","connectToTest":"...","connectToTestArabic":"...","extendThinking":"...","extendThinkingArabic":"...","vocabularyWord":"...","vocabularyDefinition":"...","vocabularyDefinitionArabic":"...","vocabularySentence":"...","vocabularySentenceArabic":"..."},{"questionId":"q2",...},{"questionId":"q3",...}]}`;
 
 // Step dots component
 const StepDots: React.FC<{ total: number; current: number; isDark: boolean }> = ({ total, current, isDark }) => (
@@ -301,25 +302,35 @@ const ProgressLoader: React.FC<{
   );
 };
 
-// Accordion section for feedback
+// Arabic font style for RTL content
+const arabicFontStyle = { fontFamily: "'Noto Sans Arabic', 'Segoe UI', Tahoma, sans-serif" };
+
+// Accordion section for feedback (bilingual)
 const FeedbackSection: React.FC<{
   title: string;
+  titleArabic: string;
   icon: string;
   content: string;
+  contentArabic: string;
+  language: 'en' | 'ar';
   defaultOpen?: boolean;
   borderColor: string;
   isDark: boolean;
-}> = ({ title, icon, content, defaultOpen = false, borderColor, isDark }) => {
+}> = ({ title, titleArabic, icon, content, contentArabic, language, defaultOpen = false, borderColor, isDark }) => {
   const [isOpen, setIsOpen] = useState(defaultOpen);
+  const isAr = language === 'ar';
+  const displayTitle = isAr ? titleArabic : title;
+  const displayContent = isAr ? (contentArabic || content) : content;
 
   return (
     <div className={`rounded-lg border-l-4 ${borderColor} overflow-hidden ${isDark ? 'bg-slate-700/50' : 'bg-white'}`}>
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={`w-full px-3 py-2.5 flex items-center justify-between text-left ${isDark ? 'hover:bg-slate-700' : 'hover:bg-slate-50'}`}
+        dir={isAr ? 'rtl' : 'ltr'}
       >
-        <span className={`text-sm font-medium ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
-          {icon} {title}
+        <span className={`text-sm font-medium ${isDark ? 'text-slate-200' : 'text-slate-700'}`} style={isAr ? arabicFontStyle : undefined}>
+          {icon} {displayTitle}
         </span>
         <span className={`text-xs transition-transform duration-300 ${isOpen ? 'rotate-180' : ''} ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
           ▼
@@ -328,8 +339,12 @@ const FeedbackSection: React.FC<{
       <div
         className={`transition-all duration-300 ease-in-out overflow-hidden ${isOpen ? 'max-h-40 opacity-100' : 'max-h-0 opacity-0'}`}
       >
-        <div className={`px-3 pb-3 text-sm ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
-          {content}
+        <div
+          className={`px-3 pb-3 text-sm ${isDark ? 'text-slate-300' : 'text-slate-600'}`}
+          dir={isAr ? 'rtl' : 'ltr'}
+          style={isAr ? arabicFontStyle : undefined}
+        >
+          {displayContent}
         </div>
       </div>
     </div>
@@ -358,6 +373,7 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
   const [feedback, setFeedback] = useState<FollowUpFeedbackItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [feedbackLang, setFeedbackLang] = useState<'en' | 'ar'>('en');
   const generatedRef = useRef(false);
 
   const model = contentModel === 'gpt-5.2' ? 'gpt-5.2' : 'gpt-5-mini';
@@ -655,6 +671,7 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
     const fb = feedback.find(f => f.questionId === currentQ.id);
     const typeInfo = TYPE_LABELS[currentQ.type] || TYPE_LABELS.connect;
     const isLastFeedback = currentIndex === questions.length - 1;
+    const isAr = feedbackLang === 'ar';
 
     return (
       <FullScreen isDark={isDark}>
@@ -662,9 +679,34 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
         <div className={`sticky top-0 z-20 ${isDark ? 'bg-slate-800 border-b border-slate-700' : 'bg-white/90 backdrop-blur border-b border-indigo-100'}`}>
           <div className="px-4 py-3 flex items-center justify-between">
             <span className={`text-sm font-semibold ${isDark ? 'text-indigo-300' : 'text-indigo-700'}`}>
-              Feedback
+              {isAr ? 'التعليقات' : 'Feedback'}
             </span>
-            <StepDots total={questions.length} current={currentIndex} isDark={isDark} />
+
+            {/* Language toggle */}
+            <div className={`flex rounded-lg overflow-hidden border ${isDark ? 'border-slate-600' : 'border-indigo-200'}`}>
+              <button
+                onClick={() => setFeedbackLang('en')}
+                className={`px-2.5 py-1 text-xs font-medium transition-colors ${
+                  !isAr
+                    ? isDark ? 'bg-indigo-600 text-white' : 'bg-indigo-500 text-white'
+                    : isDark ? 'bg-slate-700 text-slate-400 hover:text-slate-200' : 'bg-white text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                English
+              </button>
+              <button
+                onClick={() => setFeedbackLang('ar')}
+                className={`px-2.5 py-1 text-xs font-medium transition-colors ${
+                  isAr
+                    ? isDark ? 'bg-indigo-600 text-white' : 'bg-indigo-500 text-white'
+                    : isDark ? 'bg-slate-700 text-slate-400 hover:text-slate-200' : 'bg-white text-slate-500 hover:text-slate-700'
+                }`}
+                style={arabicFontStyle}
+              >
+                عربي
+              </button>
+            </div>
+
             <span className={`text-xs font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
               {currentIndex + 1}/{questions.length}
             </span>
@@ -685,14 +727,20 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
                 {typeInfo.label}
               </span>
             </div>
-            <p className={`text-sm leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-              {currentQ.question}
+            <p
+              className={`text-sm leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-700'}`}
+              dir={isAr ? 'rtl' : 'ltr'}
+              style={isAr ? arabicFontStyle : undefined}
+            >
+              {isAr && currentQ.questionArabic ? currentQ.questionArabic : currentQ.question}
             </p>
           </div>
 
           {/* Student's answer */}
           <div className={`mb-4 p-3 rounded-lg ${isDark ? 'bg-slate-800' : 'bg-white'}`}>
-            <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Your answer:</p>
+            <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} dir={isAr ? 'rtl' : 'ltr'} style={isAr ? arabicFontStyle : undefined}>
+              {isAr ? 'إجابتك:' : 'Your answer:'}
+            </p>
             <p className={`text-sm italic ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
               "{answers[currentQ.id] || '(no answer)'}"
             </p>
@@ -703,24 +751,33 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
             <div className="space-y-2">
               <FeedbackSection
                 title="What You Said"
+                titleArabic="ما قلته"
                 icon="💬"
                 content={fb.acknowledge}
+                contentArabic={fb.acknowledgeArabic}
+                language={feedbackLang}
                 defaultOpen={true}
                 borderColor="border-blue-400"
                 isDark={isDark}
               />
               <FeedbackSection
                 title="Connection"
+                titleArabic="الربط"
                 icon="🔗"
                 content={fb.connectToTest}
+                contentArabic={fb.connectToTestArabic}
+                language={feedbackLang}
                 defaultOpen={false}
                 borderColor="border-purple-400"
                 isDark={isDark}
               />
               <FeedbackSection
                 title="Think Further"
+                titleArabic="فكّر أكثر"
                 icon="💡"
                 content={fb.extendThinking}
+                contentArabic={fb.extendThinkingArabic}
+                language={feedbackLang}
                 defaultOpen={false}
                 borderColor="border-indigo-400"
                 isDark={isDark}
@@ -729,18 +786,18 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
               {/* Vocabulary — always visible */}
               {fb.vocabularyWord && (
                 <div className={`rounded-lg border-l-4 border-teal-400 p-3 ${isDark ? 'bg-slate-700/50' : 'bg-teal-50'}`}>
-                  <p className={`text-xs font-semibold uppercase mb-1 ${isDark ? 'text-teal-400' : 'text-teal-600'}`}>
-                    📖 Vocabulary
+                  <p className={`text-xs font-semibold uppercase mb-1 ${isDark ? 'text-teal-400' : 'text-teal-600'}`} dir={isAr ? 'rtl' : 'ltr'} style={isAr ? arabicFontStyle : undefined}>
+                    {isAr ? '📖 المفردات' : '📖 Vocabulary'}
                   </p>
-                  <p className={`text-sm ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
+                  <p className={`text-sm ${isDark ? 'text-slate-200' : 'text-slate-800'}`} dir={isAr ? 'rtl' : 'ltr'} style={isAr ? arabicFontStyle : undefined}>
                     <span className="font-bold">{fb.vocabularyWord}</span>
-                    {fb.vocabularyDefinition && (
-                      <span className={`${isDark ? 'text-slate-400' : 'text-slate-500'}`}> — {fb.vocabularyDefinition}</span>
+                    {(isAr ? fb.vocabularyDefinitionArabic || fb.vocabularyDefinition : fb.vocabularyDefinition) && (
+                      <span className={`${isDark ? 'text-slate-400' : 'text-slate-500'}`}> — {isAr ? (fb.vocabularyDefinitionArabic || fb.vocabularyDefinition) : fb.vocabularyDefinition}</span>
                     )}
                   </p>
-                  {fb.vocabularySentence && (
-                    <p className={`text-sm mt-1 italic ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                      "{fb.vocabularySentence}"
+                  {(isAr ? fb.vocabularySentenceArabic || fb.vocabularySentence : fb.vocabularySentence) && (
+                    <p className={`text-sm mt-1 italic ${isDark ? 'text-slate-400' : 'text-slate-600'}`} dir={isAr ? 'rtl' : 'ltr'} style={isAr ? arabicFontStyle : undefined}>
+                      "{isAr ? (fb.vocabularySentenceArabic || fb.vocabularySentence) : fb.vocabularySentence}"
                     </p>
                   )}
                 </div>
@@ -758,8 +815,9 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
                 className={`px-4 py-3 rounded-xl font-medium text-sm ${
                   isDark ? 'bg-slate-700 text-slate-300 hover:bg-slate-600' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
+                style={isAr ? arabicFontStyle : undefined}
               >
-                Previous
+                {isAr ? 'السابق' : 'Previous'}
               </button>
             )}
             <button
@@ -771,8 +829,9 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
                 }
               }}
               className="flex-1 py-3 rounded-xl font-semibold text-sm bg-gradient-to-r from-indigo-500 to-purple-500 text-white hover:from-indigo-400 hover:to-purple-400 transition-all"
+              style={isAr ? arabicFontStyle : undefined}
             >
-              {isLastFeedback ? 'Finish' : 'Next'}
+              {isLastFeedback ? (isAr ? 'إنهاء' : 'Finish') : (isAr ? 'التالي' : 'Next')}
             </button>
           </div>
         </div>
@@ -781,6 +840,7 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
   }
 
   // Done — completion screen
+  const isAr = feedbackLang === 'ar';
   return (
     <FullScreen isDark={isDark}>
       <div className="flex-1 flex items-center justify-center p-6">
@@ -790,12 +850,14 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
           }`}>
             <span className="text-2xl text-white">✓</span>
           </div>
-          <h2 className={`text-xl font-bold mb-2 ${isDark ? 'text-white' : 'text-slate-800'}`}>
-            Discussion Complete
+          <h2 className={`text-xl font-bold mb-2 ${isDark ? 'text-white' : 'text-slate-800'}`} style={isAr ? arabicFontStyle : undefined}>
+            {isAr ? 'اكتملت المناقشة' : 'Discussion Complete'}
           </h2>
-          <p className={`text-sm mb-6 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-            You reflected on {questions.length} questions about the listening dialogue.
-            Keep thinking about these ideas — great discussions build understanding!
+          <p className={`text-sm mb-6 ${isDark ? 'text-slate-400' : 'text-slate-600'}`} dir={isAr ? 'rtl' : 'ltr'} style={isAr ? arabicFontStyle : undefined}>
+            {isAr
+              ? `لقد تأملت في ${questions.length} أسئلة حول حوار الاستماع. استمر في التفكير في هذه الأفكار — المناقشات الجيدة تبني الفهم!`
+              : `You reflected on ${questions.length} questions about the listening dialogue. Keep thinking about these ideas — great discussions build understanding!`
+            }
           </p>
           <button
             onClick={onBack}
@@ -804,8 +866,9 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
                 ? 'bg-slate-700 text-slate-200 hover:bg-slate-600'
                 : 'bg-indigo-500 text-white hover:bg-indigo-400'
             }`}
+            style={isAr ? arabicFontStyle : undefined}
           >
-            Back to Results
+            {isAr ? 'العودة إلى النتائج' : 'Back to Results'}
           </button>
         </div>
       </div>
