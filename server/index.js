@@ -165,6 +165,25 @@ const deleteFromCloudinary = async (publicId) => {
   }
 };
 
+// ==================== REQUEST LOGGING MIDDLEWARE ====================
+app.use('/api', (req, res, next) => {
+  const start = Date.now();
+  const ua = req.headers['user-agent'] || 'unknown';
+  // Compact user-agent: just browser + OS
+  const uaShort = ua.includes('Android') ? 'Android' :
+                   ua.includes('iPhone') ? 'iPhone' :
+                   ua.includes('iPad') ? 'iPad' :
+                   ua.includes('Windows') ? 'Windows' :
+                   ua.includes('Mac') ? 'Mac' : ua.slice(0, 40);
+
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    const logLevel = res.statusCode >= 500 ? 'ERROR' : res.statusCode >= 400 ? 'WARN' : 'INFO';
+    console.log(`[${logLevel}] ${req.method} ${req.originalUrl} → ${res.statusCode} (${duration}ms) [${uaShort}]`);
+  });
+  next();
+});
+
 // API Routes
 
 // Get all audio entries
@@ -185,10 +204,13 @@ app.get('/api/audio-entries/:id', async (req, res) => {
   try {
     const entry = await AudioEntry.findById(req.params.id);
     if (!entry) {
+      console.log(`[GET /api/audio-entries/:id] Entry NOT FOUND: ${req.params.id}`);
       return res.status(404).json({ error: 'Entry not found' });
     }
+    console.log(`[GET /api/audio-entries/:id] Found: "${entry.title}" | transcript: ${entry.is_transcript_only} | audio: ${!!entry.audio_url}`);
     res.json(entry);
   } catch (error) {
+    console.error(`[GET /api/audio-entries/:id] ERROR: ${error.message}`);
     res.status(500).json({ error: error.message });
   }
 });
@@ -333,15 +355,25 @@ app.get('/api/tests', async (req, res) => {
   }
 });
 
-// Get single test
+// Get single test (student test loading endpoint)
 app.get('/api/tests/:id', async (req, res) => {
+  const testId = req.params.id;
+  console.log(`[GET /api/tests/:id] Loading test ${testId}`);
   try {
-    const test = await ListeningTest.findById(req.params.id);
+    const dbStart = Date.now();
+    const test = await ListeningTest.findById(testId);
+    const dbTime = Date.now() - dbStart;
+
     if (!test) {
+      console.log(`[GET /api/tests/:id] Test NOT FOUND: ${testId} (db: ${dbTime}ms)`);
       return res.status(404).json({ error: 'Test not found' });
     }
+
+    const responseSize = JSON.stringify(test).length;
+    console.log(`[GET /api/tests/:id] Test found: "${test.title}" | questions: ${test.questions?.length || 0} | preview: ${test.preview?.length || 0} | size: ${(responseSize / 1024).toFixed(1)}KB | db: ${dbTime}ms`);
     res.json(test);
   } catch (error) {
+    console.error(`[GET /api/tests/:id] ERROR loading test ${testId}:`, error.message);
     res.status(500).json({ error: error.message });
   }
 });
@@ -574,9 +606,13 @@ app.use((error, req, res, next) => {
 
 // Health check
 app.get('/api/health', (req, res) => {
+  const mongoState = ['disconnected', 'connected', 'connecting', 'disconnecting'][mongoose.connection.readyState] || 'unknown';
+  console.log(`[Health] mongo: ${mongoState} | uptime: ${Math.round(process.uptime())}s`);
   res.json({
     status: 'ok',
     mongodb: mongoose.connection.readyState === 1,
+    mongoState,
+    uptime: Math.round(process.uptime()),
     cloudinary: !!process.env.CLOUDINARY_CLOUD_NAME
   });
 });
@@ -591,6 +627,11 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
+// Log MongoDB connection events for cold start diagnosis
+mongoose.connection.on('disconnected', () => console.log('[MongoDB] Disconnected'));
+mongoose.connection.on('reconnected', () => console.log('[MongoDB] Reconnected'));
+mongoose.connection.on('error', (err) => console.error('[MongoDB] Connection error:', err.message));
+
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`[Server] Started on port ${PORT} at ${new Date().toISOString()}`);
 });
