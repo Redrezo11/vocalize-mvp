@@ -57,6 +57,11 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
 
   // Pre-listening activity toggle
   const [showPreListening, setShowPreListening] = useState(false);
+  const [showPreListeningArabic, setShowPreListeningArabic] = useState(false);
+  const [isGeneratingPreListeningAudio, setIsGeneratingPreListeningAudio] = useState(false);
+  const [preListeningAudioLang, setPreListeningAudioLang] = useState<'en' | 'ar' | null>(null);
+  const [isPlayingPreListeningAudio, setIsPlayingPreListeningAudio] = useState(false);
+  const preListeningAudioRef = useRef<HTMLAudioElement>(null);
 
   // Teacher controls - hide answers by default
   const [showAnswers, setShowAnswers] = useState(false);
@@ -363,9 +368,96 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
     setPlayCount(0);
     setIsPlaying(false);  // Reset play state for new presentation
     setShowPreListening(false);
+    setShowPreListeningArabic(false);
+    setIsPlayingPreListeningAudio(false);
     setCurrentTime(0);
     setDuration(0);
     setView('present');
+  };
+
+  // Pre-listening audio generation (OpenAI TTS)
+  const handleGeneratePreListeningAudio = async (language: 'en' | 'ar') => {
+    if (!selectedTest?.classroomActivity) return;
+    const activity = selectedTest.classroomActivity;
+
+    setIsGeneratingPreListeningAudio(true);
+    setPreListeningAudioLang(language);
+
+    try {
+      const apiKey = (import.meta as any).env?.VITE_OPENAI_API_KEY;
+      if (!apiKey || apiKey === 'PLACEHOLDER_API_KEY') {
+        throw new Error('OpenAI API key not configured');
+      }
+
+      const text = language === 'en'
+        ? `${activity.situationSetup.en} ... ${activity.discussionPrompt.en}`
+        : `${activity.situationSetup.ar} ... ${activity.discussionPrompt.ar}`;
+
+      const instructions = language === 'en'
+        ? 'Read clearly and slowly for an English language classroom. Pause at the "..." between sentences.'
+        : 'Read clearly and slowly in Arabic for a language classroom. Pause at the "..." between sentences.';
+
+      const response = await fetch('https://api.openai.com/v1/audio/speech', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini-tts',
+          input: text,
+          voice: language === 'en' ? 'nova' : 'onyx',
+          instructions,
+          response_format: 'mp3'
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        console.error('[ClassroomMode] Pre-listening TTS error:', error);
+        throw new Error('Audio generation failed');
+      }
+
+      const audioBlob = await response.blob();
+      const arrayBuffer = await audioBlob.arrayBuffer();
+      const base64 = btoa(
+        new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
+      );
+      const dataUrl = `data:audio/mpeg;base64,${base64}`;
+
+      // Update test with generated audio
+      const updatedActivity = {
+        ...activity,
+        [language === 'en' ? 'audioEn' : 'audioAr']: dataUrl
+      };
+      const updatedTest: ListeningTest = {
+        ...selectedTest,
+        classroomActivity: updatedActivity
+      };
+      setSelectedTest(updatedTest);
+      if (onUpdateTest) onUpdateTest(updatedTest);
+
+    } catch (error) {
+      console.error('[ClassroomMode] Pre-listening audio error:', error);
+    } finally {
+      setIsGeneratingPreListeningAudio(false);
+      setPreListeningAudioLang(null);
+    }
+  };
+
+  // Pre-listening audio playback
+  const handlePlayPreListeningAudio = (src: string) => {
+    const audioEl = preListeningAudioRef.current;
+    if (!audioEl) return;
+
+    if (isPlayingPreListeningAudio && audioEl.src === src) {
+      audioEl.pause();
+      setIsPlayingPreListeningAudio(false);
+    } else {
+      audioEl.src = src;
+      audioEl.play();
+      setIsPlayingPreListeningAudio(true);
+    }
   };
 
   // Audio event handlers
@@ -984,9 +1076,11 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                 <p className={`text-2xl leading-relaxed ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
                   {selectedTest.classroomActivity.situationSetup.en}
                 </p>
-                <p className={`text-xl mt-3 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} dir="rtl">
-                  {selectedTest.classroomActivity.situationSetup.ar}
-                </p>
+                {showPreListeningArabic && (
+                  <p className={`text-xl mt-3 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} dir="rtl">
+                    {selectedTest.classroomActivity.situationSetup.ar}
+                  </p>
+                )}
               </div>
 
               <hr className={isDark ? 'border-slate-700' : 'border-slate-200'} />
@@ -1000,15 +1094,117 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                 <p className={`text-2xl leading-relaxed ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
                   {selectedTest.classroomActivity.discussionPrompt.en}
                 </p>
-                <p className={`text-xl mt-3 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} dir="rtl">
-                  {selectedTest.classroomActivity.discussionPrompt.ar}
-                </p>
+                {showPreListeningArabic && (
+                  <p className={`text-xl mt-3 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} dir="rtl">
+                    {selectedTest.classroomActivity.discussionPrompt.ar}
+                  </p>
+                )}
               </div>
 
-              {/* Static label */}
+              {/* Action buttons */}
+              <div className="flex items-center justify-center gap-4 flex-wrap">
+                {/* English audio: play or generate */}
+                {selectedTest.classroomActivity.audioEn ? (
+                  <button
+                    onClick={() => handlePlayPreListeningAudio(selectedTest.classroomActivity!.audioEn!)}
+                    className={`flex items-center gap-2 px-6 py-3 rounded-xl text-lg font-medium transition-colors ${
+                      isPlayingPreListeningAudio && preListeningAudioRef.current?.src?.includes('mpeg')
+                        ? 'bg-indigo-600 text-white'
+                        : isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    <span>{isPlayingPreListeningAudio ? '⏸' : '▶'}</span>
+                    Play
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => handleGeneratePreListeningAudio('en')}
+                    disabled={isGeneratingPreListeningAudio}
+                    className={`flex items-center gap-2 px-6 py-3 rounded-xl text-lg font-medium transition-colors ${
+                      isGeneratingPreListeningAudio && preListeningAudioLang === 'en'
+                        ? 'bg-indigo-500 text-white opacity-75'
+                        : isDark ? 'bg-indigo-600 text-white hover:bg-indigo-500' : 'bg-indigo-500 text-white hover:bg-indigo-600'
+                    }`}
+                  >
+                    {isGeneratingPreListeningAudio && preListeningAudioLang === 'en' ? (
+                      <>
+                        <svg className="w-5 h-5 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <span>🔊</span>
+                        Generate Audio
+                      </>
+                    )}
+                  </button>
+                )}
+
+                {/* Arabic audio: play or generate */}
+                {selectedTest.classroomActivity.audioAr ? (
+                  <button
+                    onClick={() => handlePlayPreListeningAudio(selectedTest.classroomActivity!.audioAr!)}
+                    className={`flex items-center gap-2 px-6 py-3 rounded-xl text-lg font-medium transition-colors ${
+                      isPlayingPreListeningAudio
+                        ? 'bg-amber-600 text-white'
+                        : isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    <span>{isPlayingPreListeningAudio ? '⏸' : '▶'}</span>
+                    عربي
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => handleGeneratePreListeningAudio('ar')}
+                    disabled={isGeneratingPreListeningAudio}
+                    className={`flex items-center gap-2 px-6 py-3 rounded-xl text-lg font-medium transition-colors ${
+                      isGeneratingPreListeningAudio && preListeningAudioLang === 'ar'
+                        ? 'bg-amber-500 text-white opacity-75'
+                        : isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    {isGeneratingPreListeningAudio && preListeningAudioLang === 'ar' ? (
+                      <>
+                        <svg className="w-5 h-5 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                        جاري التوليد...
+                      </>
+                    ) : (
+                      <>
+                        <span>🔊</span>
+                        Generate عربي
+                      </>
+                    )}
+                  </button>
+                )}
+
+                {/* Show/Hide Arabic text toggle */}
+                <button
+                  onClick={() => setShowPreListeningArabic(!showPreListeningArabic)}
+                  className={`flex items-center gap-2 px-6 py-3 rounded-xl text-lg font-medium transition-colors ${
+                    showPreListeningArabic
+                      ? isDark ? 'bg-purple-600 text-white' : 'bg-purple-500 text-white'
+                      : isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
+                  </svg>
+                  {showPreListeningArabic ? 'Hide Arabic' : 'Show Arabic'}
+                </button>
+              </div>
+
+              {/* Footer label */}
               <p className={`text-center text-lg pt-4 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-                Discuss with your partner · ناقش مع زميلك
+                {showPreListeningArabic ? 'Discuss with your partner · ناقش مع زميلك' : 'Discuss with your partner'}
               </p>
+
+              {/* Hidden audio element */}
+              <audio
+                ref={preListeningAudioRef}
+                preload="metadata"
+                className="hidden"
+                onEnded={() => setIsPlayingPreListeningAudio(false)}
+              />
             </div>
           </div>
         ) :

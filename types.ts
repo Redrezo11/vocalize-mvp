@@ -186,6 +186,8 @@ export interface PreviewActivity {
 export interface ClassroomActivity {
   situationSetup: { en: string; ar: string };
   discussionPrompt: { en: string; ar: string };
+  audioEn?: string;   // Base64 data URL for English TTS
+  audioAr?: string;   // Base64 data URL for Arabic TTS
 }
 
 export interface ListeningTest {

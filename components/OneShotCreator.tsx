@@ -1036,6 +1036,7 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
               })),
             }))
           : undefined,
+        classroomActivity: pendingPayload.classroomActivity || undefined,
       };
 
       const response = await fetch(`${API_BASE}/tests`, {
