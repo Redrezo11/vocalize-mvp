@@ -206,6 +206,10 @@ export interface OneShotPayload {
     type: 'prediction' | 'wordAssociation' | 'trueFalse';
     items: any[];
   }>;
+  classroomActivity?: {
+    situationSetup: { en: string; ar: string };
+    discussionPrompt: { en: string; ar: string };
+  };
 }
 
 // Exported for use by JamButton
@@ -235,6 +239,7 @@ export function validatePayload(jsonText: string): OneShotPayload {
   if (!parsed.voiceAssignments) parsed.voiceAssignments = {};
   if (!parsed.lexis) parsed.lexis = [];
   if (!parsed.preview) parsed.preview = [];
+  if (!parsed.classroomActivity) parsed.classroomActivity = undefined;
 
   return parsed as OneShotPayload;
 }
@@ -572,6 +577,22 @@ Generate exactly 2 preview activities: ${previewActivities}
 
 IMPORTANT: Preview content must NOT duplicate or rephrase the comprehension questions.
 
+## Classroom Activity (for teacher presentation mode)
+
+Generate a collaborative pre-listening discussion task with two bilingual components:
+
+1. "situationSetup" — One sentence (English + Arabic) describing WHO is in the listening and WHAT the situation is. Names roles (not character names) and the setting. Must be specific enough to activate the right schema but NOT reveal answers to any MCQ question.
+   Good: "A university student visits a career advisor to ask for help choosing a job after graduation."
+   Bad: "Two people talk about careers." (too vague)
+   Bad: "Ahmed tells his advisor he wants to work in technology." (spoils content)
+
+2. "discussionPrompt" — One question/instruction (English + Arabic) that places students inside the scenario. The prompt type depends on CEFR level:
+   - A1-A2 (Personal Experience Retrieval): Ask students to share their own experience in the same domain. Use simple present/past tense. Plant 1-2 vocabulary words from the script naturally.
+   - B1 (Empathetic Scenario Positioning): Place the student inside the scenario as a participant. Use conditional or hypothetical framing.
+   - B2-C1 (Perspective-Taking / Counter-Argument): Require students to hold opposing positions simultaneously. Force perspective-taking.
+
+   The prompt must be answerable by ANY student regardless of background. Keep to ONE sentence. Include Arabic translations for both fields.
+
 ## Output Format
 
 Return a SINGLE JSON object with ONLY these fields. No markdown fences, no explanation — ONLY valid JSON.
@@ -616,7 +637,11 @@ Return a SINGLE JSON object with ONLY these fields. No markdown fences, no expla
         { "word": "distractor word", "inDialogue": false }
       ]
     }
-  ]
+  ],
+  "classroomActivity": {
+    "situationSetup": { "en": "English situation description", "ar": "وصف الموقف بالعربية" },
+    "discussionPrompt": { "en": "English discussion prompt", "ar": "سؤال النقاش بالعربية" }
+  }
 }
 
 Now generate the test content as a single JSON object:`;
@@ -853,6 +878,7 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
               })),
             }))
           : undefined,
+        classroomActivity: payload.classroomActivity || undefined,
       };
 
       const response = await fetch(`${API_BASE}/tests`, {

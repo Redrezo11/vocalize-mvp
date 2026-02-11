@@ -111,6 +111,7 @@ const listeningTestSchema = new mongoose.Schema({
   lexis: [lexisItemSchema],  // Vocabulary items for the test
   lexisAudio: { type: mongoose.Schema.Types.Mixed, default: null },  // Generated vocabulary audio
   preview: [previewActivitySchema],  // Pre-listening preview activities
+  classroomActivity: { type: mongoose.Schema.Types.Mixed, default: null },  // Pre-listening classroom discussion
   difficulty: { type: String, enum: ['A1', 'A2', 'B1', 'B2', 'C1'] },  // CEFR level
   created_at: { type: Date, default: Date.now },
   updated_at: { type: Date, default: Date.now }
@@ -381,7 +382,7 @@ app.get('/api/tests/:id', async (req, res) => {
 // Create test
 app.post('/api/tests', async (req, res) => {
   try {
-    const { audioId, title, type, questions, lexis, preview, difficulty } = req.body;
+    const { audioId, title, type, questions, lexis, preview, classroomActivity, difficulty } = req.body;
 
     console.log('[POST /api/tests] Creating test with preview:', preview ? preview.length + ' activities' : 'none');
 
@@ -403,6 +404,7 @@ app.post('/api/tests', async (req, res) => {
       questions,
       lexis: lexis || [],
       preview: preview || [],
+      classroomActivity: classroomActivity || null,
       difficulty: difficulty || null
     });
 
@@ -418,7 +420,7 @@ app.post('/api/tests', async (req, res) => {
 // Update test
 app.put('/api/tests/:id', async (req, res) => {
   try {
-    const { title, type, questions, lexis, lexisAudio, preview, difficulty } = req.body;
+    const { title, type, questions, lexis, lexisAudio, preview, classroomActivity, difficulty } = req.body;
 
     console.log('[SERVER PUT /api/tests/:id] Received preview:', preview ? preview.length + ' activities' : 'undefined');
     console.log('[SERVER PUT /api/tests/:id] Received lexisAudio:', lexisAudio ? { engine: lexisAudio.engine, urlLength: lexisAudio.url?.length } : 'undefined');
@@ -445,6 +447,11 @@ app.put('/api/tests/:id', async (req, res) => {
     if (preview !== undefined) {
       updateData.preview = preview;
       console.log('[SERVER PUT /api/tests/:id] Adding preview to updateData');
+    }
+
+    // Only update classroomActivity if provided
+    if (classroomActivity !== undefined) {
+      updateData.classroomActivity = classroomActivity;
     }
 
     // Only update difficulty if provided

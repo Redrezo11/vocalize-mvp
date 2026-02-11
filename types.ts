@@ -183,6 +183,11 @@ export interface PreviewActivity {
   items: PredictionItem[] | WordAssociationItem[] | TrueFalseItem[];
 }
 
+export interface ClassroomActivity {
+  situationSetup: { en: string; ar: string };
+  discussionPrompt: { en: string; ar: string };
+}
+
 export interface ListeningTest {
   id: string;
   audioId: string;
@@ -192,6 +197,7 @@ export interface ListeningTest {
   lexis?: LexisItem[];             // Optional vocabulary items
   lexisAudio?: LexisAudio;         // Generated vocabulary audio
   preview?: PreviewActivity[];     // Pre-listening preview activities
+  classroomActivity?: ClassroomActivity; // Pre-listening classroom discussion
   difficulty?: string;             // CEFR level (A1, A2, B1, B2, C1)
   createdAt: string;
   updatedAt: string;
