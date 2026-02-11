@@ -18,6 +18,7 @@ export const PredictionActivity: React.FC<PredictionActivityProps> = ({
   const isDark = theme === 'dark';
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<{ [id: string]: string }>({});
+  const [showArabic, setShowArabic] = useState(false);
 
   const currentItem = items[currentIndex];
   const isLastItem = currentIndex === items.length - 1;
@@ -92,9 +93,23 @@ export const PredictionActivity: React.FC<PredictionActivityProps> = ({
               {currentItem.question}
             </p>
             {currentItem.questionArabic && (
-              <p className={`text-lg text-center ${isDark ? 'text-slate-400' : 'text-slate-500'}`} dir="rtl">
-                {currentItem.questionArabic}
-              </p>
+              showArabic ? (
+                <p className={`text-lg text-center animate-fade-in ${isDark ? 'text-slate-400' : 'text-slate-500'}`} dir="rtl">
+                  {currentItem.questionArabic}
+                </p>
+              ) : (
+                <button
+                  onClick={() => setShowArabic(true)}
+                  className={`mx-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                    isDark ? 'text-slate-400 hover:bg-slate-700' : 'text-slate-400 hover:bg-slate-100'
+                  }`}
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
+                  </svg>
+                  Translate
+                </button>
+              )
             )}
           </div>
 
@@ -123,11 +138,10 @@ export const PredictionActivity: React.FC<PredictionActivityProps> = ({
           </div>
 
           {/* Hint */}
-          <p className={`text-center text-sm mb-4 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-            There's no wrong answer — share your thoughts!
-          </p>
-          <p className={`text-center text-sm ${isDark ? 'text-slate-500' : 'text-slate-400'}`} dir="rtl">
-            لا توجد إجابة خاطئة — شارك أفكارك!
+          <p className={`text-center text-sm ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+            {showArabic
+              ? <span dir="rtl">لا توجد إجابة خاطئة — شارك أفكارك!</span>
+              : "There's no wrong answer — share your thoughts!"}
           </p>
         </div>
       </div>
