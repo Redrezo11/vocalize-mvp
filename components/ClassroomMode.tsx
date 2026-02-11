@@ -58,6 +58,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
   // Pre-listening activity toggle
   const [showPreListening, setShowPreListening] = useState(false);
   const [showPreListeningArabic, setShowPreListeningArabic] = useState(false);
+  const [isPreListeningFullscreen, setIsPreListeningFullscreen] = useState(false);
   const [isGeneratingPreListeningAudio, setIsGeneratingPreListeningAudio] = useState(false);
   const [preListeningAudioLang, setPreListeningAudioLang] = useState<'en' | 'ar' | null>(null);
   const [isPlayingPreListeningAudio, setIsPlayingPreListeningAudio] = useState(false);
@@ -369,6 +370,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
     setIsPlaying(false);  // Reset play state for new presentation
     setShowPreListening(false);
     setShowPreListeningArabic(false);
+    setIsPreListeningFullscreen(false);
     setIsPlayingPreListeningAudio(false);
     setCurrentTime(0);
     setDuration(0);
@@ -577,7 +579,16 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
         case 'a':
         case 'A':
           if (selectedTest?.classroomActivity) {
-            setShowPreListening(prev => !prev);
+            setShowPreListening(prev => {
+              if (prev) setIsPreListeningFullscreen(false);
+              return !prev;
+            });
+          }
+          break;
+        case 'f':
+        case 'F':
+          if (showPreListening) {
+            setIsPreListeningFullscreen(prev => !prev);
           }
           break;
         case 'v':
@@ -615,6 +626,11 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
           }
           break;
         case 'Escape':
+          // Exit fullscreen first, then exit presentation
+          if (isPreListeningFullscreen) {
+            setIsPreListeningFullscreen(false);
+            break;
+          }
           if (audioRef.current) {
             audioRef.current.pause();
           }
@@ -888,7 +904,8 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
 
     return (
       <div className={`min-h-screen ${isDark ? 'bg-slate-900 text-white' : 'bg-white text-slate-900'}`}>
-        {/* Top Bar - Fixed */}
+        {/* Top Bar - Fixed (hidden in fullscreen) */}
+        {!isPreListeningFullscreen && (
         <div className={`sticky top-0 z-10 shadow-lg ${isDark ? 'bg-slate-800 text-white' : 'bg-slate-900 text-white'}`}>
           <div className="max-w-6xl mx-auto px-6 py-4">
             <div className="flex items-center justify-between mb-4">
@@ -920,17 +937,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
               </div>
 
               <div className="flex items-center gap-3">
-                {/* Preview Button */}
-                <button
-                  onClick={() => onPreviewStudent(selectedTest)}
-                  className="flex items-center gap-2 px-3 py-2 bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 transition-colors"
-                  title="Preview student view"
-                >
-                  <EyeIcon className="w-4 h-4" />
-                  <span className="text-sm">Preview</span>
-                </button>
-
-                {/* Pre-Listening Activity Button */}
+                {/* Pre-Listening Activity Button — always visible */}
                 {selectedTest.classroomActivity && (
                   <button
                     onClick={() => setShowPreListening(!showPreListening)}
@@ -946,61 +953,76 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                   </button>
                 )}
 
-                {/* QR Code Button */}
-                <button
-                  onClick={() => generateQRCode(selectedTest)}
-                  className="flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 transition-colors"
-                  title="Show QR code for students"
-                >
-                  <QRCodeIcon className="w-4 h-4" />
-                  <span className="text-sm">QR Code</span>
-                </button>
-
-                {/* Lexis Audio Button */}
-                {selectedTest.lexis && selectedTest.lexis.length > 0 && (
-                  <button
-                    onClick={() => setShowLexisAudioConfirm(true)}
-                    disabled={isGeneratingLexisAudio || isGeneratingWordAudios}
-                    className={`flex items-center gap-2 h-[34px] px-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                      selectedTest.lexisAudio
-                        ? 'bg-emerald-600 text-white hover:bg-emerald-500'
-                        : 'bg-amber-600 text-white hover:bg-amber-500'
-                    }`}
-                    title="Manage vocabulary audio"
-                  >
-                    {(isGeneratingLexisAudio || isGeneratingWordAudios) ? (
-                      <SpinnerIcon className="w-4 h-4" />
-                    ) : (
-                      <SpeakerIcon className="w-4 h-4" />
-                    )}
-                    <span className="text-sm">
-                      {isGeneratingLexisAudio || isGeneratingWordAudios ? 'Generating' : 'Vocab'}
-                    </span>
-                    {selectedTest.lexisAudio && (
-                      <span className="w-2 h-2 bg-green-400 rounded-full" title="Audio generated" />
-                    )}
-                  </button>
-                )}
-
-                {/* Play Counter - only shown with audio */}
-                {selectedAudio && (
-                  <div className="flex items-center gap-2 bg-slate-800 px-4 py-2 rounded-lg">
-                    <span className="text-slate-400 text-sm">Plays:</span>
-                    <span className="text-2xl font-bold text-indigo-400">{playCount}</span>
+                {/* Buttons hidden during pre-listening */}
+                {!showPreListening && (
+                  <>
+                    {/* Preview Button */}
                     <button
-                      onClick={handleResetCounter}
-                      className="ml-2 p-1 text-slate-500 hover:text-white transition-colors"
-                      title="Reset counter"
+                      onClick={() => onPreviewStudent(selectedTest)}
+                      className="flex items-center gap-2 px-3 py-2 bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 transition-colors"
+                      title="Preview student view"
                     >
-                      <RefreshIcon className="w-4 h-4" />
+                      <EyeIcon className="w-4 h-4" />
+                      <span className="text-sm">Preview</span>
                     </button>
-                  </div>
+
+                    {/* QR Code Button */}
+                    <button
+                      onClick={() => generateQRCode(selectedTest)}
+                      className="flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 transition-colors"
+                      title="Show QR code for students"
+                    >
+                      <QRCodeIcon className="w-4 h-4" />
+                      <span className="text-sm">QR Code</span>
+                    </button>
+
+                    {/* Lexis Audio Button */}
+                    {selectedTest.lexis && selectedTest.lexis.length > 0 && (
+                      <button
+                        onClick={() => setShowLexisAudioConfirm(true)}
+                        disabled={isGeneratingLexisAudio || isGeneratingWordAudios}
+                        className={`flex items-center gap-2 h-[34px] px-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                          selectedTest.lexisAudio
+                            ? 'bg-emerald-600 text-white hover:bg-emerald-500'
+                            : 'bg-amber-600 text-white hover:bg-amber-500'
+                        }`}
+                        title="Manage vocabulary audio"
+                      >
+                        {(isGeneratingLexisAudio || isGeneratingWordAudios) ? (
+                          <SpinnerIcon className="w-4 h-4" />
+                        ) : (
+                          <SpeakerIcon className="w-4 h-4" />
+                        )}
+                        <span className="text-sm">
+                          {isGeneratingLexisAudio || isGeneratingWordAudios ? 'Generating' : 'Vocab'}
+                        </span>
+                        {selectedTest.lexisAudio && (
+                          <span className="w-2 h-2 bg-green-400 rounded-full" title="Audio generated" />
+                        )}
+                      </button>
+                    )}
+
+                    {/* Play Counter - only shown with audio */}
+                    {selectedAudio && (
+                      <div className="flex items-center gap-2 bg-slate-800 px-4 py-2 rounded-lg">
+                        <span className="text-slate-400 text-sm">Plays:</span>
+                        <span className="text-2xl font-bold text-indigo-400">{playCount}</span>
+                        <button
+                          onClick={handleResetCounter}
+                          className="ml-2 p-1 text-slate-500 hover:text-white transition-colors"
+                          title="Reset counter"
+                        >
+                          <RefreshIcon className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>
 
-            {/* Audio Player - only shown with audio */}
-            {selectedAudio && (
+            {/* Audio Player - hidden during pre-listening */}
+            {selectedAudio && !showPreListening && (
               <div className="flex items-center gap-4">
                 <button
                   onClick={handlePlayPause}
@@ -1062,22 +1084,23 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
             )}
           </div>
         </div>
+        )}
 
         {/* Pre-Listening Activity Screen */}
         {showPreListening && selectedTest.classroomActivity ? (
-          <div className="flex-1 flex items-center justify-center p-8">
-            <div className="max-w-3xl w-full space-y-10">
+          <div className={`flex-1 flex items-center justify-center ${isPreListeningFullscreen ? 'p-12' : 'p-8'}`}>
+            <div className={`${isPreListeningFullscreen ? 'max-w-5xl' : 'max-w-4xl'} w-full space-y-10`}>
               {/* Situation Setup */}
               <div>
                 <div className="flex items-center gap-3 mb-4">
-                  <span className="text-4xl">🎧</span>
-                  <h2 className={`text-3xl font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>Situation</h2>
+                  <span className={isPreListeningFullscreen ? 'text-5xl' : 'text-4xl'}>🎧</span>
+                  <h2 className={`${isPreListeningFullscreen ? 'text-5xl' : 'text-4xl'} font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>Situation</h2>
                 </div>
-                <p className={`text-2xl leading-relaxed ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
+                <p className={`${isPreListeningFullscreen ? 'text-4xl' : 'text-3xl'} leading-loose ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
                   {selectedTest.classroomActivity.situationSetup.en}
                 </p>
                 {showPreListeningArabic && (
-                  <p className={`text-xl mt-3 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} dir="rtl">
+                  <p className={`${isPreListeningFullscreen ? 'text-3xl' : 'text-2xl'} leading-loose mt-3 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} dir="rtl">
                     {selectedTest.classroomActivity.situationSetup.ar}
                   </p>
                 )}
@@ -1088,14 +1111,14 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
               {/* Discussion Prompt */}
               <div>
                 <div className="flex items-center gap-3 mb-4">
-                  <span className="text-4xl">💬</span>
-                  <h2 className={`text-3xl font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>Discuss</h2>
+                  <span className={isPreListeningFullscreen ? 'text-5xl' : 'text-4xl'}>💬</span>
+                  <h2 className={`${isPreListeningFullscreen ? 'text-5xl' : 'text-4xl'} font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>Discuss</h2>
                 </div>
-                <p className={`text-2xl leading-relaxed ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
+                <p className={`${isPreListeningFullscreen ? 'text-4xl' : 'text-3xl'} leading-loose ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
                   {selectedTest.classroomActivity.discussionPrompt.en}
                 </p>
                 {showPreListeningArabic && (
-                  <p className={`text-xl mt-3 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} dir="rtl">
+                  <p className={`${isPreListeningFullscreen ? 'text-3xl' : 'text-2xl'} leading-loose mt-3 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} dir="rtl">
                     {selectedTest.classroomActivity.discussionPrompt.ar}
                   </p>
                 )}
@@ -1190,6 +1213,27 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
                   </svg>
                   {showPreListeningArabic ? 'Hide Arabic' : 'Show Arabic'}
+                </button>
+
+                {/* Fullscreen toggle */}
+                <button
+                  onClick={() => setIsPreListeningFullscreen(!isPreListeningFullscreen)}
+                  className={`flex items-center gap-2 px-6 py-3 rounded-xl text-lg font-medium transition-colors ${
+                    isPreListeningFullscreen
+                      ? isDark ? 'bg-slate-600 text-white' : 'bg-slate-700 text-white'
+                      : isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  {isPreListeningFullscreen ? (
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+                    </svg>
+                  )}
+                  {isPreListeningFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
                 </button>
               </div>
 
@@ -1452,37 +1496,49 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
           </div>
         )}
 
-        {/* Keyboard Hints - Fixed Bottom */}
-        <div className={`fixed bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-4 backdrop-blur px-6 py-3 rounded-full text-sm ${isDark ? 'bg-slate-800/90 text-white' : 'bg-slate-900/90 text-white'}`}>
-          {/* Audio controls - only shown when audio exists */}
-          {selectedAudio && (
-            <>
-              <span>
-                <kbd className={`px-2 py-1 rounded ${isDark ? 'bg-slate-700' : 'bg-slate-700'}`}>Space</kbd>
-                {' '}{lexisViewMode === 'focus' && selectedTest?.lexisAudio?.wordAudios ? 'Play Word' : 'Play/Pause'}
-              </span>
-              {!(lexisViewMode === 'focus' && selectedTest?.lexisAudio?.wordAudios) && (
-                <span><kbd className={`px-2 py-1 rounded ${isDark ? 'bg-slate-700' : 'bg-slate-700'}`}>R</kbd> Restart</span>
-              )}
-            </>
-          )}
-          {/* Word audio controls - shown when no main audio but has word audios */}
-          {!selectedAudio && lexisViewMode === 'focus' && selectedTest?.lexisAudio?.wordAudios && (
-            <span>
-              <kbd className={`px-2 py-1 rounded ${isDark ? 'bg-slate-700' : 'bg-slate-700'}`}>Space</kbd>
-              {' '}Play Word
-            </span>
-          )}
-          <span><kbd className={`px-2 py-1 rounded ${isDark ? 'bg-slate-700' : 'bg-slate-700'}`}>V</kbd> {lexisViewMode === 'overview' ? 'Focus' : 'Overview'}</span>
-          {lexisViewMode === 'focus' && !slideshowActive && <span><kbd className={`px-2 py-1 rounded ${isDark ? 'bg-slate-700' : 'bg-slate-700'}`}>←→</kbd> Navigate</span>}
-          {lexisViewMode === 'focus' && selectedTest?.lexisAudio?.wordAudios && (
-            <span><kbd className={`px-2 py-1 rounded ${slideshowActive ? 'bg-green-600' : isDark ? 'bg-slate-700' : 'bg-slate-700'}`}>S</kbd> {slideshowActive ? 'Stop' : 'Slideshow'}</span>
-          )}
-          {selectedTest?.classroomActivity && (
-            <span><kbd className={`px-2 py-1 rounded ${showPreListening ? 'bg-purple-600' : isDark ? 'bg-slate-700' : 'bg-slate-700'}`}>A</kbd> {showPreListening ? 'Vocabulary' : 'Pre-Listening'}</span>
-          )}
-          <span><kbd className={`px-2 py-1 rounded ${isDark ? 'bg-slate-700' : 'bg-slate-700'}`}>Esc</kbd> Exit</span>
-        </div>
+        {/* Keyboard Hints - Fixed Bottom (hidden in fullscreen) */}
+        {!isPreListeningFullscreen && (
+          <div className={`fixed bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-4 backdrop-blur px-6 py-3 rounded-full text-sm ${isDark ? 'bg-slate-800/90 text-white' : 'bg-slate-900/90 text-white'}`}>
+            {showPreListening ? (
+              <>
+                <span><kbd className="px-2 py-1 rounded bg-purple-600">A</kbd> Vocabulary</span>
+                <span><kbd className="px-2 py-1 rounded bg-slate-700">F</kbd> Fullscreen</span>
+                <span><kbd className="px-2 py-1 rounded bg-slate-700">Esc</kbd> Exit</span>
+              </>
+            ) : (
+              <>
+                {/* Audio controls - only shown when audio exists */}
+                {selectedAudio && (
+                  <>
+                    <span>
+                      <kbd className="px-2 py-1 rounded bg-slate-700">Space</kbd>
+                      {' '}{lexisViewMode === 'focus' && selectedTest?.lexisAudio?.wordAudios ? 'Play Word' : 'Play/Pause'}
+                    </span>
+                    {!(lexisViewMode === 'focus' && selectedTest?.lexisAudio?.wordAudios) && (
+                      <span><kbd className="px-2 py-1 rounded bg-slate-700">R</kbd> Restart</span>
+                    )}
+                  </>
+                )}
+                {/* Word audio controls - shown when no main audio but has word audios */}
+                {!selectedAudio && lexisViewMode === 'focus' && selectedTest?.lexisAudio?.wordAudios && (
+                  <span>
+                    <kbd className="px-2 py-1 rounded bg-slate-700">Space</kbd>
+                    {' '}Play Word
+                  </span>
+                )}
+                <span><kbd className="px-2 py-1 rounded bg-slate-700">V</kbd> {lexisViewMode === 'overview' ? 'Focus' : 'Overview'}</span>
+                {lexisViewMode === 'focus' && !slideshowActive && <span><kbd className="px-2 py-1 rounded bg-slate-700">←→</kbd> Navigate</span>}
+                {lexisViewMode === 'focus' && selectedTest?.lexisAudio?.wordAudios && (
+                  <span><kbd className={`px-2 py-1 rounded ${slideshowActive ? 'bg-green-600' : 'bg-slate-700'}`}>S</kbd> {slideshowActive ? 'Stop' : 'Slideshow'}</span>
+                )}
+                {selectedTest?.classroomActivity && (
+                  <span><kbd className="px-2 py-1 rounded bg-slate-700">A</kbd> Pre-Listening</span>
+                )}
+                <span><kbd className="px-2 py-1 rounded bg-slate-700">Esc</kbd> Exit</span>
+              </>
+            )}
+          </div>
+        )}
 
         {/* QR Code Modal */}
         {showQRModal && (
