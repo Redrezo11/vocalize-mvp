@@ -644,7 +644,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [view, isPlaying, showQRModal, selectedTest, selectedAudio, lexisViewMode, slideshowActive]);
+  }, [view, isPlaying, showQRModal, selectedTest, selectedAudio, lexisViewMode, slideshowActive, showPreListening, isPreListeningFullscreen]);
 
   // Get test type label
   const getTestTypeLabel = (type: string): string => {
