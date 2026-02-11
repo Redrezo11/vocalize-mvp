@@ -349,7 +349,11 @@ Return a SINGLE JSON object. No markdown fences, no explanation — ONLY valid J
         { "word": "distractor word", "inDialogue": false }
       ]
     }
-  ]
+  ],
+  "classroomActivity": {
+    "situationSetup": { "en": "English situation description", "ar": "وصف الموقف بالعربية" },
+    "discussionPrompt": { "en": "English discussion prompt", "ar": "سؤال النقاش بالعربية" }
+  }
 }
 
 ## Dialogue Guidelines
@@ -398,6 +402,22 @@ Generate exactly 2 preview activities: ${previewActivities}
 - Include Arabic translation for each statement
 
 IMPORTANT: Preview content must NOT duplicate or rephrase the comprehension questions.
+
+## Classroom Activity (for teacher presentation mode)
+
+Generate a collaborative pre-listening discussion task with two bilingual components:
+
+1. "situationSetup" — One sentence (English + Arabic) describing WHO is in the listening and WHAT the situation is. Name roles (not character names) and the setting. Must be specific enough to activate the right schema but NOT reveal answers to any MCQ question.
+   Good: "A university student visits a career advisor to ask for help choosing a job after graduation."
+   Bad: "Two people talk about careers." (too vague)
+   Bad: "Ahmed tells his advisor he wants to work in technology." (spoils content)
+
+2. "discussionPrompt" — One question/instruction (English + Arabic) that places students inside the scenario. The prompt type depends on CEFR level:
+   - A1-A2 (Personal Experience Retrieval): Ask students to share their own experience in the same domain. Use simple present/past tense. Plant 1-2 vocabulary words from the script naturally.
+   - B1 (Empathetic Scenario Positioning): Place the student inside the scenario as a participant. Use conditional or hypothetical framing.
+   - B2-C1 (Perspective-Taking / Counter-Argument): Require students to hold opposing positions simultaneously. Force perspective-taking.
+
+   The prompt must be answerable by ANY student regardless of background. Keep to ONE sentence. Include Arabic translations for both fields.
 
 ## Voice Selection Rules (CRITICAL)
 - ALWAYS assign one FEMALE voice and one MALE voice for contrast
