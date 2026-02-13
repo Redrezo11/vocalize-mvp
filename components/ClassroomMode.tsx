@@ -1764,7 +1764,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
               </h2>
             </div>
 
-            {/* Word rows — adaptive columns, no scroll */}
+            {/* Word rows — centered columns, no borders, no scroll */}
             <div className="flex-1 overflow-hidden pb-16">
               {(() => {
                 const items = selectedTest.lexis!;
@@ -1777,7 +1777,8 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                 const arabicSize = count <= 8 ? 'text-2xl' : count <= 14 ? 'text-xl' : 'text-lg';
                 const posSize = count <= 8 ? 'text-base' : 'text-sm';
                 const iconSize = count <= 8 ? 'text-2xl' : 'text-xl';
-                const rowPadding = count <= 8 ? 'py-3 px-6' : count <= 14 ? 'py-2 px-5' : 'py-1.5 px-4';
+                const termWidth = useTwoCols ? 'w-48' : 'w-64';
+                const posWidth = useTwoCols ? 'w-24' : 'w-32';
 
                 const renderColumn = (columnItems: typeof items) => (
                   <div className="flex-1" style={{ display: 'grid', gridTemplateRows: `repeat(${columnItems.length}, 1fr)` }}>
@@ -1789,10 +1790,8 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                       return (
                         <div
                           key={item.id}
-                          className={`flex items-center gap-4 ${rowPadding} border-b border-slate-800/50 transition-all ${
-                            isActive
-                              ? 'bg-indigo-950/40 border-l-4 border-l-indigo-500'
-                              : 'border-l-4 border-l-transparent'
+                          className={`flex items-center gap-5 px-6 rounded-lg transition-all ${
+                            isActive ? 'bg-indigo-950/30' : ''
                           }`}
                         >
                           {hasAudio ? (
@@ -1804,23 +1803,25 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                                 }
                                 handleFullscreenWordPlay(item.id);
                               }}
-                              className={`${iconSize} flex-shrink-0 transition-colors ${
+                              className={`${iconSize} w-10 flex-shrink-0 transition-colors ${
                                 isActive ? 'text-indigo-400 animate-pulse' : 'text-slate-600 hover:text-slate-400'
                               }`}
                             >
                               {isActive ? '🔊' : '🔈'}
                             </button>
                           ) : (
-                            <span className={`${iconSize} flex-shrink-0 text-slate-800`}>🔇</span>
+                            <span className={`${iconSize} w-10 flex-shrink-0 text-slate-800`}>🔇</span>
                           )}
-                          <span className={`${termSize} font-bold text-white flex-shrink-0`}>{item.term}</span>
-                          {item.partOfSpeech && (
-                            <span className={`${posSize} px-2 py-0.5 rounded-full bg-indigo-600/20 text-indigo-300 flex-shrink-0`}>
+                          <span className={`${termSize} ${termWidth} font-bold text-white flex-shrink-0`}>{item.term}</span>
+                          {item.partOfSpeech ? (
+                            <span className={`${posSize} ${posWidth} flex-shrink-0 text-indigo-300`}>
                               {item.partOfSpeech}
                             </span>
+                          ) : (
+                            <span className={`${posWidth} flex-shrink-0`} />
                           )}
                           {item.definitionArabic && (
-                            <span className={`${arabicSize} text-slate-300 ml-auto`} dir="rtl">
+                            <span className={`${arabicSize} text-slate-300`} dir="rtl">
                               {item.definitionArabic}
                             </span>
                           )}
@@ -1831,7 +1832,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                 );
 
                 return (
-                  <div className={`h-full flex ${useTwoCols ? 'gap-8' : ''} px-8`}>
+                  <div className={`h-full flex justify-center ${useTwoCols ? 'gap-12 max-w-7xl' : 'max-w-5xl'} mx-auto`}>
                     {renderColumn(leftItems)}
                     {useTwoCols && renderColumn(rightItems)}
                   </div>
