@@ -112,6 +112,7 @@ const listeningTestSchema = new mongoose.Schema({
   lexisAudio: { type: mongoose.Schema.Types.Mixed, default: null },  // Generated vocabulary audio
   preview: [previewActivitySchema],  // Pre-listening preview activities
   classroomActivity: { type: mongoose.Schema.Types.Mixed, default: null },  // Pre-listening classroom discussion
+  transferQuestion: { type: mongoose.Schema.Types.Mixed, default: null },  // Plenary transfer question
   difficulty: { type: String, enum: ['A1', 'A2', 'B1', 'B2', 'C1'] },  // CEFR level
   created_at: { type: Date, default: Date.now },
   updated_at: { type: Date, default: Date.now }
@@ -455,7 +456,7 @@ app.get('/api/tests/:id', async (req, res) => {
 // Create test
 app.post('/api/tests', async (req, res) => {
   try {
-    const { audioId, title, type, questions, lexis, preview, classroomActivity, difficulty } = req.body;
+    const { audioId, title, type, questions, lexis, preview, classroomActivity, transferQuestion, difficulty } = req.body;
 
     console.log('[POST /api/tests] Creating test with preview:', preview ? preview.length + ' activities' : 'none');
 
@@ -478,6 +479,7 @@ app.post('/api/tests', async (req, res) => {
       lexis: lexis || [],
       preview: preview || [],
       classroomActivity: classroomActivity || null,
+      transferQuestion: transferQuestion || null,
       difficulty: difficulty || null
     });
 
@@ -493,7 +495,7 @@ app.post('/api/tests', async (req, res) => {
 // Update test
 app.put('/api/tests/:id', async (req, res) => {
   try {
-    const { title, type, questions, lexis, lexisAudio, preview, classroomActivity, difficulty } = req.body;
+    const { title, type, questions, lexis, lexisAudio, preview, classroomActivity, transferQuestion, difficulty } = req.body;
 
     console.log('[SERVER PUT /api/tests/:id] Received preview:', preview ? preview.length + ' activities' : 'undefined');
     console.log('[SERVER PUT /api/tests/:id] Received lexisAudio:', lexisAudio ? { engine: lexisAudio.engine, urlLength: lexisAudio.url?.length } : 'undefined');
@@ -525,6 +527,11 @@ app.put('/api/tests/:id', async (req, res) => {
     // Only update classroomActivity if provided
     if (classroomActivity !== undefined) {
       updateData.classroomActivity = classroomActivity;
+    }
+
+    // Only update transferQuestion if provided
+    if (transferQuestion !== undefined) {
+      updateData.transferQuestion = transferQuestion;
     }
 
     // Only update difficulty if provided

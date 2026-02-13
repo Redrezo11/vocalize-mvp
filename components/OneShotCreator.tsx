@@ -210,6 +210,7 @@ export interface OneShotPayload {
     situationSetup: { en: string; ar: string };
     discussionPrompt: { en: string; ar: string };
   };
+  transferQuestion?: { en: string; ar: string };
 }
 
 // Exported for use by JamButton
@@ -353,6 +354,10 @@ Return a SINGLE JSON object. No markdown fences, no explanation — ONLY valid J
   "classroomActivity": {
     "situationSetup": { "en": "English situation description", "ar": "وصف الموقف بالعربية" },
     "discussionPrompt": { "en": "English discussion prompt", "ar": "سؤال النقاش بالعربية" }
+  },
+  "transferQuestion": {
+    "en": "English transfer question",
+    "ar": "سؤال النقل بالعربية"
   }
 }
 
@@ -418,6 +423,22 @@ Generate a collaborative pre-listening discussion task with two bilingual compon
    - B2-C1 (Perspective-Taking / Counter-Argument): Require students to hold opposing positions simultaneously. Force perspective-taking.
 
    The prompt must be answerable by ANY student regardless of background. Keep to ONE sentence. Include Arabic translations for both fields.
+
+## Transfer Question (plenary — whole-class discussion after all tasks)
+
+Generate ONE question that takes the listening content and plants it into a new, adjacent scenario the students haven't encountered. This forces creative application (Bloom's Apply/Create). It is projected on the smartboard for teacher-facilitated class discussion.
+
+The question type depends on CEFR level:
+- A1-A2 (Concrete Personal Application): Take the specific situation from the listening and place the student in it. Simple, concrete, first-person. "You need to [situation from listening]. What would you...?"
+- B1 (Applied Reasoning): Give a scenario adjacent to the listening — same domain, new stakeholders, unresolved problem. "The [entity] did [action from listening], but [new complication]. What might be going wrong?"
+- B2-C1 (Abstract Transfer): Lift a principle from the listening and ask students to apply it to a broader category. "The speakers [did X]. Is this kind of [abstract pattern] always [judgment], or does it sometimes [alternative]?"
+
+Rules:
+- Must require knowledge FROM the listening to answer well
+- Must NOT be answerable by just recalling what the speakers said
+- Must place content into a context the listening never mentioned
+- Keep to 1-2 sentences maximum
+- Include Arabic translation
 
 ## Voice Selection Rules (CRITICAL)
 - ALWAYS assign one FEMALE voice and one MALE voice for contrast
@@ -613,6 +634,22 @@ Generate a collaborative pre-listening discussion task with two bilingual compon
 
    The prompt must be answerable by ANY student regardless of background. Keep to ONE sentence. Include Arabic translations for both fields.
 
+## Transfer Question (plenary — whole-class discussion after all tasks)
+
+Generate ONE question that takes the listening content and plants it into a new, adjacent scenario the students haven't encountered. This forces creative application (Bloom's Apply/Create). It is projected on the smartboard for teacher-facilitated class discussion.
+
+The question type depends on CEFR level:
+- A1-A2 (Concrete Personal Application): Take the specific situation from the listening and place the student in it. Simple, concrete, first-person. "You need to [situation from listening]. What would you...?"
+- B1 (Applied Reasoning): Give a scenario adjacent to the listening — same domain, new stakeholders, unresolved problem. "The [entity] did [action from listening], but [new complication]. What might be going wrong?"
+- B2-C1 (Abstract Transfer): Lift a principle from the listening and ask students to apply it to a broader category. "The speakers [did X]. Is this kind of [abstract pattern] always [judgment], or does it sometimes [alternative]?"
+
+Rules:
+- Must require knowledge FROM the listening to answer well
+- Must NOT be answerable by just recalling what the speakers said
+- Must place content into a context the listening never mentioned
+- Keep to 1-2 sentences maximum
+- Include Arabic translation
+
 ## Output Format
 
 Return a SINGLE JSON object with ONLY these fields. No markdown fences, no explanation — ONLY valid JSON.
@@ -661,6 +698,10 @@ Return a SINGLE JSON object with ONLY these fields. No markdown fences, no expla
   "classroomActivity": {
     "situationSetup": { "en": "English situation description", "ar": "وصف الموقف بالعربية" },
     "discussionPrompt": { "en": "English discussion prompt", "ar": "سؤال النقاش بالعربية" }
+  },
+  "transferQuestion": {
+    "en": "English transfer question",
+    "ar": "سؤال النقل بالعربية"
   }
 }
 
@@ -899,6 +940,7 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
             }))
           : undefined,
         classroomActivity: payload.classroomActivity || undefined,
+        transferQuestion: payload.transferQuestion || undefined,
       };
 
       const response = await fetch(`${API_BASE}/tests`, {

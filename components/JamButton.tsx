@@ -456,6 +456,7 @@ export const JamButton: React.FC<JamButtonProps> = ({
           items: p.items.map((item: any) => ({ ...item, id: generateId() })),
         })) || [],
         classroomActivity: payload.classroomActivity || undefined,
+        transferQuestion: payload.transferQuestion || undefined,
         difficulty: payload.difficulty,
       }),
     });
@@ -474,6 +475,7 @@ export const JamButton: React.FC<JamButtonProps> = ({
       lexis: testData.lexis?.map((l: any) => ({ ...l, id: l._id || generateId() })),
       preview: testData.preview,
       classroomActivity: testData.classroomActivity,
+      transferQuestion: testData.transferQuestion,
       difficulty: testData.difficulty,
       createdAt: testData.created_at,
       updatedAt: testData.updated_at,
@@ -623,7 +625,7 @@ export const JamButton: React.FC<JamButtonProps> = ({
         throw new Error('No valid JSON found in test content response');
       }
 
-      let testResult: { questions: any[]; lexis: any[]; preview: any[]; classroomActivity?: any };
+      let testResult: { questions: any[]; lexis: any[]; preview: any[]; classroomActivity?: any; transferQuestion?: any };
       try {
         testResult = JSON.parse(testJsonMatch[0]);
       } catch {
@@ -644,6 +646,7 @@ export const JamButton: React.FC<JamButtonProps> = ({
         lexis: testResult.lexis || [],
         preview: testResult.preview || [],
         classroomActivity: testResult.classroomActivity || undefined,
+        transferQuestion: testResult.transferQuestion || undefined,
       }));
 
       setGeneratingLabel('');

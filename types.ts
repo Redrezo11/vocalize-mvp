@@ -200,6 +200,7 @@ export interface ListeningTest {
   lexisAudio?: LexisAudio;         // Generated vocabulary audio
   preview?: PreviewActivity[];     // Pre-listening preview activities
   classroomActivity?: ClassroomActivity; // Pre-listening classroom discussion
+  transferQuestion?: { en: string; ar: string }; // Plenary transfer question for whole-class discussion
   difficulty?: string;             // CEFR level (A1, A2, B1, B2, C1)
   createdAt: string;
   updatedAt: string;

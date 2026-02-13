@@ -80,6 +80,9 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
   const [isPlayingPreListeningAudio, setIsPlayingPreListeningAudio] = useState(false);
   const preListeningAudioRef = useRef<HTMLAudioElement>(null);
 
+  // Plenary transfer question toggle
+  const [showTransferQuestion, setShowTransferQuestion] = useState(false);
+
   // Teacher controls - hide answers by default
   const [showAnswers, setShowAnswers] = useState(false);
 
@@ -428,6 +431,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
     setShowPreListeningArabic(false);
     setIsPreListeningFullscreen(false);
     setIsPlayingPreListeningAudio(false);
+    setShowTransferQuestion(false);
     setCurrentTime(0);
     setDuration(0);
     setView('present');
@@ -619,6 +623,17 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
         return;
       }
 
+      // T toggles plenary transfer question
+      if (e.key === 't' || e.key === 'T') {
+        if (view === 'present' && selectedTest?.transferQuestion) {
+          setShowTransferQuestion(prev => {
+            if (!prev) setShowPreListening(false);
+            return !prev;
+          });
+        }
+        return;
+      }
+
       if (view !== 'present' || showQRModal) return;
 
       switch (e.key) {
@@ -644,6 +659,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
           if (selectedTest?.classroomActivity) {
             setShowPreListening(prev => {
               if (prev) setIsPreListeningFullscreen(false);
+              if (!prev) setShowTransferQuestion(false); // exit plenary if entering pre-listening
               return !prev;
             });
           }
@@ -689,7 +705,11 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
           }
           break;
         case 'Escape':
-          // Exit fullscreen first, then exit presentation
+          // Step back: plenary → vocabulary → exit presentation
+          if (showTransferQuestion) {
+            setShowTransferQuestion(false);
+            break;
+          }
           if (isPreListeningFullscreen) {
             setIsPreListeningFullscreen(false);
             break;
@@ -707,7 +727,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [view, isPlaying, showQRModal, selectedTest, selectedAudio, lexisViewMode, slideshowActive, showPreListening, isPreListeningFullscreen]);
+  }, [view, isPlaying, showQRModal, selectedTest, selectedAudio, lexisViewMode, slideshowActive, showPreListening, isPreListeningFullscreen, showTransferQuestion]);
 
   // Get test type label
   const getTestTypeLabel = (type: string): string => {
@@ -1035,8 +1055,27 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                   </button>
                 )}
 
-                {/* Buttons hidden during pre-listening */}
-                {!showPreListening && (
+                {/* Plenary Transfer Question Button */}
+                {selectedTest.transferQuestion && (
+                  <button
+                    onClick={() => {
+                      setShowTransferQuestion(!showTransferQuestion);
+                      if (!showTransferQuestion) setShowPreListening(false);
+                    }}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
+                      showTransferQuestion
+                        ? 'bg-amber-500 text-white hover:bg-amber-400'
+                        : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                    }`}
+                    title="Show plenary transfer question for class discussion"
+                  >
+                    <span className="text-sm">🗣️</span>
+                    <span className="text-sm">{showTransferQuestion ? 'Vocabulary' : 'Plenary'}</span>
+                  </button>
+                )}
+
+                {/* Buttons hidden during pre-listening and plenary */}
+                {!showPreListening && !showTransferQuestion && (
                   <>
                     {/* QR Code Button */}
                     <button
@@ -1094,7 +1133,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
             </div>
 
             {/* Audio Player - hidden during pre-listening */}
-            {selectedAudio && !showPreListening && (
+            {selectedAudio && !showPreListening && !showTransferQuestion && (
               <div className="flex items-center gap-4">
                 <button
                   onClick={handlePlayPause}
@@ -1321,6 +1360,38 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                 className="hidden"
                 onEnded={() => setIsPlayingPreListeningAudio(false)}
               />
+            </div>
+          </div>
+        ) : showTransferQuestion && selectedTest.transferQuestion ? (
+          /* Plenary Transfer Question Screen */
+          <div className="flex-1 flex items-center justify-center p-8">
+            <div className="max-w-4xl w-full space-y-10">
+              {/* Header */}
+              <div className="text-center">
+                <span className="text-6xl mb-4 block">🗣️</span>
+                <h2 className={`text-2xl font-semibold tracking-wide uppercase ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                  Plenary
+                </h2>
+              </div>
+
+              {/* English question */}
+              <div className={`rounded-2xl p-10 border ${isDark ? 'bg-slate-800/50 border-slate-700/50' : 'bg-slate-100 border-slate-200'}`}>
+                <p className={`text-3xl leading-relaxed font-medium ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                  {selectedTest.transferQuestion.en}
+                </p>
+              </div>
+
+              {/* Arabic question */}
+              <div className={`rounded-2xl p-10 border ${isDark ? 'bg-slate-800/50 border-slate-700/50' : 'bg-slate-100 border-slate-200'}`}>
+                <p className={`text-3xl leading-relaxed font-medium text-right ${isDark ? 'text-slate-300' : 'text-slate-700'}`} dir="rtl">
+                  {selectedTest.transferQuestion.ar}
+                </p>
+              </div>
+
+              {/* Footer label */}
+              <p className={`text-center text-lg pt-4 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                Discuss as a class · ناقشوا كصف
+              </p>
             </div>
           </div>
         ) :
@@ -1571,10 +1642,22 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
         {/* Keyboard Hints - Fixed Bottom (hidden in fullscreen) */}
         {!isPreListeningFullscreen && (
           <div className={`fixed bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-4 backdrop-blur px-6 py-3 rounded-full text-sm ${isDark ? 'bg-slate-800/90 text-white' : 'bg-slate-900/90 text-white'}`}>
-            {showPreListening ? (
+            {showTransferQuestion ? (
+              <>
+                <span><kbd className="px-2 py-1 rounded bg-amber-600">T</kbd> Vocabulary</span>
+                {selectedTest?.classroomActivity && (
+                  <span><kbd className="px-2 py-1 rounded bg-slate-700">A</kbd> Pre-Listening</span>
+                )}
+                <span><kbd className="px-2 py-1 rounded bg-slate-700">Q</kbd> QR Code</span>
+                <span><kbd className="px-2 py-1 rounded bg-slate-700">Esc</kbd> Back</span>
+              </>
+            ) : showPreListening ? (
               <>
                 <span><kbd className="px-2 py-1 rounded bg-purple-600">A</kbd> Vocabulary</span>
                 <span><kbd className="px-2 py-1 rounded bg-slate-700">F</kbd> Fullscreen</span>
+                {selectedTest?.transferQuestion && (
+                  <span><kbd className="px-2 py-1 rounded bg-slate-700">T</kbd> Plenary</span>
+                )}
                 <span><kbd className="px-2 py-1 rounded bg-slate-700">Q</kbd> QR Code</span>
                 <span><kbd className="px-2 py-1 rounded bg-slate-700">Esc</kbd> Exit</span>
               </>
@@ -1606,6 +1689,9 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                 )}
                 {selectedTest?.classroomActivity && (
                   <span><kbd className="px-2 py-1 rounded bg-slate-700">A</kbd> Pre-Listening</span>
+                )}
+                {selectedTest?.transferQuestion && (
+                  <span><kbd className="px-2 py-1 rounded bg-slate-700">T</kbd> Plenary</span>
                 )}
                 <span><kbd className="px-2 py-1 rounded bg-slate-700">Q</kbd> QR Code</span>
                 <span><kbd className="px-2 py-1 rounded bg-slate-700">Esc</kbd> Exit</span>
