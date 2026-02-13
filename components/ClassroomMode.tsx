@@ -631,7 +631,11 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
           break;
         case 'q':
         case 'Q':
-          if (selectedTest) generateQRCode(selectedTest);
+          if (showQRModal) {
+            setShowQRModal(false);
+          } else if (selectedTest) {
+            generateQRCode(selectedTest);
+          }
           break;
         case 'a':
         case 'A':
@@ -1569,6 +1573,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
               <>
                 <span><kbd className="px-2 py-1 rounded bg-purple-600">A</kbd> Vocabulary</span>
                 <span><kbd className="px-2 py-1 rounded bg-slate-700">F</kbd> Fullscreen</span>
+                <span><kbd className="px-2 py-1 rounded bg-slate-700">Q</kbd> QR Code</span>
                 <span><kbd className="px-2 py-1 rounded bg-slate-700">Esc</kbd> Exit</span>
               </>
             ) : (
@@ -1600,6 +1605,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                 {selectedTest?.classroomActivity && (
                   <span><kbd className="px-2 py-1 rounded bg-slate-700">A</kbd> Pre-Listening</span>
                 )}
+                <span><kbd className="px-2 py-1 rounded bg-slate-700">Q</kbd> QR Code</span>
                 <span><kbd className="px-2 py-1 rounded bg-slate-700">Esc</kbd> Exit</span>
               </>
             )}
