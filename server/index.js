@@ -166,6 +166,73 @@ const deleteFromCloudinary = async (publicId) => {
   }
 };
 
+// Helper: Upload test audio (lexis, word, classroom) to Cloudinary
+// Accepts full data URLs (audio/mpeg from OpenAI, audio/wav from Gemini)
+const uploadTestAudio = async (dataUrl, publicId) => {
+  if (!dataUrl || !dataUrl.startsWith('data:')) return null;
+  try {
+    const result = await cloudinary.uploader.upload(dataUrl, {
+      resource_type: 'video',
+      public_id: publicId,
+      folder: 'vocalize-test-audio',
+      overwrite: true
+    });
+    return result.secure_url;
+  } catch (error) {
+    console.error('Test audio upload error:', error);
+    return null;
+  }
+};
+
+// Process all base64 audio fields in a test, upload to Cloudinary, replace with URLs
+const processTestAudioUploads = async (testId, data) => {
+  const uploads = [];
+
+  // lexisAudio.url
+  if (data.lexisAudio?.url?.startsWith('data:')) {
+    uploads.push(
+      uploadTestAudio(data.lexisAudio.url, `lexis_audio_${testId}`)
+        .then(url => { if (url) data.lexisAudio.url = url; })
+    );
+  }
+
+  // lexisAudio.wordAudios
+  if (data.lexisAudio?.wordAudios) {
+    for (const [wordId, wordAudio] of Object.entries(data.lexisAudio.wordAudios)) {
+      if (wordAudio.url?.startsWith('data:')) {
+        uploads.push(
+          uploadTestAudio(wordAudio.url, `word_audio_${testId}_${wordId}`)
+            .then(url => { if (url) wordAudio.url = url; })
+        );
+      }
+    }
+  }
+
+  // classroomActivity.audioEn
+  if (data.classroomActivity?.audioEn?.startsWith('data:')) {
+    uploads.push(
+      uploadTestAudio(data.classroomActivity.audioEn, `classroom_en_${testId}`)
+        .then(url => { if (url) data.classroomActivity.audioEn = url; })
+    );
+  }
+
+  // classroomActivity.audioAr
+  if (data.classroomActivity?.audioAr?.startsWith('data:')) {
+    uploads.push(
+      uploadTestAudio(data.classroomActivity.audioAr, `classroom_ar_${testId}`)
+        .then(url => { if (url) data.classroomActivity.audioAr = url; })
+    );
+  }
+
+  if (uploads.length > 0) {
+    console.log(`[processTestAudioUploads] Uploading ${uploads.length} audio file(s) for test ${testId}`);
+    await Promise.all(uploads);
+    console.log(`[processTestAudioUploads] Done uploading for test ${testId}`);
+  }
+
+  return data;
+};
+
 // ==================== REQUEST LOGGING MIDDLEWARE ====================
 app.use('/api', (req, res, next) => {
   const start = Date.now();
@@ -465,6 +532,9 @@ app.put('/api/tests/:id', async (req, res) => {
       updateData.difficulty = difficulty;
     }
 
+    // Upload any base64 audio to Cloudinary before saving
+    await processTestAudioUploads(req.params.id, updateData);
+
     const test = await ListeningTest.findByIdAndUpdate(
       req.params.id,
       updateData,
@@ -491,6 +561,25 @@ app.delete('/api/tests/:id', async (req, res) => {
     if (!test) {
       return res.status(404).json({ error: 'Test not found' });
     }
+
+    // Clean up Cloudinary audio assets (fire-and-forget)
+    const testId = test._id.toString();
+    const deletions = [
+      deleteFromCloudinary(`vocalize-test-audio/lexis_audio_${testId}`),
+      deleteFromCloudinary(`vocalize-test-audio/classroom_en_${testId}`),
+      deleteFromCloudinary(`vocalize-test-audio/classroom_ar_${testId}`),
+    ];
+    if (test.lexisAudio?.wordAudios) {
+      for (const wordId of Object.keys(test.lexisAudio.wordAudios)) {
+        deletions.push(
+          deleteFromCloudinary(`vocalize-test-audio/word_audio_${testId}_${wordId}`)
+        );
+      }
+    }
+    Promise.all(deletions).catch(err =>
+      console.error('[DELETE /api/tests] Cloudinary cleanup error:', err)
+    );
+
     res.json({ message: 'Test deleted' });
   } catch (error) {
     res.status(500).json({ error: error.message });

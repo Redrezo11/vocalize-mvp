@@ -384,7 +384,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
 
     try {
       const qrDataUrl = await QRCode.toDataURL(url, {
-        width: 300,
+        width: 512,
         margin: 2,
         color: {
           dark: '#1e293b',
@@ -1606,37 +1606,42 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
           </div>
         )}
 
-        {/* QR Code Modal */}
+        {/* QR Code Modal — landscape layout for smartboard/projector */}
         {showQRModal && (
-          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl max-w-md w-full p-8 text-center">
-              <h2 className="text-2xl font-bold text-slate-900 mb-2">Student Access</h2>
-              <p className="text-slate-500 mb-6">Scan the QR code or share the link to access the test</p>
-
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"
+               onClick={() => setShowQRModal(false)}>
+            <div className="bg-white rounded-2xl max-w-4xl w-full p-10 flex gap-10 items-center"
+                 onClick={e => e.stopPropagation()}>
+              {/* Left: Large QR code */}
               {qrCodeUrl && (
-                <div className="bg-slate-50 p-6 rounded-2xl mb-6 inline-block">
-                  <img src={qrCodeUrl} alt="QR Code" className="w-64 h-64 mx-auto" />
+                <div className="bg-slate-50 p-8 rounded-2xl flex-shrink-0">
+                  <img src={qrCodeUrl} alt="QR Code" className="w-80 h-80" />
                 </div>
               )}
+              {/* Right: Info & actions */}
+              <div className="flex-1 min-w-0">
+                <h2 className="text-3xl font-bold text-slate-900 mb-2">Student Access</h2>
+                <p className="text-lg text-slate-500 mb-8">Scan the QR code or share the link to access the test</p>
 
-              <div className="bg-slate-100 rounded-xl p-4 mb-6">
-                <p className="text-xs text-slate-500 mb-2">Student URL:</p>
-                <p className="text-sm font-mono text-slate-700 break-all">{studentUrl}</p>
-              </div>
+                <div className="bg-slate-100 rounded-xl p-4 mb-8">
+                  <p className="text-xs text-slate-500 mb-2">Student URL:</p>
+                  <p className="text-sm font-mono text-slate-700 break-all">{studentUrl}</p>
+                </div>
 
-              <div className="flex gap-3">
-                <button
-                  onClick={copyUrlToClipboard}
-                  className="flex-1 px-4 py-3 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 transition-colors"
-                >
-                  Copy Link
-                </button>
-                <button
-                  onClick={() => setShowQRModal(false)}
-                  className="flex-1 px-4 py-3 bg-slate-200 text-slate-700 rounded-xl font-medium hover:bg-slate-300 transition-colors"
-                >
-                  Close
-                </button>
+                <div className="flex gap-3">
+                  <button
+                    onClick={copyUrlToClipboard}
+                    className="flex-1 px-4 py-3 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 transition-colors"
+                  >
+                    Copy Link
+                  </button>
+                  <button
+                    onClick={() => setShowQRModal(false)}
+                    className="flex-1 px-4 py-3 bg-slate-200 text-slate-700 rounded-xl font-medium hover:bg-slate-300 transition-colors"
+                  >
+                    Close
+                  </button>
+                </div>
               </div>
             </div>
           </div>
