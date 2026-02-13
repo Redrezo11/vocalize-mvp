@@ -652,6 +652,12 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
         return;
       }
 
+      // Escape closes QR modal when it's open
+      if (e.key === 'Escape' && showQRModal) {
+        setShowQRModal(false);
+        return;
+      }
+
       // T navigates to plenary fullscreen slide
       if (e.key === 't' || e.key === 'T') {
         if (view === 'present' && selectedTest?.transferQuestion) {
@@ -1543,18 +1549,18 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                       💬 Pre-Listening
                     </h2>
                   </div>
-                  <div className="flex-1 flex items-center justify-center p-12">
-                    <div className="max-w-5xl w-full space-y-10">
+                  <div className="flex-1 overflow-y-auto p-8 pb-20">
+                    <div className="max-w-5xl w-full mx-auto space-y-6">
                       <div>
                         <div className="flex items-center gap-3 mb-4">
-                          <span className="text-5xl">🎧</span>
-                          <h3 className="text-5xl font-bold text-white">Situation</h3>
+                          <span className="text-4xl">🎧</span>
+                          <h3 className="text-4xl font-bold text-white">Situation</h3>
                         </div>
-                        <p className="text-4xl leading-loose text-slate-200">
+                        <p className="text-3xl leading-loose text-slate-200">
                           {selectedTest.classroomActivity.situationSetup.en}
                         </p>
                         {showPreListeningArabic && (
-                          <p className="text-3xl leading-loose mt-3 text-slate-400" dir="rtl">
+                          <p className="text-2xl leading-loose mt-3 text-slate-400" dir="rtl">
                             {selectedTest.classroomActivity.situationSetup.ar}
                           </p>
                         )}
@@ -1562,14 +1568,14 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                       <hr className="border-slate-700" />
                       <div>
                         <div className="flex items-center gap-3 mb-4">
-                          <span className="text-5xl">💬</span>
-                          <h3 className="text-5xl font-bold text-white">Discuss</h3>
+                          <span className="text-4xl">💬</span>
+                          <h3 className="text-4xl font-bold text-white">Discuss</h3>
                         </div>
-                        <p className="text-4xl leading-loose text-slate-200">
+                        <p className="text-3xl leading-loose text-slate-200">
                           {selectedTest.classroomActivity.discussionPrompt.en}
                         </p>
                         {showPreListeningArabic && (
-                          <p className="text-3xl leading-loose mt-3 text-slate-400" dir="rtl">
+                          <p className="text-2xl leading-loose mt-3 text-slate-400" dir="rtl">
                             {selectedTest.classroomActivity.discussionPrompt.ar}
                           </p>
                         )}
@@ -1735,15 +1741,15 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                       🗣️ Plenary
                     </h2>
                   </div>
-                  <div className="flex-1 flex items-center justify-center p-12">
-                    <div className="max-w-4xl w-full space-y-10">
-                      <div className="rounded-2xl p-10 bg-slate-800/50 border border-slate-700/50">
-                        <p className="text-4xl leading-relaxed font-medium text-white">
+                  <div className="flex-1 overflow-y-auto p-8 pb-20">
+                    <div className="max-w-4xl w-full mx-auto space-y-6">
+                      <div className="rounded-2xl p-8 bg-slate-800/50 border border-slate-700/50">
+                        <p className="text-3xl leading-relaxed font-medium text-white">
                           {selectedTest.transferQuestion.en}
                         </p>
                       </div>
-                      <div className="rounded-2xl p-10 bg-slate-800/50 border border-slate-700/50">
-                        <p className="text-4xl leading-relaxed font-medium text-slate-300 text-right" dir="rtl">
+                      <div className="rounded-2xl p-8 bg-slate-800/50 border border-slate-700/50">
+                        <p className="text-3xl leading-relaxed font-medium text-slate-300 text-right" dir="rtl">
                           {selectedTest.transferQuestion.ar}
                         </p>
                       </div>
