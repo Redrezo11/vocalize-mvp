@@ -83,6 +83,10 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
   // Plenary transfer question toggle
   const [showTransferQuestion, setShowTransferQuestion] = useState(false);
 
+  // Fullscreen vocabulary display
+  const [showFullscreenVocab, setShowFullscreenVocab] = useState(false);
+  const [playingWordId, setPlayingWordId] = useState<string | null>(null);
+
   // Teacher controls - hide answers by default
   const [showAnswers, setShowAnswers] = useState(false);
 
@@ -379,6 +383,23 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
     }
   };
 
+  // Play individual word audio in fullscreen vocab grid
+  const handleFullscreenWordPlay = (wordId: string) => {
+    const wordAudio = selectedTest?.lexisAudio?.wordAudios?.[wordId];
+    if (wordAudio && wordAudioRef.current) {
+      if (playingWordId === wordId) {
+        wordAudioRef.current.pause();
+        setPlayingWordId(null);
+      } else {
+        wordAudioRef.current.src = wordAudio.url;
+        wordAudioRef.current.play().catch(err => {
+          console.error('[ClassroomMode] Failed to play word audio:', err);
+        });
+        setPlayingWordId(wordId);
+      }
+    }
+  };
+
   // Generate QR code for student access
   const generateQRCode = async (test: ListeningTest) => {
     const baseUrl = window.location.origin + window.location.pathname;
@@ -432,6 +453,8 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
     setIsPreListeningFullscreen(false);
     setIsPlayingPreListeningAudio(false);
     setShowTransferQuestion(false);
+    setShowFullscreenVocab(false);
+    setPlayingWordId(null);
     setCurrentTime(0);
     setDuration(0);
     setView('present');
@@ -627,7 +650,10 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
       if (e.key === 't' || e.key === 'T') {
         if (view === 'present' && selectedTest?.transferQuestion) {
           setShowTransferQuestion(prev => {
-            if (!prev) setShowPreListening(false);
+            if (!prev) {
+              setShowPreListening(false);
+              setShowFullscreenVocab(false);
+            }
             return !prev;
           });
         }
@@ -659,7 +685,10 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
           if (selectedTest?.classroomActivity) {
             setShowPreListening(prev => {
               if (prev) setIsPreListeningFullscreen(false);
-              if (!prev) setShowTransferQuestion(false); // exit plenary if entering pre-listening
+              if (!prev) {
+                setShowTransferQuestion(false); // exit plenary if entering pre-listening
+                setShowFullscreenVocab(false); // exit fullscreen vocab if entering pre-listening
+              }
               return !prev;
             });
           }
@@ -668,13 +697,28 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
         case 'F':
           if (showPreListening) {
             setIsPreListeningFullscreen(prev => !prev);
+          } else if (!showTransferQuestion && selectedTest?.lexis?.length) {
+            setShowFullscreenVocab(prev => !prev);
           }
           break;
         case 'v':
         case 'V':
-          setLexisViewMode(prev => prev === 'overview' ? 'focus' : 'overview');
-          setFocusedLexisIndex(0);
-          setSlideshowActive(false);
+          if (showFullscreenVocab) {
+            // Fullscreen → back to overview
+            setShowFullscreenVocab(false);
+            setLexisViewMode('overview');
+            setFocusedLexisIndex(0);
+            setSlideshowActive(false);
+          } else if (lexisViewMode === 'overview') {
+            // Overview → Focus
+            setLexisViewMode('focus');
+            setFocusedLexisIndex(0);
+            setSlideshowActive(false);
+          } else {
+            // Focus → Fullscreen
+            setShowFullscreenVocab(true);
+            setSlideshowActive(false);
+          }
           break;
         case 's':
         case 'S':
@@ -705,7 +749,11 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
           }
           break;
         case 'Escape':
-          // Step back: plenary → vocabulary → exit presentation
+          // Step back: fullscreen vocab → plenary → vocabulary → exit presentation
+          if (showFullscreenVocab) {
+            setShowFullscreenVocab(false);
+            break;
+          }
           if (showTransferQuestion) {
             setShowTransferQuestion(false);
             break;
@@ -727,7 +775,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [view, isPlaying, showQRModal, selectedTest, selectedAudio, lexisViewMode, slideshowActive, showPreListening, isPreListeningFullscreen, showTransferQuestion]);
+  }, [view, isPlaying, showQRModal, selectedTest, selectedAudio, lexisViewMode, slideshowActive, showPreListening, isPreListeningFullscreen, showTransferQuestion, showFullscreenVocab]);
 
   // Get test type label
   const getTestTypeLabel = (type: string): string => {
@@ -1077,6 +1125,22 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                 {/* Buttons hidden during pre-listening and plenary */}
                 {!showPreListening && !showTransferQuestion && (
                   <>
+                    {/* Fullscreen Vocab Button */}
+                    {selectedTest.lexis && selectedTest.lexis.length > 0 && (
+                      <button
+                        onClick={() => setShowFullscreenVocab(!showFullscreenVocab)}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
+                          showFullscreenVocab
+                            ? 'bg-cyan-600 text-white hover:bg-cyan-500'
+                            : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                        }`}
+                        title="Fullscreen vocabulary display for projector"
+                      >
+                        <span className="text-sm">📋</span>
+                        <span className="text-sm">{showFullscreenVocab ? 'Normal' : 'Fullscreen'}</span>
+                      </button>
+                    )}
+
                     {/* QR Code Button */}
                     <button
                       onClick={() => generateQRCode(selectedTest)}
@@ -1682,10 +1746,13 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                     {' '}Play Word
                   </span>
                 )}
-                <span><kbd className="px-2 py-1 rounded bg-slate-700">V</kbd> {lexisViewMode === 'overview' ? 'Focus' : 'Overview'}</span>
+                <span><kbd className="px-2 py-1 rounded bg-slate-700">V</kbd> {lexisViewMode === 'overview' ? 'Focus' : 'Fullscreen'}</span>
                 {lexisViewMode === 'focus' && !slideshowActive && <span><kbd className="px-2 py-1 rounded bg-slate-700">←→</kbd> Navigate</span>}
                 {lexisViewMode === 'focus' && selectedTest?.lexisAudio?.wordAudios && (
                   <span><kbd className={`px-2 py-1 rounded ${slideshowActive ? 'bg-green-600' : 'bg-slate-700'}`}>S</kbd> {slideshowActive ? 'Stop' : 'Slideshow'}</span>
+                )}
+                {selectedTest?.lexis && selectedTest.lexis.length > 0 && (
+                  <span><kbd className="px-2 py-1 rounded bg-slate-700">F</kbd> Fullscreen</span>
                 )}
                 {selectedTest?.classroomActivity && (
                   <span><kbd className="px-2 py-1 rounded bg-slate-700">A</kbd> Pre-Listening</span>
@@ -1697,6 +1764,90 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                 <span><kbd className="px-2 py-1 rounded bg-slate-700">Esc</kbd> Exit</span>
               </>
             )}
+          </div>
+        )}
+
+        {/* Fullscreen Vocabulary — projector-optimized grid overlay */}
+        {showFullscreenVocab && selectedTest?.lexis && selectedTest.lexis.length > 0 && (
+          <div className="fixed inset-0 bg-slate-900 z-40 flex flex-col">
+            {/* Vocabulary Grid */}
+            <div className="flex-1 p-6 pb-20 overflow-hidden">
+              {(() => {
+                const itemCount = selectedTest.lexis.length;
+                const cols = itemCount <= 6 ? 2 : 3;
+                const rows = Math.ceil(itemCount / cols);
+                const isSmall = itemCount > 6;
+                const hasWordAudios = !!selectedTest.lexisAudio?.wordAudios;
+                return (
+                  <div
+                    className="grid gap-4 h-full"
+                    style={{
+                      gridTemplateColumns: `repeat(${cols}, 1fr)`,
+                      gridTemplateRows: `repeat(${rows}, 1fr)`,
+                    }}
+                  >
+                    {selectedTest.lexis.map((item) => {
+                      const isPlaying = playingWordId === item.id;
+                      const hasAudio = hasWordAudios && !!selectedTest.lexisAudio?.wordAudios?.[item.id];
+                      return (
+                        <div
+                          key={item.id}
+                          onClick={() => hasAudio && handleFullscreenWordPlay(item.id)}
+                          className={`rounded-2xl border-2 flex flex-col items-center justify-center p-4 transition-all ${
+                            isPlaying
+                              ? 'bg-slate-800 border-indigo-500 ring-2 ring-indigo-500/50'
+                              : 'bg-slate-800 border-slate-700'
+                          } ${hasAudio ? 'cursor-pointer hover:border-indigo-400' : ''}`}
+                        >
+                          {/* Top row: part of speech + audio icon */}
+                          <div className="flex items-center gap-3 mb-2">
+                            {item.partOfSpeech && (
+                              <span className="px-3 py-1 rounded-full text-base font-medium bg-indigo-600/30 text-indigo-300">
+                                {item.partOfSpeech}
+                              </span>
+                            )}
+                            {hasAudio && (
+                              <span className={`text-xl ${isPlaying ? 'text-indigo-400 animate-pulse' : 'text-slate-500'}`}>
+                                {isPlaying ? '🔊' : '🔈'}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Term */}
+                          <h3 className={`${isSmall ? 'text-3xl' : 'text-4xl'} font-bold text-white mb-2 text-center leading-tight`}>
+                            {item.term}
+                          </h3>
+
+                          {/* Arabic definition */}
+                          {item.definitionArabic && (
+                            <p className={`${isSmall ? 'text-xl' : 'text-2xl'} text-slate-300 text-center leading-snug`} dir="rtl">
+                              {item.definitionArabic}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Footer hints */}
+            <div className="fixed bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-4 backdrop-blur px-6 py-3 rounded-full text-sm bg-slate-800/90 text-white">
+              <span><kbd className="px-2 py-1 rounded bg-cyan-600">V</kbd> Overview</span>
+              <span><kbd className="px-2 py-1 rounded bg-slate-700">F</kbd> Normal View</span>
+              {selectedTest.classroomActivity && (
+                <span><kbd className="px-2 py-1 rounded bg-slate-700">A</kbd> Pre-Listening</span>
+              )}
+              {selectedTest.transferQuestion && (
+                <span><kbd className="px-2 py-1 rounded bg-slate-700">T</kbd> Plenary</span>
+              )}
+              <span><kbd className="px-2 py-1 rounded bg-slate-700">Q</kbd> QR Code</span>
+              <span><kbd className="px-2 py-1 rounded bg-slate-700">Esc</kbd> Back</span>
+              {selectedTest.lexisAudio?.wordAudios && (
+                <span className="text-slate-400 ml-2">Click card to play word</span>
+              )}
+            </div>
           </div>
         )}
 
@@ -1984,6 +2135,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
           ref={wordAudioRef}
           preload="metadata"
           className="hidden"
+          onEnded={() => setPlayingWordId(null)}
         />
       </div>
     );
