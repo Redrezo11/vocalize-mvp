@@ -5,6 +5,18 @@ import { ClassroomTheme } from './Settings';
 import QRCode from 'qrcode';
 import { generateLexisAudio, generateAllWordAudios, LexisTTSEngine } from '../utils/lexisTTS';
 
+// Map server test document to client ListeningTest format
+const mapTestFromServer = (t: any): ListeningTest => ({
+  ...t,
+  id: t._id || t.id,
+  createdAt: t.created_at || t.createdAt,
+  updatedAt: t.updated_at || t.updatedAt,
+  questions: (t.questions || []).map((q: any) => ({ ...q, id: q._id || q.id || Math.random().toString(36).substring(2, 11) })),
+  lexis: t.lexis?.map((l: any) => ({ ...l, id: l._id || l.id || Math.random().toString(36).substring(2, 11) })),
+  lexisAudio: t.lexisAudio,
+  classroomActivity: t.classroomActivity,
+});
+
 interface ClassroomModeProps {
   tests: ListeningTest[];
   isLoadingTests?: boolean;  // Loading state for initial test fetch
@@ -55,6 +67,9 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
   const [wordAudioProgress, setWordAudioProgress] = useState({ current: 0, total: 0, word: '' });
   const wordAudioRef = useRef<HTMLAudioElement>(null);
 
+  // Loading state for Present button (on-demand full test fetch)
+  const [loadingTestId, setLoadingTestId] = useState<string | null>(null);
+
   // Pre-listening activity toggle
   const [showPreListening, setShowPreListening] = useState(false);
   const [showPreListeningArabic, setShowPreListeningArabic] = useState(false);
@@ -93,14 +108,26 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
         // Mark as handled BEFORE setting state to prevent re-runs
         handledAutoSelectRef.current = autoSelectTestId;
 
-        setSelectedTest(test);
-        setSelectedAudio(audio || null);
-        setPlayCount(0);
-        setIsPlaying(false);  // Reset play state for new presentation
-        setCurrentTime(0);
-        setDuration(0);
-        setView('present');
-        onAutoSelectHandled?.();
+        // Fetch full test data (lightweight list excludes lexisAudio/classroomActivity)
+        (async () => {
+          try {
+            const response = await fetch(`/api/tests/${test.id}`);
+            if (response.ok) {
+              setSelectedTest(mapTestFromServer(await response.json()));
+            } else {
+              setSelectedTest(test);
+            }
+          } catch {
+            setSelectedTest(test);
+          }
+          setSelectedAudio(audio || null);
+          setPlayCount(0);
+          setIsPlaying(false);
+          setCurrentTime(0);
+          setDuration(0);
+          setView('present');
+          onAutoSelectHandled?.();
+        })();
       }
     }
   }, [autoSelectTestId, tests, audioEntries, onAutoSelectHandled]);
@@ -362,18 +389,33 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
   };
 
   // Start presenting a test (works with or without audio)
-  const handleStartPresentation = (test: ListeningTest) => {
+  const handleStartPresentation = async (test: ListeningTest) => {
+    setLoadingTestId(test.id);
+    try {
+      // Fetch full test data (includes lexisAudio, classroomActivity with audio)
+      const response = await fetch(`/api/tests/${test.id}`);
+      if (response.ok) {
+        const fullTest = mapTestFromServer(await response.json());
+        setSelectedTest(fullTest);
+      } else {
+        console.error('[ClassroomMode] Failed to fetch full test, using lightweight data');
+        setSelectedTest(test);
+      }
+    } catch (error) {
+      console.error('[ClassroomMode] Failed to fetch full test, using lightweight data:', error);
+      setSelectedTest(test);
+    }
     const audio = getAudioForTest(test);
-    setSelectedTest(test);
     setSelectedAudio(audio || null);
     setPlayCount(0);
-    setIsPlaying(false);  // Reset play state for new presentation
+    setIsPlaying(false);
     setShowPreListening(false);
     setShowPreListeningArabic(false);
     setIsPreListeningFullscreen(false);
     setIsPlayingPreListeningAudio(false);
     setCurrentTime(0);
     setDuration(0);
+    setLoadingTestId(null);
     setView('present');
   };
 
@@ -815,11 +857,20 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                         </button>
                         <button
                           onClick={() => handleStartPresentation(test)}
-                          disabled={!audio && (!test.lexis || test.lexis.length === 0) && (!test.questions || test.questions.length === 0)}
+                          disabled={loadingTestId !== null || (!audio && (!test.lexis || test.lexis.length === 0) && (!test.questions || test.questions.length === 0))}
                           className="flex items-center gap-2 px-5 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                         >
-                          <span className="text-sm">Present</span>
-                          <ChevronRightIcon className="w-4 h-4" />
+                          {loadingTestId === test.id ? (
+                            <>
+                              <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                              <span className="text-sm">Loading…</span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="text-sm">Present</span>
+                              <ChevronRightIcon className="w-4 h-4" />
+                            </>
+                          )}
                         </button>
                       </div>
                       {/* Secondary actions - subtle icon buttons */}

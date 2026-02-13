@@ -339,7 +339,9 @@ app.delete('/api/audio-entries/:id', async (req, res) => {
 // Get all tests for an audio entry
 app.get('/api/audio-entries/:audioId/tests', async (req, res) => {
   try {
-    const tests = await ListeningTest.find({ audioId: req.params.audioId }).sort({ created_at: -1 });
+    const tests = await ListeningTest.find({ audioId: req.params.audioId })
+      .select('-lexisAudio -classroomActivity')
+      .sort({ created_at: -1 });
     res.json(tests);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -349,7 +351,11 @@ app.get('/api/audio-entries/:audioId/tests', async (req, res) => {
 // Get all tests
 app.get('/api/tests', async (req, res) => {
   try {
-    const tests = await ListeningTest.find().sort({ created_at: -1 });
+    const tests = await ListeningTest.find()
+      .select('-lexisAudio -classroomActivity')
+      .sort({ created_at: -1 });
+    const responseJson = JSON.stringify(tests);
+    console.log(`[GET /api/tests] Response size: ${(responseJson.length / 1024).toFixed(1)}KB, ${tests.length} tests`);
     res.json(tests);
   } catch (error) {
     res.status(500).json({ error: error.message });
