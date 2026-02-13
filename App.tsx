@@ -12,6 +12,7 @@ import { Settings, AppSettings, DEFAULT_SETTINGS } from './components/Settings';
 import { useSettings } from './hooks/useSettings';
 import { HomePage, CreationMethod } from './components/HomePage';
 import { ImportWizard, ImportData } from './components/ImportWizard';
+import { fullTestCache } from './utils/testCache';
 
 // Lazy load components for better initial load
 const Visualizer = lazy(() => import('./components/Visualizer'));
@@ -700,9 +701,10 @@ const App: React.FC = () => {
       lexisAudio: result.test.lexisAudio,
     };
 
-    // Add to allTests
+    // Add to allTests and pre-populate cache for instant presentation
     setAllTests(prev => [newTest, ...prev]);
     setAllTestsLastFetched(0);
+    fullTestCache.set(newTest.id, newTest);
 
     // Refresh audio storage so classroom can find the audio entry
     audioStorage.loadAll();
@@ -727,9 +729,10 @@ const App: React.FC = () => {
       lexisAudio: result.test.lexisAudio,
     };
 
-    // Add to allTests
+    // Add to allTests and pre-populate cache for instant presentation
     setAllTests(prev => [newTest, ...prev]);
     setAllTestsLastFetched(0);
+    fullTestCache.set(newTest.id, newTest);
 
     // Refresh audio storage so classroom can find the audio entry
     audioStorage.loadAll();

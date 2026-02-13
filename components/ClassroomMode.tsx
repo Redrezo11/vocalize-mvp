@@ -4,9 +4,7 @@ import { ArrowLeftIcon, PlayIcon, PauseIcon, RefreshIcon, ChevronRightIcon } fro
 import { ClassroomTheme } from './Settings';
 import QRCode from 'qrcode';
 import { generateLexisAudio, generateAllWordAudios, LexisTTSEngine } from '../utils/lexisTTS';
-
-// Module-level cache for full test data (survives component unmount/remount)
-const fullTestCache = new Map<string, ListeningTest>();
+import { fullTestCache } from '../utils/testCache';
 
 // Map server test document to client ListeningTest format
 const mapTestFromServer = (t: any): ListeningTest => ({
