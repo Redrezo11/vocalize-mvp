@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { SavedAudio, ListeningTest, LexisAudio } from '../types';
 import { ArrowLeftIcon, PlayIcon, PauseIcon, RefreshIcon, ChevronRightIcon } from './Icons';
 import { ClassroomTheme } from './Settings';
@@ -83,9 +83,22 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
   // Plenary transfer question toggle
   const [showTransferQuestion, setShowTransferQuestion] = useState(false);
 
-  // Fullscreen vocabulary display
-  const [showFullscreenVocab, setShowFullscreenVocab] = useState(false);
+  // Unified fullscreen slide deck: null = not in fullscreen, string = which slide
+  const [fullscreenSlide, setFullscreenSlide] = useState<string | null>(null);
   const [playingWordId, setPlayingWordId] = useState<string | null>(null);
+
+  // Compute available fullscreen slides from test data
+  const fullscreenSlides = useMemo(() => {
+    if (!selectedTest) return [];
+    const slides: string[] = [];
+    if (selectedTest.classroomActivity) slides.push('preListening');
+    if (selectedTest.lexis?.length) slides.push('vocabulary');
+    if (selectedTest.transferQuestion) slides.push('plenary');
+    return slides;
+  }, [selectedTest]);
+
+  const currentSlideIndex = fullscreenSlide ? fullscreenSlides.indexOf(fullscreenSlide) : -1;
+  const isFullscreen = fullscreenSlide !== null;
 
   // Teacher controls - hide answers by default
   const [showAnswers, setShowAnswers] = useState(false);
@@ -453,7 +466,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
     setIsPreListeningFullscreen(false);
     setIsPlayingPreListeningAudio(false);
     setShowTransferQuestion(false);
-    setShowFullscreenVocab(false);
+    setFullscreenSlide(null);
     setPlayingWordId(null);
     setCurrentTime(0);
     setDuration(0);
@@ -646,14 +659,13 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
         return;
       }
 
-      // T toggles plenary transfer question
+      // T toggles plenary toolbar overlay
       if (e.key === 't' || e.key === 'T') {
         if (view === 'present' && selectedTest?.transferQuestion) {
+          setFullscreenSlide(null); // exit fullscreen if open
+          setSlideshowActive(false);
           setShowTransferQuestion(prev => {
-            if (!prev) {
-              setShowPreListening(false);
-              setShowFullscreenVocab(false);
-            }
+            if (!prev) setShowPreListening(false);
             return !prev;
           });
         }
@@ -665,96 +677,115 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
       switch (e.key) {
         case ' ':
           e.preventDefault();
-          // In focus mode with word audios, Space plays current word
-          if (lexisViewMode === 'focus' && selectedTest?.lexisAudio?.wordAudios) {
+          // In fullscreen vocabulary slide, Space plays current word
+          if (isFullscreen && fullscreenSlide === 'vocabulary' && selectedTest?.lexisAudio?.wordAudios) {
+            handlePlayWordAudio();
+          } else if (lexisViewMode === 'focus' && selectedTest?.lexisAudio?.wordAudios) {
             handlePlayWordAudio();
           } else if (selectedAudio) {
-            // Only control main audio if it exists
             handlePlayPause();
           }
           break;
         case 'r':
         case 'R':
-          // Only restart if there's audio
           if (selectedAudio) {
             handleRestart();
           }
           break;
         case 'a':
         case 'A':
+          // Toggle pre-listening toolbar overlay
           if (selectedTest?.classroomActivity) {
+            setFullscreenSlide(null); // exit fullscreen if open
+            setSlideshowActive(false);
             setShowPreListening(prev => {
               if (prev) setIsPreListeningFullscreen(false);
-              if (!prev) {
-                setShowTransferQuestion(false); // exit plenary if entering pre-listening
-                setShowFullscreenVocab(false); // exit fullscreen vocab if entering pre-listening
-              }
+              if (!prev) setShowTransferQuestion(false);
               return !prev;
             });
           }
           break;
         case 'f':
         case 'F':
-          if (showPreListening) {
-            setIsPreListeningFullscreen(prev => !prev);
-          } else if (!showTransferQuestion && selectedTest?.lexis?.length) {
-            setShowFullscreenVocab(prev => !prev);
+          // Toggle fullscreen slide deck
+          if (isFullscreen) {
+            // Exit fullscreen
+            setFullscreenSlide(null);
+            setSlideshowActive(false);
+          } else {
+            // Enter fullscreen — close toolbar overlays, start on vocabulary or first available
+            setShowPreListening(false);
+            setIsPreListeningFullscreen(false);
+            setShowTransferQuestion(false);
+            const startSlide = fullscreenSlides.includes('vocabulary') ? 'vocabulary' : fullscreenSlides[0];
+            if (startSlide) setFullscreenSlide(startSlide);
           }
           break;
         case 'v':
         case 'V':
-          if (showFullscreenVocab) {
-            // Fullscreen → back to overview
-            setShowFullscreenVocab(false);
+          // 2-way toggle: overview ↔ focus. If in fullscreen: exit → overview
+          if (isFullscreen) {
+            setFullscreenSlide(null);
             setLexisViewMode('overview');
             setFocusedLexisIndex(0);
             setSlideshowActive(false);
           } else if (lexisViewMode === 'overview') {
-            // Overview → Focus
             setLexisViewMode('focus');
             setFocusedLexisIndex(0);
             setSlideshowActive(false);
           } else {
-            // Focus → Fullscreen
-            setShowFullscreenVocab(true);
+            setLexisViewMode('overview');
+            setFocusedLexisIndex(0);
             setSlideshowActive(false);
           }
           break;
         case 's':
         case 'S':
-          // Toggle slideshow in focus mode or fullscreen (requires word audios)
-          if ((lexisViewMode === 'focus' || showFullscreenVocab) && selectedTest?.lexisAudio?.wordAudios) {
+          // Toggle slideshow in focus mode or fullscreen vocabulary slide
+          if ((lexisViewMode === 'focus' || (isFullscreen && fullscreenSlide === 'vocabulary')) && selectedTest?.lexisAudio?.wordAudios) {
             e.preventDefault();
             handleToggleSlideshow();
           }
           break;
         case 'p':
         case 'P':
-          // Play current word audio in focus mode
           if (lexisViewMode === 'focus' && selectedTest?.lexisAudio?.wordAudios) {
             e.preventDefault();
             handlePlayWordAudio();
           }
           break;
         case 'ArrowLeft':
-          if (lexisViewMode === 'focus' && selectedTest?.lexis && !slideshowActive) {
-            e.preventDefault();
+          e.preventDefault();
+          if (isFullscreen) {
+            // Navigate to previous slide
+            if (currentSlideIndex > 0) {
+              setSlideshowActive(false);
+              setFullscreenSlide(fullscreenSlides[currentSlideIndex - 1]);
+            }
+          } else if (lexisViewMode === 'focus' && selectedTest?.lexis && !slideshowActive) {
             setFocusedLexisIndex(prev => prev > 0 ? prev - 1 : selectedTest.lexis!.length - 1);
           }
           break;
         case 'ArrowRight':
-          if (lexisViewMode === 'focus' && selectedTest?.lexis && !slideshowActive) {
-            e.preventDefault();
+          e.preventDefault();
+          if (isFullscreen) {
+            // Navigate to next slide
+            if (currentSlideIndex < fullscreenSlides.length - 1) {
+              setSlideshowActive(false);
+              setFullscreenSlide(fullscreenSlides[currentSlideIndex + 1]);
+            }
+          } else if (lexisViewMode === 'focus' && selectedTest?.lexis && !slideshowActive) {
             setFocusedLexisIndex(prev => prev < selectedTest.lexis!.length - 1 ? prev + 1 : 0);
           }
           break;
         case 'Escape':
-          // Any overlay → back to toolbar view; toolbar view → exit presentation
-          if (showFullscreenVocab) {
-            setShowFullscreenVocab(false);
+          // Fullscreen → back to toolbar view
+          if (isFullscreen) {
+            setFullscreenSlide(null);
             setSlideshowActive(false);
             break;
           }
+          // Toolbar overlays → back to toolbar view
           if (showTransferQuestion) {
             setShowTransferQuestion(false);
             break;
@@ -778,7 +809,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [view, isPlaying, showQRModal, selectedTest, selectedAudio, lexisViewMode, slideshowActive, showPreListening, isPreListeningFullscreen, showTransferQuestion, showFullscreenVocab]);
+  }, [view, isPlaying, showQRModal, selectedTest, selectedAudio, lexisViewMode, slideshowActive, showPreListening, isPreListeningFullscreen, showTransferQuestion, isFullscreen, fullscreenSlide, fullscreenSlides, currentSlideIndex]);
 
   // Get test type label
   const getTestTypeLabel = (type: string): string => {
@@ -1048,7 +1079,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
     return (
       <div className={`min-h-screen ${isDark ? 'bg-slate-900 text-white' : 'bg-white text-slate-900'}`}>
         {/* Top Bar - Fixed (hidden in fullscreen) */}
-        {!isPreListeningFullscreen && (
+        {!isPreListeningFullscreen && !isFullscreen && (
         <div className={`sticky top-0 z-10 shadow-lg ${isDark ? 'bg-slate-800 text-white' : 'bg-slate-900 text-white'}`}>
           <div className="max-w-6xl mx-auto px-6 py-4">
             <div className="flex items-center justify-between mb-4">
@@ -1093,7 +1124,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                 {/* Pre-Listening Activity Button — next to QR Code */}
                 {selectedTest.classroomActivity && (
                   <button
-                    onClick={() => setShowPreListening(!showPreListening)}
+                    onClick={() => { setFullscreenSlide(null); setShowPreListening(!showPreListening); }}
                     className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
                       showPreListening
                         ? 'bg-purple-500 text-white hover:bg-purple-400'
@@ -1110,6 +1141,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                 {selectedTest.transferQuestion && (
                   <button
                     onClick={() => {
+                      setFullscreenSlide(null);
                       setShowTransferQuestion(!showTransferQuestion);
                       if (!showTransferQuestion) setShowPreListening(false);
                     }}
@@ -1377,25 +1409,21 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                   {showPreListeningArabic ? 'Hide Arabic' : 'Show Arabic'}
                 </button>
 
-                {/* Fullscreen toggle */}
+                {/* Fullscreen toggle — enters unified slide deck */}
                 <button
-                  onClick={() => setIsPreListeningFullscreen(!isPreListeningFullscreen)}
+                  onClick={() => {
+                    setShowPreListening(false);
+                    const startSlide = fullscreenSlides.includes('preListening') ? 'preListening' : fullscreenSlides[0];
+                    if (startSlide) setFullscreenSlide(startSlide);
+                  }}
                   className={`flex items-center gap-2 px-6 py-3 rounded-xl text-lg font-medium transition-colors ${
-                    isPreListeningFullscreen
-                      ? isDark ? 'bg-slate-600 text-white' : 'bg-slate-700 text-white'
-                      : isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                   }`}
                 >
-                  {isPreListeningFullscreen ? (
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" />
-                    </svg>
-                  ) : (
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
-                    </svg>
-                  )}
-                  {isPreListeningFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+                  </svg>
+                  Fullscreen
                 </button>
               </div>
 
@@ -1691,13 +1719,16 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
         )}
 
         {/* Keyboard Hints - Fixed Bottom (hidden in fullscreen) */}
-        {!isPreListeningFullscreen && (
+        {!isPreListeningFullscreen && !isFullscreen && (
           <div className={`fixed bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-4 backdrop-blur px-6 py-3 rounded-full text-sm ${isDark ? 'bg-slate-800/90 text-white' : 'bg-slate-900/90 text-white'}`}>
             {showTransferQuestion ? (
               <>
                 <span><kbd className="px-2 py-1 rounded bg-amber-600">T</kbd> Vocabulary</span>
                 {selectedTest?.classroomActivity && (
                   <span><kbd className="px-2 py-1 rounded bg-slate-700">A</kbd> Pre-Listening</span>
+                )}
+                {fullscreenSlides.length > 0 && (
+                  <span><kbd className="px-2 py-1 rounded bg-slate-700">F</kbd> Fullscreen</span>
                 )}
                 <span><kbd className="px-2 py-1 rounded bg-slate-700">Q</kbd> QR Code</span>
                 <span><kbd className="px-2 py-1 rounded bg-slate-700">Esc</kbd> Back</span>
@@ -1733,12 +1764,12 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                     {' '}Play Word
                   </span>
                 )}
-                <span><kbd className="px-2 py-1 rounded bg-slate-700">V</kbd> {lexisViewMode === 'overview' ? 'Focus' : 'Fullscreen'}</span>
+                <span><kbd className="px-2 py-1 rounded bg-slate-700">V</kbd> {lexisViewMode === 'overview' ? 'Focus' : 'Overview'}</span>
                 {lexisViewMode === 'focus' && !slideshowActive && <span><kbd className="px-2 py-1 rounded bg-slate-700">←→</kbd> Navigate</span>}
                 {lexisViewMode === 'focus' && selectedTest?.lexisAudio?.wordAudios && (
                   <span><kbd className={`px-2 py-1 rounded ${slideshowActive ? 'bg-green-600' : 'bg-slate-700'}`}>S</kbd> {slideshowActive ? 'Stop' : 'Slideshow'}</span>
                 )}
-                {selectedTest?.lexis && selectedTest.lexis.length > 0 && (
+                {fullscreenSlides.length > 0 && (
                   <span><kbd className="px-2 py-1 rounded bg-slate-700">F</kbd> Fullscreen</span>
                 )}
                 {selectedTest?.classroomActivity && (
@@ -1754,101 +1785,253 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
           </div>
         )}
 
-        {/* Fullscreen Vocabulary — presentation-style overlay */}
-        {showFullscreenVocab && selectedTest?.lexis && selectedTest.lexis.length > 0 && (
+        {/* Unified Fullscreen Slide Deck */}
+        {isFullscreen && (
           <div className="fixed inset-0 bg-slate-900 z-40 flex flex-col">
-            {/* Header */}
-            <div className="text-center pt-6 pb-4 flex-shrink-0">
-              <h2 className="text-2xl font-semibold text-slate-400 tracking-wide uppercase">
-                📖 Vocabulary
-              </h2>
-            </div>
+            {/* Slide content */}
+            <div className="flex-1 overflow-hidden">
 
-            {/* Word rows — centered columns, no borders, no scroll */}
-            <div className="flex-1 overflow-hidden pb-16">
-              {(() => {
-                const items = selectedTest.lexis!;
-                const count = items.length;
-                const useTwoCols = count > 8;
-                const half = Math.ceil(count / 2);
-                const leftItems = useTwoCols ? items.slice(0, half) : items;
-                const rightItems = useTwoCols ? items.slice(half) : [];
-                const termSize = count <= 8 ? 'text-3xl' : count <= 14 ? 'text-2xl' : 'text-xl';
-                const arabicSize = count <= 8 ? 'text-2xl' : count <= 14 ? 'text-xl' : 'text-lg';
-                const posSize = count <= 8 ? 'text-base' : 'text-sm';
-                const iconSize = count <= 8 ? 'text-2xl' : 'text-xl';
-                const termWidth = useTwoCols ? 'w-48' : 'w-64';
-                const posWidth = useTwoCols ? 'w-24' : 'w-32';
-
-                const renderColumn = (columnItems: typeof items) => (
-                  <div className="flex-1" style={{ display: 'grid', gridTemplateRows: `repeat(${columnItems.length}, 1fr)` }}>
-                    {columnItems.map((item) => {
-                      const globalIdx = items.indexOf(item);
-                      const isActive = (slideshowActive && globalIdx === focusedLexisIndex)
-                                     || playingWordId === item.id;
-                      const hasAudio = !!selectedTest.lexisAudio?.wordAudios?.[item.id];
-                      return (
-                        <div
-                          key={item.id}
-                          className={`flex items-center gap-5 px-6 rounded-lg transition-all ${
-                            isActive ? 'bg-indigo-950/30' : ''
+              {/* Pre-Listening Slide */}
+              {fullscreenSlide === 'preListening' && selectedTest.classroomActivity && (
+                <div className="h-full flex flex-col">
+                  <div className="text-center pt-6 pb-4 flex-shrink-0">
+                    <h2 className="text-2xl font-semibold text-slate-400 tracking-wide uppercase">
+                      💬 Pre-Listening
+                    </h2>
+                  </div>
+                  <div className="flex-1 flex items-center justify-center p-12">
+                    <div className="max-w-5xl w-full space-y-10">
+                      <div>
+                        <div className="flex items-center gap-3 mb-4">
+                          <span className="text-5xl">🎧</span>
+                          <h3 className="text-5xl font-bold text-white">Situation</h3>
+                        </div>
+                        <p className="text-4xl leading-loose text-slate-200">
+                          {selectedTest.classroomActivity.situationSetup.en}
+                        </p>
+                        {showPreListeningArabic && (
+                          <p className="text-3xl leading-loose mt-3 text-slate-400" dir="rtl">
+                            {selectedTest.classroomActivity.situationSetup.ar}
+                          </p>
+                        )}
+                      </div>
+                      <hr className="border-slate-700" />
+                      <div>
+                        <div className="flex items-center gap-3 mb-4">
+                          <span className="text-5xl">💬</span>
+                          <h3 className="text-5xl font-bold text-white">Discuss</h3>
+                        </div>
+                        <p className="text-4xl leading-loose text-slate-200">
+                          {selectedTest.classroomActivity.discussionPrompt.en}
+                        </p>
+                        {showPreListeningArabic && (
+                          <p className="text-3xl leading-loose mt-3 text-slate-400" dir="rtl">
+                            {selectedTest.classroomActivity.discussionPrompt.ar}
+                          </p>
+                        )}
+                      </div>
+                      {/* Audio + Arabic toggle buttons */}
+                      <div className="flex items-center justify-center gap-4 flex-wrap">
+                        {selectedTest.classroomActivity.audioEn ? (
+                          <button
+                            onClick={() => handlePlayPreListeningAudio(selectedTest.classroomActivity!.audioEn!)}
+                            className={`flex items-center gap-2 px-6 py-3 rounded-xl text-lg font-medium transition-colors ${
+                              isPlayingPreListeningAudio ? 'bg-indigo-600 text-white' : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
+                            }`}
+                          >
+                            <span>{isPlayingPreListeningAudio ? '⏸' : '▶'}</span> Play
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleGeneratePreListeningAudio('en')}
+                            disabled={isGeneratingPreListeningAudio}
+                            className={`flex items-center gap-2 px-6 py-3 rounded-xl text-lg font-medium transition-colors ${
+                              isGeneratingPreListeningAudio && preListeningAudioLang === 'en'
+                                ? 'bg-indigo-500 text-white opacity-75'
+                                : 'bg-indigo-600 text-white hover:bg-indigo-500'
+                            }`}
+                          >
+                            {isGeneratingPreListeningAudio && preListeningAudioLang === 'en' ? (
+                              <><svg className="w-5 h-5 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg> Generating...</>
+                            ) : (<><span>🔊</span> Generate Audio</>)}
+                          </button>
+                        )}
+                        {selectedTest.classroomActivity.audioAr ? (
+                          <button
+                            onClick={() => handlePlayPreListeningAudio(selectedTest.classroomActivity!.audioAr!)}
+                            className={`flex items-center gap-2 px-6 py-3 rounded-xl text-lg font-medium transition-colors ${
+                              isPlayingPreListeningAudio ? 'bg-amber-600 text-white' : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
+                            }`}
+                          >
+                            <span>{isPlayingPreListeningAudio ? '⏸' : '▶'}</span> عربي
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleGeneratePreListeningAudio('ar')}
+                            disabled={isGeneratingPreListeningAudio}
+                            className={`flex items-center gap-2 px-6 py-3 rounded-xl text-lg font-medium transition-colors ${
+                              isGeneratingPreListeningAudio && preListeningAudioLang === 'ar'
+                                ? 'bg-amber-500 text-white opacity-75'
+                                : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
+                            }`}
+                          >
+                            {isGeneratingPreListeningAudio && preListeningAudioLang === 'ar' ? (
+                              <><svg className="w-5 h-5 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg> جاري التوليد...</>
+                            ) : (<><span>🔊</span> Generate عربي</>)}
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setShowPreListeningArabic(!showPreListeningArabic)}
+                          className={`flex items-center gap-2 px-6 py-3 rounded-xl text-lg font-medium transition-colors ${
+                            showPreListeningArabic ? 'bg-purple-600 text-white' : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
                           }`}
                         >
-                          {hasAudio ? (
-                            <button
-                              onClick={() => {
-                                if (slideshowActive) {
-                                  setSlideshowActive(false);
-                                  if (wordAudioRef.current) wordAudioRef.current.pause();
-                                }
-                                handleFullscreenWordPlay(item.id);
-                              }}
-                              className={`${iconSize} w-10 flex-shrink-0 transition-colors ${
-                                isActive ? 'text-indigo-400 animate-pulse' : 'text-slate-600 hover:text-slate-400'
-                              }`}
-                            >
-                              {isActive ? '🔊' : '🔈'}
-                            </button>
-                          ) : (
-                            <span className={`${iconSize} w-10 flex-shrink-0 text-slate-800`}>🔇</span>
-                          )}
-                          <span className={`${termSize} ${termWidth} font-bold text-white flex-shrink-0`}>{item.term}</span>
-                          {item.partOfSpeech ? (
-                            <span className={`${posSize} ${posWidth} flex-shrink-0 text-indigo-300`}>
-                              {item.partOfSpeech}
-                            </span>
-                          ) : (
-                            <span className={`${posWidth} flex-shrink-0`} />
-                          )}
-                          {item.definitionArabic && (
-                            <span className={`${arabicSize} text-slate-300`} dir="rtl">
-                              {item.definitionArabic}
-                            </span>
-                          )}
+                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
+                          </svg>
+                          {showPreListeningArabic ? 'Hide Arabic' : 'Show Arabic'}
+                        </button>
+                      </div>
+                      <audio ref={preListeningAudioRef} preload="metadata" className="hidden" onEnded={() => setIsPlayingPreListeningAudio(false)} />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Vocabulary Slide */}
+              {fullscreenSlide === 'vocabulary' && selectedTest.lexis && selectedTest.lexis.length > 0 && (
+                <div className="h-full flex flex-col">
+                  <div className="text-center pt-6 pb-4 flex-shrink-0">
+                    <h2 className="text-2xl font-semibold text-slate-400 tracking-wide uppercase">
+                      📖 Vocabulary
+                    </h2>
+                  </div>
+                  <div className="flex-1 overflow-hidden pb-16">
+                    {(() => {
+                      const items = selectedTest.lexis!;
+                      const count = items.length;
+                      const useTwoCols = count > 8;
+                      const half = Math.ceil(count / 2);
+                      const leftItems = useTwoCols ? items.slice(0, half) : items;
+                      const rightItems = useTwoCols ? items.slice(half) : [];
+                      const termSize = count <= 8 ? 'text-3xl' : count <= 14 ? 'text-2xl' : 'text-xl';
+                      const arabicSize = count <= 8 ? 'text-2xl' : count <= 14 ? 'text-xl' : 'text-lg';
+                      const posSize = count <= 8 ? 'text-base' : 'text-sm';
+                      const iconSize = count <= 8 ? 'text-2xl' : 'text-xl';
+                      const termWidth = useTwoCols ? 'w-48' : 'w-64';
+                      const posWidth = useTwoCols ? 'w-24' : 'w-32';
+
+                      const renderColumn = (columnItems: typeof items) => (
+                        <div className="flex-1" style={{ display: 'grid', gridTemplateRows: `repeat(${columnItems.length}, 1fr)` }}>
+                          {columnItems.map((item) => {
+                            const globalIdx = items.indexOf(item);
+                            const isActive = (slideshowActive && globalIdx === focusedLexisIndex)
+                                           || playingWordId === item.id;
+                            const hasAudio = !!selectedTest.lexisAudio?.wordAudios?.[item.id];
+                            return (
+                              <div
+                                key={item.id}
+                                className={`flex items-center gap-5 px-6 rounded-lg transition-all ${
+                                  isActive ? 'bg-indigo-950/30' : ''
+                                }`}
+                              >
+                                {hasAudio ? (
+                                  <button
+                                    onClick={() => {
+                                      if (slideshowActive) {
+                                        setSlideshowActive(false);
+                                        if (wordAudioRef.current) wordAudioRef.current.pause();
+                                      }
+                                      handleFullscreenWordPlay(item.id);
+                                    }}
+                                    className={`${iconSize} w-10 flex-shrink-0 transition-colors ${
+                                      isActive ? 'text-indigo-400 animate-pulse' : 'text-slate-600 hover:text-slate-400'
+                                    }`}
+                                  >
+                                    {isActive ? '🔊' : '🔈'}
+                                  </button>
+                                ) : (
+                                  <span className={`${iconSize} w-10 flex-shrink-0 text-slate-800`}>🔇</span>
+                                )}
+                                <span className={`${termSize} ${termWidth} font-bold text-white flex-shrink-0`}>{item.term}</span>
+                                {item.partOfSpeech ? (
+                                  <span className={`${posSize} ${posWidth} flex-shrink-0 text-indigo-300`}>
+                                    {item.partOfSpeech}
+                                  </span>
+                                ) : (
+                                  <span className={`${posWidth} flex-shrink-0`} />
+                                )}
+                                {item.definitionArabic && (
+                                  <span className={`${arabicSize} text-slate-300`} dir="rtl">
+                                    {item.definitionArabic}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       );
-                    })}
-                  </div>
-                );
 
-                return (
-                  <div className={`h-full flex justify-center ${useTwoCols ? 'gap-12 max-w-7xl' : 'max-w-5xl'} mx-auto`}>
-                    {renderColumn(leftItems)}
-                    {useTwoCols && renderColumn(rightItems)}
+                      return (
+                        <div className={`h-full flex justify-center ${useTwoCols ? 'gap-12 max-w-7xl' : 'max-w-5xl'} mx-auto`}>
+                          {renderColumn(leftItems)}
+                          {useTwoCols && renderColumn(rightItems)}
+                        </div>
+                      );
+                    })()}
                   </div>
-                );
-              })()}
+                </div>
+              )}
+
+              {/* Plenary Slide */}
+              {fullscreenSlide === 'plenary' && selectedTest.transferQuestion && (
+                <div className="h-full flex flex-col">
+                  <div className="text-center pt-6 pb-4 flex-shrink-0">
+                    <h2 className="text-2xl font-semibold text-slate-400 tracking-wide uppercase">
+                      🗣️ Plenary
+                    </h2>
+                  </div>
+                  <div className="flex-1 flex items-center justify-center p-12">
+                    <div className="max-w-4xl w-full space-y-10">
+                      <div className="rounded-2xl p-10 bg-slate-800/50 border border-slate-700/50">
+                        <p className="text-4xl leading-relaxed font-medium text-white">
+                          {selectedTest.transferQuestion.en}
+                        </p>
+                      </div>
+                      <div className="rounded-2xl p-10 bg-slate-800/50 border border-slate-700/50">
+                        <p className="text-4xl leading-relaxed font-medium text-slate-300 text-right" dir="rtl">
+                          {selectedTest.transferQuestion.ar}
+                        </p>
+                      </div>
+                      <p className="text-center text-xl pt-4 text-slate-500">
+                        Discuss as a class · ناقشوا كصف
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* Footer hints */}
+            {/* Unified footer — position indicator + navigation + contextual controls */}
             <div className="fixed bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-4 backdrop-blur px-6 py-3 rounded-full text-sm bg-slate-800/90 text-white">
-              {selectedTest.lexisAudio?.wordAudios && (
+              {currentSlideIndex > 0 && (
+                <span className="cursor-pointer hover:text-indigo-300 transition-colors" onClick={() => { setSlideshowActive(false); setFullscreenSlide(fullscreenSlides[currentSlideIndex - 1]); }}>
+                  <kbd className="px-2 py-1 rounded bg-slate-700">←</kbd> Prev
+                </span>
+              )}
+              <span className="text-slate-400">{currentSlideIndex + 1} / {fullscreenSlides.length}</span>
+              {currentSlideIndex < fullscreenSlides.length - 1 && (
+                <span className="cursor-pointer hover:text-indigo-300 transition-colors" onClick={() => { setSlideshowActive(false); setFullscreenSlide(fullscreenSlides[currentSlideIndex + 1]); }}>
+                  Next <kbd className="px-2 py-1 rounded bg-slate-700">→</kbd>
+                </span>
+              )}
+              {fullscreenSlide === 'vocabulary' && selectedTest.lexisAudio?.wordAudios && (
                 <span>
                   <kbd className={`px-2 py-1 rounded ${slideshowActive ? 'bg-green-600' : 'bg-slate-700'}`}>S</kbd>
                   {' '}{slideshowActive ? 'Stop' : 'Play All'}
                 </span>
               )}
-              <span><kbd className="px-2 py-1 rounded bg-slate-700">Esc</kbd> Back to Presentation</span>
+              <span><kbd className="px-2 py-1 rounded bg-slate-700">Esc</kbd> Exit</span>
             </div>
           </div>
         )}
