@@ -722,8 +722,8 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
           break;
         case 's':
         case 'S':
-          // Toggle slideshow in focus mode (requires word audios)
-          if (lexisViewMode === 'focus' && selectedTest?.lexisAudio?.wordAudios) {
+          // Toggle slideshow in focus mode or fullscreen (requires word audios)
+          if ((lexisViewMode === 'focus' || showFullscreenVocab) && selectedTest?.lexisAudio?.wordAudios) {
             e.preventDefault();
             handleToggleSlideshow();
           }
@@ -749,23 +749,26 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
           }
           break;
         case 'Escape':
-          // Step back: fullscreen vocab → plenary → vocabulary → exit presentation
+          // Any overlay → back to toolbar view; toolbar view → exit presentation
           if (showFullscreenVocab) {
             setShowFullscreenVocab(false);
+            setSlideshowActive(false);
             break;
           }
           if (showTransferQuestion) {
             setShowTransferQuestion(false);
             break;
           }
-          if (isPreListeningFullscreen) {
+          if (showPreListening) {
+            setShowPreListening(false);
             setIsPreListeningFullscreen(false);
             break;
           }
+          // Already in toolbar view → exit presentation entirely
           if (audioRef.current) {
             audioRef.current.pause();
           }
-          setIsPlaying(false);  // Explicitly reset play state
+          setIsPlaying(false);
           setView('select');
           setSelectedTest(null);
           setSelectedAudio(null);
@@ -1125,22 +1128,6 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                 {/* Buttons hidden during pre-listening and plenary */}
                 {!showPreListening && !showTransferQuestion && (
                   <>
-                    {/* Fullscreen Vocab Button */}
-                    {selectedTest.lexis && selectedTest.lexis.length > 0 && (
-                      <button
-                        onClick={() => setShowFullscreenVocab(!showFullscreenVocab)}
-                        className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
-                          showFullscreenVocab
-                            ? 'bg-cyan-600 text-white hover:bg-cyan-500'
-                            : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                        }`}
-                        title="Fullscreen vocabulary display for projector"
-                      >
-                        <span className="text-sm">📋</span>
-                        <span className="text-sm">{showFullscreenVocab ? 'Normal' : 'Fullscreen'}</span>
-                      </button>
-                    )}
-
                     {/* QR Code Button */}
                     <button
                       onClick={() => generateQRCode(selectedTest)}
@@ -1767,66 +1754,86 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
           </div>
         )}
 
-        {/* Fullscreen Vocabulary — projector-optimized grid overlay */}
+        {/* Fullscreen Vocabulary — presentation-style overlay */}
         {showFullscreenVocab && selectedTest?.lexis && selectedTest.lexis.length > 0 && (
           <div className="fixed inset-0 bg-slate-900 z-40 flex flex-col">
-            {/* Vocabulary Grid */}
-            <div className="flex-1 p-6 pb-20 overflow-hidden">
+            {/* Header */}
+            <div className="text-center pt-6 pb-4 flex-shrink-0">
+              <h2 className="text-2xl font-semibold text-slate-400 tracking-wide uppercase">
+                📖 Vocabulary
+              </h2>
+            </div>
+
+            {/* Word rows — adaptive columns, no scroll */}
+            <div className="flex-1 overflow-hidden pb-16">
               {(() => {
-                const itemCount = selectedTest.lexis.length;
-                const cols = itemCount <= 6 ? 2 : 3;
-                const rows = Math.ceil(itemCount / cols);
-                const isSmall = itemCount > 6;
-                const hasWordAudios = !!selectedTest.lexisAudio?.wordAudios;
-                return (
-                  <div
-                    className="grid gap-4 h-full"
-                    style={{
-                      gridTemplateColumns: `repeat(${cols}, 1fr)`,
-                      gridTemplateRows: `repeat(${rows}, 1fr)`,
-                    }}
-                  >
-                    {selectedTest.lexis.map((item) => {
-                      const isPlaying = playingWordId === item.id;
-                      const hasAudio = hasWordAudios && !!selectedTest.lexisAudio?.wordAudios?.[item.id];
+                const items = selectedTest.lexis!;
+                const count = items.length;
+                const useTwoCols = count > 8;
+                const half = Math.ceil(count / 2);
+                const leftItems = useTwoCols ? items.slice(0, half) : items;
+                const rightItems = useTwoCols ? items.slice(half) : [];
+                const termSize = count <= 8 ? 'text-3xl' : count <= 14 ? 'text-2xl' : 'text-xl';
+                const arabicSize = count <= 8 ? 'text-2xl' : count <= 14 ? 'text-xl' : 'text-lg';
+                const posSize = count <= 8 ? 'text-base' : 'text-sm';
+                const iconSize = count <= 8 ? 'text-2xl' : 'text-xl';
+                const rowPadding = count <= 8 ? 'py-3 px-6' : count <= 14 ? 'py-2 px-5' : 'py-1.5 px-4';
+
+                const renderColumn = (columnItems: typeof items) => (
+                  <div className="flex-1" style={{ display: 'grid', gridTemplateRows: `repeat(${columnItems.length}, 1fr)` }}>
+                    {columnItems.map((item) => {
+                      const globalIdx = items.indexOf(item);
+                      const isActive = (slideshowActive && globalIdx === focusedLexisIndex)
+                                     || playingWordId === item.id;
+                      const hasAudio = !!selectedTest.lexisAudio?.wordAudios?.[item.id];
                       return (
                         <div
                           key={item.id}
-                          onClick={() => hasAudio && handleFullscreenWordPlay(item.id)}
-                          className={`rounded-2xl border-2 flex flex-col items-center justify-center p-4 transition-all ${
-                            isPlaying
-                              ? 'bg-slate-800 border-indigo-500 ring-2 ring-indigo-500/50'
-                              : 'bg-slate-800 border-slate-700'
-                          } ${hasAudio ? 'cursor-pointer hover:border-indigo-400' : ''}`}
+                          className={`flex items-center gap-4 ${rowPadding} border-b border-slate-800/50 transition-all ${
+                            isActive
+                              ? 'bg-indigo-950/40 border-l-4 border-l-indigo-500'
+                              : 'border-l-4 border-l-transparent'
+                          }`}
                         >
-                          {/* Top row: part of speech + audio icon */}
-                          <div className="flex items-center gap-3 mb-2">
-                            {item.partOfSpeech && (
-                              <span className="px-3 py-1 rounded-full text-base font-medium bg-indigo-600/30 text-indigo-300">
-                                {item.partOfSpeech}
-                              </span>
-                            )}
-                            {hasAudio && (
-                              <span className={`text-xl ${isPlaying ? 'text-indigo-400 animate-pulse' : 'text-slate-500'}`}>
-                                {isPlaying ? '🔊' : '🔈'}
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Term */}
-                          <h3 className={`${isSmall ? 'text-3xl' : 'text-4xl'} font-bold text-white mb-2 text-center leading-tight`}>
-                            {item.term}
-                          </h3>
-
-                          {/* Arabic definition */}
+                          {hasAudio ? (
+                            <button
+                              onClick={() => {
+                                if (slideshowActive) {
+                                  setSlideshowActive(false);
+                                  if (wordAudioRef.current) wordAudioRef.current.pause();
+                                }
+                                handleFullscreenWordPlay(item.id);
+                              }}
+                              className={`${iconSize} flex-shrink-0 transition-colors ${
+                                isActive ? 'text-indigo-400 animate-pulse' : 'text-slate-600 hover:text-slate-400'
+                              }`}
+                            >
+                              {isActive ? '🔊' : '🔈'}
+                            </button>
+                          ) : (
+                            <span className={`${iconSize} flex-shrink-0 text-slate-800`}>🔇</span>
+                          )}
+                          <span className={`${termSize} font-bold text-white flex-shrink-0`}>{item.term}</span>
+                          {item.partOfSpeech && (
+                            <span className={`${posSize} px-2 py-0.5 rounded-full bg-indigo-600/20 text-indigo-300 flex-shrink-0`}>
+                              {item.partOfSpeech}
+                            </span>
+                          )}
                           {item.definitionArabic && (
-                            <p className={`${isSmall ? 'text-xl' : 'text-2xl'} text-slate-300 text-center leading-snug`} dir="rtl">
+                            <span className={`${arabicSize} text-slate-300 ml-auto`} dir="rtl">
                               {item.definitionArabic}
-                            </p>
+                            </span>
                           )}
                         </div>
                       );
                     })}
+                  </div>
+                );
+
+                return (
+                  <div className={`h-full flex ${useTwoCols ? 'gap-8' : ''} px-8`}>
+                    {renderColumn(leftItems)}
+                    {useTwoCols && renderColumn(rightItems)}
                   </div>
                 );
               })()}
@@ -1834,19 +1841,13 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
 
             {/* Footer hints */}
             <div className="fixed bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-4 backdrop-blur px-6 py-3 rounded-full text-sm bg-slate-800/90 text-white">
-              <span><kbd className="px-2 py-1 rounded bg-cyan-600">V</kbd> Overview</span>
-              <span><kbd className="px-2 py-1 rounded bg-slate-700">F</kbd> Normal View</span>
-              {selectedTest.classroomActivity && (
-                <span><kbd className="px-2 py-1 rounded bg-slate-700">A</kbd> Pre-Listening</span>
-              )}
-              {selectedTest.transferQuestion && (
-                <span><kbd className="px-2 py-1 rounded bg-slate-700">T</kbd> Plenary</span>
-              )}
-              <span><kbd className="px-2 py-1 rounded bg-slate-700">Q</kbd> QR Code</span>
-              <span><kbd className="px-2 py-1 rounded bg-slate-700">Esc</kbd> Back</span>
               {selectedTest.lexisAudio?.wordAudios && (
-                <span className="text-slate-400 ml-2">Click card to play word</span>
+                <span>
+                  <kbd className={`px-2 py-1 rounded ${slideshowActive ? 'bg-green-600' : 'bg-slate-700'}`}>S</kbd>
+                  {' '}{slideshowActive ? 'Stop' : 'Play All'}
+                </span>
               )}
+              <span><kbd className="px-2 py-1 rounded bg-slate-700">Esc</kbd> Back to Presentation</span>
             </div>
           </div>
         )}
