@@ -5,6 +5,9 @@ import { ClassroomTheme } from './Settings';
 import QRCode from 'qrcode';
 import { generateLexisAudio, generateAllWordAudios, LexisTTSEngine } from '../utils/lexisTTS';
 
+// Module-level cache for full test data (survives component unmount/remount)
+const fullTestCache = new Map<string, ListeningTest>();
+
 // Map server test document to client ListeningTest format
 const mapTestFromServer = (t: any): ListeningTest => ({
   ...t,
@@ -108,17 +111,24 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
         // Mark as handled BEFORE setting state to prevent re-runs
         handledAutoSelectRef.current = autoSelectTestId;
 
-        // Fetch full test data (lightweight list excludes lexisAudio/classroomActivity)
+        // Use cache or fetch full test data
         (async () => {
-          try {
-            const response = await fetch(`/api/tests/${test.id}`);
-            if (response.ok) {
-              setSelectedTest(mapTestFromServer(await response.json()));
-            } else {
+          const cached = fullTestCache.get(test.id);
+          if (cached) {
+            setSelectedTest(cached);
+          } else {
+            try {
+              const response = await fetch(`/api/tests/${test.id}`);
+              if (response.ok) {
+                const fullTest = mapTestFromServer(await response.json());
+                fullTestCache.set(test.id, fullTest);
+                setSelectedTest(fullTest);
+              } else {
+                setSelectedTest(test);
+              }
+            } catch {
               setSelectedTest(test);
             }
-          } catch {
-            setSelectedTest(test);
           }
           setSelectedAudio(audio || null);
           setPlayCount(0);
@@ -162,10 +172,11 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
         };
         setSelectedTest(updatedTest);
 
-        // Save to database
+        // Save to database and update cache
         if (onUpdateTest) {
           onUpdateTest(updatedTest);
         }
+        fullTestCache.set(updatedTest.id, updatedTest);
 
         // Close modal on success
         setShowLexisAudioConfirm(false);
@@ -243,10 +254,11 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
         };
         setSelectedTest(updatedTest);
 
-        // Save to database
+        // Save to database and update cache
         if (onUpdateTest) {
           onUpdateTest(updatedTest);
         }
+        fullTestCache.set(updatedTest.id, updatedTest);
 
         // Close modal on success
         setShowLexisAudioConfirm(false);
@@ -390,20 +402,25 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
 
   // Start presenting a test (works with or without audio)
   const handleStartPresentation = async (test: ListeningTest) => {
-    setLoadingTestId(test.id);
-    try {
-      // Fetch full test data (includes lexisAudio, classroomActivity with audio)
-      const response = await fetch(`/api/tests/${test.id}`);
-      if (response.ok) {
-        const fullTest = mapTestFromServer(await response.json());
-        setSelectedTest(fullTest);
-      } else {
-        console.error('[ClassroomMode] Failed to fetch full test, using lightweight data');
+    // Check cache first — instant if already loaded
+    const cached = fullTestCache.get(test.id);
+    if (cached) {
+      setSelectedTest(cached);
+    } else {
+      setLoadingTestId(test.id);
+      try {
+        const response = await fetch(`/api/tests/${test.id}`);
+        if (response.ok) {
+          const fullTest = mapTestFromServer(await response.json());
+          fullTestCache.set(test.id, fullTest);
+          setSelectedTest(fullTest);
+        } else {
+          setSelectedTest(test);
+        }
+      } catch {
         setSelectedTest(test);
       }
-    } catch (error) {
-      console.error('[ClassroomMode] Failed to fetch full test, using lightweight data:', error);
-      setSelectedTest(test);
+      setLoadingTestId(null);
     }
     const audio = getAudioForTest(test);
     setSelectedAudio(audio || null);
@@ -415,7 +432,6 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
     setIsPlayingPreListeningAudio(false);
     setCurrentTime(0);
     setDuration(0);
-    setLoadingTestId(null);
     setView('present');
   };
 
@@ -480,6 +496,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
       };
       setSelectedTest(updatedTest);
       if (onUpdateTest) onUpdateTest(updatedTest);
+      fullTestCache.set(updatedTest.id, updatedTest);
 
     } catch (error) {
       console.error('[ClassroomMode] Pre-listening audio error:', error);
@@ -1695,6 +1712,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                           };
                           setSelectedTest(updatedTest);
                           if (onUpdateTest) onUpdateTest(updatedTest);
+                          fullTestCache.set(updatedTest.id, updatedTest);
                         }
                       }}
                       className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-600 text-white hover:bg-red-700 rounded-xl font-medium transition-colors"
