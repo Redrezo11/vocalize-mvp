@@ -1009,7 +1009,17 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
               </div>
 
               <div className="flex items-center gap-3">
-                {/* Pre-Listening Activity Button — always visible */}
+                {/* Preview Button — always visible, leftmost */}
+                <button
+                  onClick={() => onPreviewStudent(selectedTest)}
+                  className="flex items-center gap-2 px-3 py-2 bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 transition-colors"
+                  title="Preview student view"
+                >
+                  <EyeIcon className="w-4 h-4" />
+                  <span className="text-sm">Preview</span>
+                </button>
+
+                {/* Pre-Listening Activity Button — next to QR Code */}
                 {selectedTest.classroomActivity && (
                   <button
                     onClick={() => setShowPreListening(!showPreListening)}
@@ -1028,16 +1038,6 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                 {/* Buttons hidden during pre-listening */}
                 {!showPreListening && (
                   <>
-                    {/* Preview Button */}
-                    <button
-                      onClick={() => onPreviewStudent(selectedTest)}
-                      className="flex items-center gap-2 px-3 py-2 bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 transition-colors"
-                      title="Preview student view"
-                    >
-                      <EyeIcon className="w-4 h-4" />
-                      <span className="text-sm">Preview</span>
-                    </button>
-
                     {/* QR Code Button */}
                     <button
                       onClick={() => generateQRCode(selectedTest)}
