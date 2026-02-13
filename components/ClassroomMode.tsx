@@ -609,6 +609,16 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Q toggles QR view — must be handled before the guard below
+      if (e.key === 'q' || e.key === 'Q') {
+        if (showQRModal) {
+          setShowQRModal(false);
+        } else if (view === 'present' && selectedTest) {
+          generateQRCode(selectedTest);
+        }
+        return;
+      }
+
       if (view !== 'present' || showQRModal) return;
 
       switch (e.key) {
@@ -627,14 +637,6 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
           // Only restart if there's audio
           if (selectedAudio) {
             handleRestart();
-          }
-          break;
-        case 'q':
-        case 'Q':
-          if (showQRModal) {
-            setShowQRModal(false);
-          } else if (selectedTest) {
-            generateQRCode(selectedTest);
           }
           break;
         case 'a':
@@ -1650,6 +1652,10 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                   </button>
                 </div>
               </div>
+            </div>
+            {/* Footer hint */}
+            <div className="fixed bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-4 backdrop-blur px-6 py-3 rounded-full text-sm bg-white/10 text-white">
+              <span><kbd className="px-2 py-1 rounded bg-white/20">Q</kbd> Back to Presentation</span>
             </div>
           </div>
         )}
