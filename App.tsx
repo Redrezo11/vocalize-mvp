@@ -691,6 +691,8 @@ const App: React.FC = () => {
   const handleOneShotComplete = useCallback((result: { audioEntry: SavedAudio; test: any }) => {
     setShowOneShotCreator(false);
 
+    console.log('[handleOneShotComplete] raw result.test._id:', result.test?._id, '| .id:', result.test?.id, '| title:', result.test?.title);
+
     // Map server response to ListeningTest
     const newTest: ListeningTest = {
       ...result.test,
@@ -701,6 +703,10 @@ const App: React.FC = () => {
       lexis: result.test.lexis?.map((l: any) => ({ ...l, id: l._id || Math.random().toString(36).substring(2, 11) })),
       lexisAudio: result.test.lexisAudio,
     };
+
+    if (!newTest.id) {
+      console.error('[handleOneShotComplete] WARNING: newTest.id is falsy!', 'Raw keys:', Object.keys(result.test || {}));
+    }
 
     // Add to allTests and pre-populate cache for instant presentation
     setAllTests(prev => [newTest, ...prev]);
@@ -719,6 +725,8 @@ const App: React.FC = () => {
   const handleJamComplete = useCallback((result: { audioEntry: SavedAudio; test: any }) => {
     setShowJamButton(false);
 
+    console.log('[handleJamComplete] raw result.test._id:', result.test?._id, '| .id:', result.test?.id, '| title:', result.test?.title);
+
     // Map server response to ListeningTest
     const newTest: ListeningTest = {
       ...result.test,
@@ -729,6 +737,10 @@ const App: React.FC = () => {
       lexis: result.test.lexis?.map((l: any) => ({ ...l, id: l._id || Math.random().toString(36).substring(2, 11) })),
       lexisAudio: result.test.lexisAudio,
     };
+
+    if (!newTest.id) {
+      console.error('[handleJamComplete] WARNING: newTest.id is falsy!', 'Raw keys:', Object.keys(result.test || {}));
+    }
 
     // Add to allTests and pre-populate cache for instant presentation
     setAllTests(prev => [newTest, ...prev]);
@@ -1676,6 +1688,11 @@ const App: React.FC = () => {
           }}
           onDeleteTest={async (test) => {
             console.log('[App onDeleteTest] Called with test.id:', test.id, '| _id:', (test as any)._id, '| title:', test.title);
+            if (!test.id) {
+              console.error('[App onDeleteTest] ABORT: test.id is undefined/null! Full test object:', JSON.stringify(test, null, 2));
+              alert('Cannot delete: test ID is missing. Please refresh the page and try again.');
+              throw new Error('Test ID is undefined');
+            }
             console.log('[App onDeleteTest] DELETE URL:', `${API_BASE}/tests/${test.id}`);
             try {
               const response = await fetch(`${API_BASE}/tests/${test.id}`, {

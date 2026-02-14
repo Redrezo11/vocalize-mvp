@@ -1125,7 +1125,7 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
   };
 
   // Continue with save after getting audio (shared by Gemini and fallbacks)
-  const continueWithAudio = async (audioBlob: Blob | null) => {
+  const continueWithAudio = async (audioBlob: Blob | null, engine?: EngineType) => {
     if (!pendingPayload || !pendingAnalysis) return;
 
     setStage('saving-audio');
@@ -1136,6 +1136,7 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
         audioData = await blobToBase64(audioBlob);
       }
 
+      const audioEngine = audioBlob ? (engine || EngineType.GEMINI) : EngineType.BROWSER;
       const response = await fetch(`${API_BASE}/audio-entries`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1143,7 +1144,7 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
           title: pendingPayload.title,
           transcript: pendingPayload.transcript,
           audio_data: audioData,
-          engine: audioBlob ? EngineType.GEMINI : EngineType.BROWSER,
+          engine: audioEngine,
           speaker_mapping: pendingSpeakerMapping,
           speakers: pendingAnalysis.speakers,
           is_transcript_only: !audioBlob,
@@ -1200,6 +1201,7 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
             }))
           : undefined,
         classroomActivity: pendingPayload.classroomActivity || undefined,
+        transferQuestion: pendingPayload.transferQuestion || undefined,
       };
 
       const response = await fetch(`${API_BASE}/tests`, {
@@ -1210,6 +1212,7 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
 
       if (!response.ok) throw new Error('Failed to create test');
       const savedTest = await response.json();
+      console.log('[OneShot continueWithAudio] savedTest._id:', savedTest?._id, '| savedTest.id:', savedTest?.id);
 
       setStage('done');
       onComplete({ audioEntry, test: savedTest });
@@ -1228,7 +1231,7 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
 
     try {
       const audioBlob = await generateOpenAIAudio(pendingPayload.transcript);
-      await continueWithAudio(audioBlob);
+      await continueWithAudio(audioBlob, EngineType.OPENAI);
     } catch (err) {
       console.error('[OneShot] OpenAI TTS also failed:', err);
       const errorMessage = err instanceof Error ? err.message : 'OpenAI TTS failed';

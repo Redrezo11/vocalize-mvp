@@ -1,6 +1,7 @@
 export enum EngineType {
   BROWSER = 'BROWSER',
   GEMINI = 'GEMINI',
+  OPENAI = 'OPENAI',
   ELEVEN_LABS = 'ELEVEN_LABS'
 }
 
