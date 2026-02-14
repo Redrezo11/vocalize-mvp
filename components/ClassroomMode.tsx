@@ -1156,123 +1156,114 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
         {!isFullscreen && (
         <div className={`sticky top-0 z-10 shadow-lg ${isDark ? 'bg-slate-800 text-white' : 'bg-slate-900 text-white'}`}>
           <div className="max-w-6xl mx-auto px-6 py-4">
-            <div className="flex items-center justify-between mb-4">
+            {/* Row 1: Back + Title */}
+            <div className="flex items-center mb-3">
               <button
                 onClick={() => {
                   if (audioRef.current) {
                     audioRef.current.pause();
                   }
-                  setIsPlaying(false);  // Explicitly reset play state
+                  setIsPlaying(false);
                   setView('select');
                   setSelectedTest(null);
                   setSelectedAudio(null);
                 }}
-                className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors"
+                className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors flex-shrink-0"
               >
                 <ArrowLeftIcon className="w-5 h-5" />
                 <span>Back to Tests</span>
               </button>
+              <h1 className="text-xl font-bold text-center flex-1">{selectedTest.title}</h1>
+              {/* Invisible spacer to balance the back button */}
+              <div className="w-[130px] flex-shrink-0" />
+            </div>
 
-              <div className="text-center">
-                <h1 className="text-xl font-bold">{selectedTest.title}</h1>
-                <p className="text-slate-400 text-sm">
-                  {selectedAudio
-                    ? selectedAudio.title
-                    : (selectedTest.lexis && selectedTest.lexis.length > 0
-                        ? 'Vocabulary Presentation'
-                        : 'Questions Presentation')}
-                </p>
-              </div>
+            {/* Row 2: Control buttons */}
+            <div className="flex items-center justify-center gap-3 flex-wrap mb-4">
+              {/* Preview Button */}
+              <button
+                onClick={() => onPreviewStudent(selectedTest)}
+                className="flex items-center gap-2 px-3 py-2 bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 transition-colors"
+                title="Preview student view"
+              >
+                <EyeIcon className="w-4 h-4" />
+                <span className="text-sm">Preview</span>
+              </button>
 
-              <div className="flex items-center gap-3">
-                {/* Preview Button — always visible, leftmost */}
+              {/* Pre-Listening Activity Button */}
+              {selectedTest.classroomActivity && (
                 <button
-                  onClick={() => onPreviewStudent(selectedTest)}
-                  className="flex items-center gap-2 px-3 py-2 bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 transition-colors"
-                  title="Preview student view"
+                  onClick={() => setFullscreenSlide(fullscreenSlide === 'preListening' ? null : 'preListening')}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg transition-colors bg-slate-700 text-slate-300 hover:bg-slate-600"
+                  title="Pre-listening classroom activity"
                 >
-                  <EyeIcon className="w-4 h-4" />
-                  <span className="text-sm">Preview</span>
+                  <span className="text-sm">💬</span>
+                  <span className="text-sm">Pre-Listening</span>
                 </button>
+              )}
 
-                {/* Pre-Listening Activity Button → enters fullscreen slide */}
-                {selectedTest.classroomActivity && (
+              {/* Plenary Transfer Question Button */}
+              {selectedTest.transferQuestion && (
+                <button
+                  onClick={() => setFullscreenSlide(fullscreenSlide === 'plenary' ? null : 'plenary')}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg transition-colors bg-slate-700 text-slate-300 hover:bg-slate-600"
+                  title="Plenary transfer question for class discussion"
+                >
+                  <span className="text-sm">🗣️</span>
+                  <span className="text-sm">Plenary</span>
+                </button>
+              )}
+
+              {/* QR Code Button */}
+              <button
+                onClick={() => generateQRCode(selectedTest)}
+                className="flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 transition-colors"
+                title="Show QR code for students"
+              >
+                <QRCodeIcon className="w-4 h-4" />
+                <span className="text-sm">QR Code</span>
+              </button>
+
+              {/* Lexis Audio Button */}
+              {selectedTest.lexis && selectedTest.lexis.length > 0 && (
+                <button
+                  onClick={() => setShowLexisAudioConfirm(true)}
+                  disabled={isGeneratingLexisAudio || isGeneratingWordAudios}
+                  className={`flex items-center gap-2 h-[34px] px-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                    selectedTest.lexisAudio
+                      ? 'bg-emerald-600 text-white hover:bg-emerald-500'
+                      : 'bg-amber-600 text-white hover:bg-amber-500'
+                  }`}
+                  title="Manage vocabulary audio"
+                >
+                  {(isGeneratingLexisAudio || isGeneratingWordAudios) ? (
+                    <SpinnerIcon className="w-4 h-4" />
+                  ) : (
+                    <SpeakerIcon className="w-4 h-4" />
+                  )}
+                  <span className="text-sm">
+                    {isGeneratingLexisAudio || isGeneratingWordAudios ? 'Generating' : 'Vocab'}
+                  </span>
+                  {selectedTest.lexisAudio && (
+                    <span className="w-2 h-2 bg-green-400 rounded-full" title="Audio generated" />
+                  )}
+                </button>
+              )}
+
+              {/* Play Counter - only shown with audio */}
+              {selectedAudio && (
+                <div className="flex items-center gap-2 bg-slate-800 px-4 py-2 rounded-lg">
+                  <span className="text-slate-400 text-sm">Plays:</span>
+                  <span className="text-2xl font-bold text-indigo-400">{playCount}</span>
                   <button
-                    onClick={() => setFullscreenSlide(fullscreenSlide === 'preListening' ? null : 'preListening')}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg transition-colors bg-slate-700 text-slate-300 hover:bg-slate-600"
-                    title="Pre-listening classroom activity"
+                    onClick={handleResetCounter}
+                    className="ml-2 p-1 text-slate-500 hover:text-white transition-colors"
+                    title="Reset counter"
                   >
-                    <span className="text-sm">💬</span>
-                    <span className="text-sm">Pre-Listening</span>
+                    <RefreshIcon className="w-4 h-4" />
                   </button>
-                )}
-
-                {/* Plenary Transfer Question Button → enters fullscreen slide */}
-                {selectedTest.transferQuestion && (
-                  <button
-                    onClick={() => setFullscreenSlide(fullscreenSlide === 'plenary' ? null : 'plenary')}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg transition-colors bg-slate-700 text-slate-300 hover:bg-slate-600"
-                    title="Plenary transfer question for class discussion"
-                  >
-                    <span className="text-sm">🗣️</span>
-                    <span className="text-sm">Plenary</span>
-                  </button>
-                )}
-
-                {/* QR, Lexis Audio, Play Counter */}
-                <>
-                    {/* QR Code Button */}
-                    <button
-                      onClick={() => generateQRCode(selectedTest)}
-                      className="flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 transition-colors"
-                      title="Show QR code for students"
-                    >
-                      <QRCodeIcon className="w-4 h-4" />
-                      <span className="text-sm">QR Code</span>
-                    </button>
-
-                    {/* Lexis Audio Button */}
-                    {selectedTest.lexis && selectedTest.lexis.length > 0 && (
-                      <button
-                        onClick={() => setShowLexisAudioConfirm(true)}
-                        disabled={isGeneratingLexisAudio || isGeneratingWordAudios}
-                        className={`flex items-center gap-2 h-[34px] px-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                          selectedTest.lexisAudio
-                            ? 'bg-emerald-600 text-white hover:bg-emerald-500'
-                            : 'bg-amber-600 text-white hover:bg-amber-500'
-                        }`}
-                        title="Manage vocabulary audio"
-                      >
-                        {(isGeneratingLexisAudio || isGeneratingWordAudios) ? (
-                          <SpinnerIcon className="w-4 h-4" />
-                        ) : (
-                          <SpeakerIcon className="w-4 h-4" />
-                        )}
-                        <span className="text-sm">
-                          {isGeneratingLexisAudio || isGeneratingWordAudios ? 'Generating' : 'Vocab'}
-                        </span>
-                        {selectedTest.lexisAudio && (
-                          <span className="w-2 h-2 bg-green-400 rounded-full" title="Audio generated" />
-                        )}
-                      </button>
-                    )}
-
-                    {/* Play Counter - only shown with audio */}
-                    {selectedAudio && (
-                      <div className="flex items-center gap-2 bg-slate-800 px-4 py-2 rounded-lg">
-                        <span className="text-slate-400 text-sm">Plays:</span>
-                        <span className="text-2xl font-bold text-indigo-400">{playCount}</span>
-                        <button
-                          onClick={handleResetCounter}
-                          className="ml-2 p-1 text-slate-500 hover:text-white transition-colors"
-                          title="Reset counter"
-                        >
-                          <RefreshIcon className="w-4 h-4" />
-                        </button>
-                      </div>
-                    )}
-                </>
-              </div>
+                </div>
+              )}
             </div>
 
             {/* Audio Player */}
