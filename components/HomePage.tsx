@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { CEFRLevel, ContentMode, ContentModel } from './Settings';
-import { EFL_TOPICS, SpeakerCount, getRandomTopic } from '../utils/eflTopics';
+import { EFL_TOPICS, SpeakerCount, getRandomTopic, randomSpeakerCount, resolveSpeakerDefault } from '../utils/eflTopics';
+import type { SpeakerCountDefault } from './Settings';
 
 export type CreationMethod = 'audio' | 'transcript' | 'import' | 'oneshot' | 'jam';
 export type { ContentModel } from './Settings';
@@ -38,6 +39,7 @@ interface HomePageProps {
   defaultContentMode?: ContentMode;
   defaultTargetDuration?: number;
   defaultContentModel?: ContentModel;
+  defaultSpeakerCount?: SpeakerCountDefault;
 }
 
 // Icons for the cards
@@ -93,6 +95,7 @@ export const HomePage: React.FC<HomePageProps> = ({
   defaultContentMode = 'standard',
   defaultTargetDuration = 10,
   defaultContentModel = 'gpt-5-mini',
+  defaultSpeakerCount = 'random' as const,
 }) => {
   const [jamExpanded, setJamExpanded] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -103,9 +106,10 @@ export const HomePage: React.FC<HomePageProps> = ({
     contentModel: defaultContentModel,
     useReasoning: true,
   });
-  const [speakerCount, setSpeakerCount] = useState<SpeakerCount>(2);
+  const initialSpeakers = useMemo(() => resolveSpeakerDefault(defaultSpeakerCount), []);
+  const [speakerCount, setSpeakerCount] = useState<SpeakerCount>(initialSpeakers);
   const [currentTopic, setCurrentTopic] = useState(() =>
-    getRandomTopic(2)
+    getRandomTopic(initialSpeakers)
   );
   const [isCustomTopic, setIsCustomTopic] = useState(false);
   const [customTopic, setCustomTopic] = useState('');
@@ -313,6 +317,18 @@ export const HomePage: React.FC<HomePageProps> = ({
                         {count === 3 ? '3+' : count}
                       </button>
                     ))}
+                    <button
+                      onClick={() => {
+                        const count = randomSpeakerCount();
+                        setSpeakerCount(count);
+                        setCurrentTopic(getRandomTopic(count));
+                        setIsCustomTopic(false);
+                      }}
+                      className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-500 hover:bg-amber-50 hover:text-amber-600 transition-all"
+                      title="Random speaker count"
+                    >
+                      🎲
+                    </button>
                   </div>
                 </div>
 

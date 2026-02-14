@@ -3,7 +3,7 @@ import { CEFRLevel, ContentMode } from './Settings';
 import { EngineType, SavedAudio, ListeningTest, SpeakerVoiceMapping } from '../types';
 import { parseDialogue } from '../utils/parser';
 import { buildDialoguePrompt, buildTestContentPrompt, validatePayload, OneShotPayload } from './OneShotCreator';
-import { EFL_TOPICS, SpeakerCount, AudioFormat, getRandomTopic, getRandomFormat, shuffleFormat } from '../utils/eflTopics';
+import { EFL_TOPICS, SpeakerCount, AudioFormat, getRandomTopic, getRandomFormat, shuffleFormat, randomSpeakerCount } from '../utils/eflTopics';
 
 const API_BASE = '/api';
 
@@ -943,6 +943,20 @@ export const JamButton: React.FC<JamButtonProps> = ({
                 {count === 3 ? '3+' : count}
               </button>
             ))}
+            <button
+              onClick={() => {
+                const count = randomSpeakerCount();
+                setSpeakerCount(count);
+                setCurrentTopic(getRandomTopic(count));
+                setAudioFormat(getRandomFormat(count));
+                setIsCustomTopic(false);
+              }}
+              disabled={stage !== 'idle'}
+              className="px-2.5 py-1.5 rounded-lg text-sm font-medium bg-slate-200 text-slate-500 hover:bg-amber-50 hover:text-amber-600 transition-all disabled:opacity-50"
+              title="Random speaker count"
+            >
+              🎲
+            </button>
           </div>
 
           {/* Topic */}

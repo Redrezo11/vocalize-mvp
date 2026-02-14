@@ -709,6 +709,16 @@ export function getFormatById(id: string): AudioFormat | undefined {
   return AUDIO_FORMATS.find(f => f.id === id);
 }
 
+/** Pick a random speaker count (1, 2, or 3) */
+export function randomSpeakerCount(): SpeakerCount {
+  return ([1, 2, 3] as SpeakerCount[])[Math.floor(Math.random() * 3)];
+}
+
+/** Resolve a speaker-count default setting to a concrete SpeakerCount */
+export function resolveSpeakerDefault(setting: 'random' | SpeakerCount): SpeakerCount {
+  return setting === 'random' ? randomSpeakerCount() : setting;
+}
+
 // --- Backward-compatible flat array (all 210 topics) ---
 
 export const EFL_TOPICS: string[] = TOPIC_CATEGORIES.flatMap(cat => cat.topics);

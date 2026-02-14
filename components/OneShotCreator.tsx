@@ -1,8 +1,9 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { CEFRLevel, ContentMode } from './Settings';
 import { EngineType, SavedAudio, SpeakerVoiceMapping } from '../types';
 import { parseDialogue } from '../utils/parser';
-import { EFL_TOPICS, SpeakerCount, AudioFormat, getRandomTopic, getRandomFormat, shuffleFormat } from '../utils/eflTopics';
+import { EFL_TOPICS, SpeakerCount, AudioFormat, getRandomTopic, getRandomFormat, shuffleFormat, randomSpeakerCount, resolveSpeakerDefault } from '../utils/eflTopics';
+import type { SpeakerCountDefault } from './Settings';
 
 const API_BASE = '/api';
 
@@ -10,6 +11,7 @@ interface OneShotCreatorProps {
   isOpen: boolean;
   defaultDifficulty: CEFRLevel;
   contentMode: ContentMode;
+  defaultSpeakerCount?: SpeakerCountDefault;
   onClose: () => void;
   onComplete: (result: { audioEntry: SavedAudio; test: any }) => void;
 }
@@ -789,15 +791,17 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
   isOpen,
   defaultDifficulty,
   contentMode,
+  defaultSpeakerCount = 'random' as const,
   onClose,
   onComplete,
 }) => {
+  const initialSpeakers = useMemo(() => resolveSpeakerDefault(defaultSpeakerCount), []);
   const [difficulty, setDifficulty] = useState<CEFRLevel>(defaultDifficulty);
   const [targetDuration, setTargetDuration] = useState(10); // Default 10 minutes
-  const [speakerCount, setSpeakerCount] = useState<SpeakerCount>(2);
-  const [audioFormat, setAudioFormat] = useState<AudioFormat | null>(() => getRandomFormat(2));
+  const [speakerCount, setSpeakerCount] = useState<SpeakerCount>(initialSpeakers);
+  const [audioFormat, setAudioFormat] = useState<AudioFormat | null>(() => getRandomFormat(initialSpeakers));
   const [currentTopic, setCurrentTopic] = useState(() =>
-    getRandomTopic(2)
+    getRandomTopic(initialSpeakers)
   );
   const [isCustomTopic, setIsCustomTopic] = useState(false);
   const [customTopic, setCustomTopic] = useState('');
@@ -1310,16 +1314,29 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
                         {count === 3 ? '3+' : count}
                       </button>
                     ))}
+                    <button
+                      onClick={() => {
+                        const count = randomSpeakerCount();
+                        setSpeakerCount(count);
+                        setCurrentTopic(getRandomTopic(count));
+                        setAudioFormat(getRandomFormat(count));
+                        setIsCustomTopic(false);
+                      }}
+                      className="px-2.5 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-500 hover:bg-amber-50 hover:text-amber-600 transition-all"
+                      title="Random speaker count"
+                    >
+                      🎲
+                    </button>
                     {audioFormat && (
-                      <div className="flex-1 flex items-center gap-1 ml-2">
-                        <span className="text-xs text-slate-400 truncate">{audioFormat.label}</span>
+                      <>
                         <button
                           onClick={() => setAudioFormat(shuffleFormat(speakerCount, audioFormat.id))}
-                          className="px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded text-xs text-slate-500 transition-colors flex-shrink-0"
+                          className="px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded text-xs text-slate-500 transition-colors flex-shrink-0 ml-2"
                         >
-                          🎲
+                          🔀
                         </button>
-                      </div>
+                        <span className="text-xs text-slate-400 truncate">{audioFormat.label}</span>
+                      </>
                     )}
                   </div>
                 </div>

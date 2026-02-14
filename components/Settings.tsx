@@ -5,6 +5,7 @@ export type CEFRLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1';
 export type ContentMode = 'standard' | 'halal' | 'elsd';
 export type ClassroomTheme = 'light' | 'dark';
 export type ContentModel = 'gpt-5-mini' | 'gpt-5.2';
+export type SpeakerCountDefault = 'random' | 1 | 2 | 3;
 
 export interface AppSettings {
   difficultyLevel: CEFRLevel;
@@ -13,6 +14,7 @@ export interface AppSettings {
   // JAM generation defaults
   targetDuration: number; // 5-30 minutes
   contentModel: ContentModel;
+  defaultSpeakerCount: SpeakerCountDefault;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -22,6 +24,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // JAM generation defaults
   targetDuration: 10, // 10 minutes default
   contentModel: 'gpt-5-mini',
+  defaultSpeakerCount: 'random',
 };
 
 const CEFR_LEVELS: { value: CEFRLevel; label: string; shortLabel: string; description: string }[] = [
@@ -321,6 +324,28 @@ export const Settings: React.FC<SettingsProps> = ({
                       AI determines question and vocabulary counts based on duration and CEFR level
                     </p>
                   </div>
+                  {/* Speaker Count Default */}
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-2">Speaker Count</label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {([['random', 'Random'], [1, '1'], [2, '2'], [3, '3+']] as const).map(([val, label]) => (
+                        <button
+                          key={String(val)}
+                          onClick={() => setLocalSettings({ ...localSettings, defaultSpeakerCount: val as any })}
+                          className={`p-2 rounded-lg text-center border-2 transition-all text-xs font-medium ${
+                            localSettings.defaultSpeakerCount === val
+                              ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                              : 'border-slate-200 hover:border-slate-300 bg-white text-slate-700'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-2">
+                      Initial speaker count when opening test creation features
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -506,6 +531,28 @@ export const Settings: React.FC<SettingsProps> = ({
                   </div>
                   <p className="text-[10px] text-slate-500 mt-2">
                     AI determines question and vocabulary counts based on duration and CEFR level
+                  </p>
+                </div>
+                {/* Speaker Count Default */}
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-2">Speaker Count</label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {([['random', 'Random'], [1, '1'], [2, '2'], [3, '3+']] as const).map(([val, label]) => (
+                      <button
+                        key={String(val)}
+                        onClick={() => setLocalSettings({ ...localSettings, defaultSpeakerCount: val as any })}
+                        className={`p-2 rounded-lg text-center border-2 transition-all text-xs font-medium ${
+                          localSettings.defaultSpeakerCount === val
+                            ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                            : 'border-slate-200 hover:border-slate-300 bg-white text-slate-700'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-2">
+                    Initial speaker count when opening test creation features
                   </p>
                 </div>
               </div>

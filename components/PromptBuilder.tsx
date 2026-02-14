@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { EngineType, ElevenLabsVoice } from '../types';
 import { ClipboardIcon, CheckCircleIcon, SparklesIcon, XIcon } from './Icons';
-import { ContentMode } from './Settings';
-import { EFL_TOPICS, SpeakerCount, AudioFormat, getRandomTopic, getRandomFormat, shuffleFormat } from '../utils/eflTopics';
+import { ContentMode, SpeakerCountDefault } from './Settings';
+import { EFL_TOPICS, SpeakerCount, AudioFormat, getRandomTopic, getRandomFormat, shuffleFormat, randomSpeakerCount, resolveSpeakerDefault } from '../utils/eflTopics';
 
 type CEFRLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1';
 
@@ -12,6 +12,7 @@ interface PromptBuilderProps {
   elevenLabsVoices?: ElevenLabsVoice[]; // Actual voices from ElevenLabs API
   defaultDifficulty?: CEFRLevel; // Default difficulty from app settings
   contentMode?: ContentMode; // Content filtering mode: standard, halal, or elsd
+  defaultSpeakerCount?: SpeakerCountDefault;
   onClose: () => void;
   onApplyPrompt: (prompt: string, voiceAssignments: Record<string, string>) => void;
   onDifficultyUsed?: (difficulty: string) => void;
@@ -211,6 +212,7 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
   elevenLabsVoices = [],
   defaultDifficulty = 'B1',
   contentMode = 'standard',
+  defaultSpeakerCount = 'random' as const,
   onClose,
   onApplyPrompt,
   onDifficultyUsed,
@@ -284,11 +286,12 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
     };
   }, [elevenLabsVoices]);
 
-  const [speakerCount, setSpeakerCount] = useState<SpeakerCount>(2);
-  const [audioFormat, setAudioFormat] = useState<AudioFormat | null>(() => getRandomFormat(2));
+  const initialSpeakers = useMemo(() => resolveSpeakerDefault(defaultSpeakerCount), []);
+  const [speakerCount, setSpeakerCount] = useState<SpeakerCount>(initialSpeakers);
+  const [audioFormat, setAudioFormat] = useState<AudioFormat | null>(() => getRandomFormat(initialSpeakers));
   const [useRandomTopic, setUseRandomTopic] = useState(true);
   const [currentRandomTopic, setCurrentRandomTopic] = useState(() =>
-    getRandomTopic(2)
+    getRandomTopic(initialSpeakers)
   );
   const [duration, setDuration] = useState(90);
   const [customDuration, setCustomDuration] = useState('');
@@ -827,15 +830,27 @@ Now generate the listening exercise:`;
                   {count === 3 ? '3+' : count}
                 </button>
               ))}
+              <button
+                onClick={() => {
+                  const count = randomSpeakerCount();
+                  setSpeakerCount(count);
+                  setCurrentRandomTopic(getRandomTopic(count));
+                  setAudioFormat(getRandomFormat(count));
+                }}
+                className="px-2.5 py-2 rounded-xl text-sm font-medium bg-slate-100 text-slate-500 hover:bg-amber-50 hover:text-amber-600 transition-all"
+                title="Random speaker count"
+              >
+                🎲
+              </button>
               {audioFormat && (
                 <div className="flex items-center gap-1 ml-auto">
-                  <span className="text-xs text-slate-500 truncate max-w-[140px]">{audioFormat.label}</span>
                   <button
                     onClick={() => setAudioFormat(shuffleFormat(speakerCount, audioFormat.id))}
-                    className="px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded text-xs text-slate-500 transition-colors"
+                    className="px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded text-xs text-slate-500 transition-colors flex-shrink-0"
                   >
-                    🎲
+                    🔀
                   </button>
+                  <span className="text-xs text-slate-500 truncate max-w-[140px]">{audioFormat.label}</span>
                 </div>
               )}
             </div>

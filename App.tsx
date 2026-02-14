@@ -1276,6 +1276,7 @@ const App: React.FC = () => {
       defaultContentMode={settingsHook.settings.contentMode}
       defaultTargetDuration={settingsHook.settings.targetDuration}
       defaultContentModel={settingsHook.settings.contentModel}
+      defaultSpeakerCount={settingsHook.settings.defaultSpeakerCount}
     />
   );
 
@@ -1745,6 +1746,7 @@ const App: React.FC = () => {
         elevenLabsVoices={elevenTTS.voices}
         defaultDifficulty={settingsHook.settings.difficultyLevel}
         contentMode={settingsHook.settings.contentMode}
+        defaultSpeakerCount={settingsHook.settings.defaultSpeakerCount}
         onClose={() => setShowPromptBuilder(false)}
         onApplyPrompt={(prompt, voiceAssignments) => {
           // For now, just copy the prompt to clipboard
@@ -1775,6 +1777,7 @@ const App: React.FC = () => {
           isOpen={showOneShotCreator}
           defaultDifficulty={settingsHook.settings.difficultyLevel}
           contentMode={settingsHook.settings.contentMode}
+          defaultSpeakerCount={settingsHook.settings.defaultSpeakerCount}
           onClose={() => setShowOneShotCreator(false)}
           onComplete={handleOneShotComplete}
         />
