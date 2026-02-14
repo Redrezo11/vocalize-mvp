@@ -1334,18 +1334,20 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                   </div>
                 </div>
 
-                {selectedAudio.audioUrl && (
-                  <audio
-                    ref={audioRef}
-                    src={selectedAudio.audioUrl}
-                    preload="metadata"
-                    className="hidden"
-                  />
-                )}
               </div>
             )}
           </div>
         </div>
+        )}
+
+        {/* Audio element — always mounted so it works in both toolbar and fullscreen widget */}
+        {selectedAudio?.audioUrl && (
+          <audio
+            ref={audioRef}
+            src={selectedAudio.audioUrl}
+            preload="metadata"
+            className="hidden"
+          />
         )}
 
         {/* Vocabulary / Lexis Section */}
