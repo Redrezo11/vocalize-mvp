@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { EngineType, ElevenLabsVoice } from '../types';
 import { ClipboardIcon, CheckCircleIcon, SparklesIcon, XIcon } from './Icons';
 import { ContentMode } from './Settings';
-import { EFL_TOPICS } from '../utils/eflTopics';
+import { EFL_TOPICS, SpeakerCount, AudioFormat, getRandomTopic, getRandomFormat, shuffleFormat } from '../utils/eflTopics';
 
 type CEFRLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1';
 
@@ -284,9 +284,11 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
     };
   }, [elevenLabsVoices]);
 
+  const [speakerCount, setSpeakerCount] = useState<SpeakerCount>(2);
+  const [audioFormat, setAudioFormat] = useState<AudioFormat | null>(() => getRandomFormat(2));
   const [useRandomTopic, setUseRandomTopic] = useState(true);
   const [currentRandomTopic, setCurrentRandomTopic] = useState(() =>
-    EFL_TOPICS[Math.floor(Math.random() * EFL_TOPICS.length)]
+    getRandomTopic(2)
   );
   const [duration, setDuration] = useState(90);
   const [customDuration, setCustomDuration] = useState('');
@@ -329,15 +331,20 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
       ? `\n**IMPORTANT: Use ${elevenLabsTier.toUpperCase()} tier voices ONLY.**`
       : '';
 
+    const speakerLabel = speakerCount === 1 ? '1 speaker (monologue)' : speakerCount === 3 ? '3+ speakers (group discussion)' : '2 speakers (dialogue)';
+
     const prompt = `# EFL Listening Exercise Generator
 
 ## Task
-Create an engaging listening dialogue for English as a Foreign Language (EFL) learners.
+Create an engaging listening ${speakerCount === 1 ? 'monologue' : speakerCount === 3 ? 'group discussion' : 'dialogue'} for English as a Foreign Language (EFL) learners.
 
 ## Requirements
 
 ### Difficulty Level: ${difficulty} (${CEFR_DESCRIPTIONS[difficulty]})
 
+### Speaker Count: ${speakerLabel}
+${speakerCount === 1 ? '- Use exactly 1 speaker\n- Use a single character name, NOT "Narrator" or "Speaker1"' : speakerCount === 3 ? '- Use 3-4 speakers with distinct personalities\n- Give each speaker a real name and clear role\n- Mix genders for voice contrast' : '- Use exactly 2 speakers with contrasting voice types\n- One FEMALE and one MALE voice'}
+${audioFormat ? `\n### Audio Format: ${audioFormat.label}\n${audioFormat.promptDescription}\nRegister: ${audioFormat.register}\n` : ''}
 ### Topic: ${selectedTopic}
 
 ### Duration: ~${Math.floor(actualDuration / 60)}:${(actualDuration % 60).toString().padStart(2, '0')} (${wordCount.min}-${wordCount.max} words)
@@ -667,13 +674,14 @@ Now generate the listening exercise:`;
   };
 
   const shuffleTopic = () => {
-    // Get a different topic than the current one
-    let newTopic = EFL_TOPICS[Math.floor(Math.random() * EFL_TOPICS.length)];
-    // Avoid selecting the same topic
-    while (newTopic === currentRandomTopic && EFL_TOPICS.length > 1) {
-      newTopic = EFL_TOPICS[Math.floor(Math.random() * EFL_TOPICS.length)];
-    }
-    setCurrentRandomTopic(newTopic);
+    setCurrentRandomTopic(getRandomTopic(speakerCount, currentRandomTopic));
+    setUseRandomTopic(true);
+  };
+
+  const handleSpeakerCountChange = (count: SpeakerCount) => {
+    setSpeakerCount(count);
+    setCurrentRandomTopic(getRandomTopic(count));
+    setAudioFormat(getRandomFormat(count));
     setUseRandomTopic(true);
   };
 
@@ -800,6 +808,37 @@ Now generate the listening exercise:`;
               ))}
             </div>
             <p className="text-xs text-slate-500">{CEFR_DESCRIPTIONS[difficulty]}</p>
+          </div>
+
+          {/* Speakers & Format */}
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-slate-700">Speakers</label>
+            <div className="flex items-center gap-2">
+              {([1, 2, 3] as SpeakerCount[]).map((count) => (
+                <button
+                  key={count}
+                  onClick={() => handleSpeakerCountChange(count)}
+                  className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                    speakerCount === count
+                      ? 'bg-indigo-100 text-indigo-700 ring-2 ring-indigo-500'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  {count === 3 ? '3+' : count}
+                </button>
+              ))}
+              {audioFormat && (
+                <div className="flex items-center gap-1 ml-auto">
+                  <span className="text-xs text-slate-500 truncate max-w-[140px]">{audioFormat.label}</span>
+                  <button
+                    onClick={() => setAudioFormat(shuffleFormat(speakerCount, audioFormat.id))}
+                    className="px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded text-xs text-slate-500 transition-colors"
+                  >
+                    🎲
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Topic */}

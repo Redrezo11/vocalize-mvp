@@ -126,7 +126,7 @@ const App: React.FC = () => {
   const [showOneShotCreator, setShowOneShotCreator] = useState(false);
   const [showJamButton, setShowJamButton] = useState(false);
   const [jamDifficulty, setJamDifficulty] = useState<import('./components/Settings').CEFRLevel>('B1');
-  const [jamSettings, setJamSettings] = useState<{ targetDuration: number; contentMode: import('./components/Settings').ContentMode; contentModel?: import('./components/HomePage').ContentModel; useReasoning?: boolean } | null>(null);
+  const [jamSettings, setJamSettings] = useState<{ targetDuration: number; contentMode: import('./components/Settings').ContentMode; contentModel?: import('./components/HomePage').ContentModel; useReasoning?: boolean; speakerCount?: import('./utils/eflTopics').SpeakerCount } | null>(null);
   const [jamTopic, setJamTopic] = useState<string | undefined>();
   const [autoSelectTestId, setAutoSelectTestId] = useState<string | null>(null);
   const settingsHook = useSettings();
@@ -1259,11 +1259,11 @@ const App: React.FC = () => {
   // Handle JAM generation from homepage
   const handleJamGenerate = (
     difficulty: import('./components/Settings').CEFRLevel,
-    settings?: { targetDuration: number; contentMode: import('./components/Settings').ContentMode; contentModel?: import('./components/HomePage').ContentModel; useReasoning?: boolean; topic?: string }
+    settings?: { targetDuration: number; contentMode: import('./components/Settings').ContentMode; contentModel?: import('./components/HomePage').ContentModel; useReasoning?: boolean; topic?: string; speakerCount?: import('./utils/eflTopics').SpeakerCount }
   ) => {
     setJamDifficulty(difficulty);
     setJamTopic(settings?.topic);
-    setJamSettings(settings ? { targetDuration: settings.targetDuration, contentMode: settings.contentMode, contentModel: settings.contentModel, useReasoning: settings.useReasoning } : null);
+    setJamSettings(settings ? { targetDuration: settings.targetDuration, contentMode: settings.contentMode, contentModel: settings.contentModel, useReasoning: settings.useReasoning, speakerCount: settings.speakerCount } : null);
     setShowJamButton(true);
   };
 
@@ -1801,6 +1801,7 @@ const App: React.FC = () => {
                   targetDuration: jamSettings.targetDuration,
                   contentModel: jamSettings.contentModel,
                   useReasoning: jamSettings.useReasoning,
+                  speakerCount: jamSettings.speakerCount,
                 } : undefined}
                 topic={jamTopic}
                 autoStart={true}

@@ -3,7 +3,7 @@ import { CEFRLevel, ContentMode } from './Settings';
 import { EngineType, SavedAudio, ListeningTest, SpeakerVoiceMapping } from '../types';
 import { parseDialogue } from '../utils/parser';
 import { buildDialoguePrompt, buildTestContentPrompt, validatePayload, OneShotPayload } from './OneShotCreator';
-import { EFL_TOPICS } from '../utils/eflTopics';
+import { EFL_TOPICS, SpeakerCount, AudioFormat, getRandomTopic, getRandomFormat, shuffleFormat } from '../utils/eflTopics';
 
 const API_BASE = '/api';
 
@@ -37,6 +37,7 @@ export interface JamProfile {
   includeExplanations: boolean;
   explanationLanguage: 'english' | 'arabic' | 'both';
   useReasoning: boolean; // true = low/medium reasoning, false = none (faster)
+  speakerCount?: SpeakerCount;
 }
 
 const DEFAULT_JAM_PROFILE: JamProfile = {
@@ -283,19 +284,26 @@ export const JamButton: React.FC<JamButtonProps> = ({
   const [errorMsg, setErrorMsg] = useState('');
   const [generatingLabel, setGeneratingLabel] = useState('');
 
+  // Speaker count & format state
+  const [speakerCount, setSpeakerCount] = useState<SpeakerCount>(profile.speakerCount || 2);
+  const [audioFormat, setAudioFormat] = useState<AudioFormat | null>(() => getRandomFormat(profile.speakerCount || 2));
+
   // Topic state
   const [currentTopic, setCurrentTopic] = useState(() =>
-    EFL_TOPICS[Math.floor(Math.random() * EFL_TOPICS.length)]
+    getRandomTopic(profile.speakerCount || 2)
   );
   const [isCustomTopic, setIsCustomTopic] = useState(false);
   const [customTopic, setCustomTopic] = useState('');
 
   const shuffleTopic = () => {
-    let newTopic = EFL_TOPICS[Math.floor(Math.random() * EFL_TOPICS.length)];
-    while (newTopic === currentTopic && EFL_TOPICS.length > 1) {
-      newTopic = EFL_TOPICS[Math.floor(Math.random() * EFL_TOPICS.length)];
-    }
-    setCurrentTopic(newTopic);
+    setCurrentTopic(getRandomTopic(speakerCount, currentTopic));
+    setIsCustomTopic(false);
+  };
+
+  const handleSpeakerCountChange = (count: SpeakerCount) => {
+    setSpeakerCount(count);
+    setCurrentTopic(getRandomTopic(count));
+    setAudioFormat(getRandomFormat(count));
     setIsCustomTopic(false);
   };
 
@@ -318,7 +326,7 @@ export const JamButton: React.FC<JamButtonProps> = ({
     const ai = new GoogleGenAI({ apiKey: geminiKey });
 
     const speakers = Object.entries(speakerMapping);
-    const speechConfig = speakers.length === 2
+    const speechConfig = speakers.length >= 2
       ? {
           multiSpeakerVoiceConfig: {
             speakerVoiceConfigs: speakers.map(([speaker, voice]) => ({
@@ -584,7 +592,7 @@ export const JamButton: React.FC<JamButtonProps> = ({
 
       // --- Call 1: Generate dialogue + voice assignments (creative, high reasoning) ---
       const effectiveTopic = topic || (isCustomTopic ? customTopic : currentTopic);
-      const dialoguePrompt = buildDialoguePrompt(profile.difficulty, profile.contentMode, profile.targetDuration, effectiveTopic);
+      const dialoguePrompt = buildDialoguePrompt(profile.difficulty, profile.contentMode, profile.targetDuration, effectiveTopic, speakerCount, audioFormat || undefined);
 
       const dialogueResponse = await fetch('https://api.openai.com/v1/responses', {
         method: 'POST',
@@ -914,6 +922,25 @@ export const JamButton: React.FC<JamButtonProps> = ({
                 } disabled:opacity-50`}
               >
                 {level}
+              </button>
+            ))}
+          </div>
+
+          {/* Speaker Count */}
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-slate-500 mr-1">Speakers:</span>
+            {([1, 2, 3] as SpeakerCount[]).map((count) => (
+              <button
+                key={count}
+                onClick={() => handleSpeakerCountChange(count)}
+                disabled={stage !== 'idle'}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                  speakerCount === count
+                    ? 'bg-indigo-100 text-indigo-700 ring-2 ring-indigo-500'
+                    : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
+                } disabled:opacity-50`}
+              >
+                {count === 3 ? '3+' : count}
               </button>
             ))}
           </div>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { CEFRLevel, ContentMode, ContentModel } from './Settings';
-import { EFL_TOPICS } from '../utils/eflTopics';
+import { EFL_TOPICS, SpeakerCount, getRandomTopic } from '../utils/eflTopics';
 
 export type CreationMethod = 'audio' | 'transcript' | 'import' | 'oneshot' | 'jam';
 export type { ContentModel } from './Settings';
@@ -28,6 +28,7 @@ interface JamSettings {
   contentMode: ContentMode;
   contentModel: ContentModel;
   useReasoning: boolean;
+  speakerCount?: SpeakerCount;
 }
 
 interface HomePageProps {
@@ -102,18 +103,21 @@ export const HomePage: React.FC<HomePageProps> = ({
     contentModel: defaultContentModel,
     useReasoning: true,
   });
+  const [speakerCount, setSpeakerCount] = useState<SpeakerCount>(2);
   const [currentTopic, setCurrentTopic] = useState(() =>
-    EFL_TOPICS[Math.floor(Math.random() * EFL_TOPICS.length)]
+    getRandomTopic(2)
   );
   const [isCustomTopic, setIsCustomTopic] = useState(false);
   const [customTopic, setCustomTopic] = useState('');
 
   const shuffleTopic = () => {
-    let newTopic = EFL_TOPICS[Math.floor(Math.random() * EFL_TOPICS.length)];
-    while (newTopic === currentTopic && EFL_TOPICS.length > 1) {
-      newTopic = EFL_TOPICS[Math.floor(Math.random() * EFL_TOPICS.length)];
-    }
-    setCurrentTopic(newTopic);
+    setCurrentTopic(getRandomTopic(speakerCount, currentTopic));
+    setIsCustomTopic(false);
+  };
+
+  const handleSpeakerCountChange = (count: SpeakerCount) => {
+    setSpeakerCount(count);
+    setCurrentTopic(getRandomTopic(count));
     setIsCustomTopic(false);
   };
 
@@ -183,7 +187,7 @@ export const HomePage: React.FC<HomePageProps> = ({
 
   const handleGenerateClick = () => {
     if (onJamGenerate) {
-      onJamGenerate(selectedDifficulty, { ...jamSettings, topic: isCustomTopic ? customTopic : currentTopic });
+      onJamGenerate(selectedDifficulty, { ...jamSettings, speakerCount, topic: isCustomTopic ? customTopic : currentTopic });
     } else {
       onSelect('jam');
     }
@@ -287,6 +291,26 @@ export const HomePage: React.FC<HomePageProps> = ({
                         }`}
                       >
                         {level}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Speaker Count */}
+                <div className="w-full">
+                  <label className="block text-sm font-medium text-slate-600 mb-2 text-center">Speakers</label>
+                  <div className="flex justify-center gap-2">
+                    {([1, 2, 3] as SpeakerCount[]).map((count) => (
+                      <button
+                        key={count}
+                        onClick={() => handleSpeakerCountChange(count)}
+                        className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                          speakerCount === count
+                            ? 'bg-indigo-100 text-indigo-700 ring-2 ring-indigo-500'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        {count === 3 ? '3+' : count}
                       </button>
                     ))}
                   </div>

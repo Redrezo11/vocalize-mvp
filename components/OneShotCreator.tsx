@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { CEFRLevel, ContentMode } from './Settings';
 import { EngineType, SavedAudio, SpeakerVoiceMapping } from '../types';
 import { parseDialogue } from '../utils/parser';
-import { EFL_TOPICS } from '../utils/eflTopics';
+import { EFL_TOPICS, SpeakerCount, AudioFormat, getRandomTopic, getRandomFormat, shuffleFormat } from '../utils/eflTopics';
 
 const API_BASE = '/api';
 
@@ -154,13 +154,20 @@ export const GEMINI_VOICES_REFERENCE = `
 - Umbriel (Male): Relaxed — podcast host, casual guide
 - Zubenelgenubi (Male): Casual — friend, everyday conversation
 
-PAIRING GUIDE (always pair one FEMALE + one MALE voice):
+PAIRING GUIDE (for 2-speaker dialogues — pair one FEMALE + one MALE voice):
 - Teacher + Student: Kore (Female) + Achird (Male) or Charon (Male) + Leda (Female)
 - Friends chatting: Aoede (Female) + Umbriel (Male) or Zephyr (Female) + Zubenelgenubi (Male)
 - Boss + Employee: Orus (Male) + Despina (Female) or Kore (Female) + Achird (Male)
 - Expert + Learner: Erinome (Female) + Fenrir (Male) or Charon (Male) + Leda (Female)
 - Customer service: Achird (Male) + Autonoe (Female) or Despina (Female) + Zubenelgenubi (Male)
 - Professional: Schedar (Male) + Despina (Female) or Sadaltager (Male) + Erinome (Female)
+
+MULTI-SPEAKER GUIDE (for 3+ speaker exercises):
+- Use a mix of male and female voices for contrast (at least 1 of each gender)
+- Assign different voice styles to each speaker for easy differentiation
+- For a moderator/host role, use an authoritative voice (Kore, Orus, Schedar, Despina)
+- For panelists/group members, vary between warm, energetic, and casual styles
+- Avoid pairing two voices with similar archetypes (e.g., don't pair two "Firm" voices)
 `.trim();
 
 // --- Helpers ---
@@ -268,7 +275,9 @@ export function buildTemplate(
   difficulty: CEFRLevel,
   contentMode: ContentMode,
   targetDuration: number = 10,
-  topic?: string
+  topic?: string,
+  speakerCount: SpeakerCount = 2,
+  audioFormat?: AudioFormat
 ): string {
   const contentGuidelines = contentMode === 'halal'
     ? `\nCONTENT RESTRICTIONS (Halal mode):\n- No references to alcohol, pork, gambling, dating, or romantic relationships\n- Topics should be family-friendly and culturally appropriate\n- Avoid slang related to prohibited topics\n`
@@ -295,8 +304,12 @@ Create a COMPLETE listening test package designed for approximately ${targetDura
 
 ### Language Guidelines for ${difficulty}:
 ${CEFR_PROMPT_GUIDELINES[difficulty]}
-${contentGuidelines}${topic ? `## Topic
-Create the dialogue about: "${topic}"
+${contentGuidelines}${audioFormat ? `## Audio Format: ${audioFormat.label}
+${audioFormat.promptDescription}
+Register: ${audioFormat.register}
+
+` : ''}${topic ? `## Topic
+Create the ${speakerCount === 1 ? 'monologue' : speakerCount === 3 ? 'group discussion' : 'dialogue'} about: "${topic}"
 Make the specific scenario unique and engaging while staying on this topic.
 
 ` : ''}## Available TTS Voices (Gemini)
@@ -311,10 +324,9 @@ Return a SINGLE JSON object. No markdown fences, no explanation — ONLY valid J
 {
   "title": "Descriptive title for the listening exercise",
   "difficulty": "${difficulty}",
-  "transcript": "Speaker1: First line of dialogue.\\n\\nSpeaker2: Response line.\\n\\nSpeaker1: Another line.",
+  "transcript": "${speakerCount === 1 ? 'Speaker: Full monologue text here with natural pauses between sections.' : speakerCount === 3 ? 'Speaker1: First line.\\n\\nSpeaker2: Response.\\n\\nSpeaker3: Another perspective.\\n\\nSpeaker1: Follow-up.' : 'Speaker1: First line of dialogue.\\n\\nSpeaker2: Response line.\\n\\nSpeaker1: Another line.'}",
   "voiceAssignments": {
-    "Speaker1": "VoiceName",
-    "Speaker2": "VoiceName"
+    ${speakerCount === 1 ? '"Speaker": "VoiceName"' : speakerCount === 3 ? '"Speaker1": "VoiceName",\n    "Speaker2": "VoiceName",\n    "Speaker3": "VoiceName"' : '"Speaker1": "VoiceName",\n    "Speaker2": "VoiceName"'}
   },
   "questions": [
     {
@@ -366,13 +378,13 @@ Return a SINGLE JSON object. No markdown fences, no explanation — ONLY valid J
   }
 }
 
-## Dialogue Guidelines
-- Use exactly 2 speakers with contrasting voice types
-- Target approximately ${durationInfo.wordCount} words for the dialogue
-- Use "Speaker: text" format with \\n\\n between turns
-- Include natural fillers (um, well, you know) for realism
+## ${speakerCount === 1 ? 'Monologue' : 'Dialogue'} Guidelines
+- ${speakerCount === 1 ? 'Use exactly 1 speaker' : speakerCount === 3 ? 'Use 3-4 speakers with diverse, contrasting voices and distinct personalities' : 'Use exactly 2 speakers with contrasting voice types'}
+- Target approximately ${durationInfo.wordCount} words for the ${speakerCount === 1 ? 'monologue' : 'dialogue'}
+- Use "Speaker: text" format with \\n\\n between turns${speakerCount === 1 ? ' (use a single speaker name throughout)' : ''}
+- Include natural ${speakerCount === 1 ? 'speech features (pauses, self-corrections, emphasis)' : 'fillers (um, well, you know)'} for realism
 - No stage directions, sound effects, or meta-commentary
-- Just pure dialogue text
+- Just pure ${speakerCount === 1 ? 'monologue' : 'dialogue'} text
 
 ## Question Guidelines
 - Generate ${durationInfo.questionCount} multiple-choice comprehension questions
@@ -446,12 +458,21 @@ Rules:
 - Include Arabic translation
 
 ## Voice Selection Rules (CRITICAL)
-- ALWAYS assign one FEMALE voice and one MALE voice for contrast
+${speakerCount === 1 ? `- Assign ONE voice that matches the speaker's character and gender
+- Choose from the FEMALE or MALE voices list above based on the character
+- Match voice personality to the character's role (see archetypes above)
+- Vary your selections — do not always default to the same voice` : speakerCount === 3 ? `- Assign 3-4 distinct voices with a MIX of genders (at least 1 male and 1 female)
+- Each speaker MUST have a clearly different voice style for easy differentiation
+- Female characters MUST use a voice from the FEMALE voices list above
+- Male characters MUST use a voice from the MALE voices list above
+- NEVER assign a Female voice to a male character or vice versa
+- For moderator/host roles, use an authoritative voice
+- Vary your selections — do not pair voices with similar archetypes` : `- ALWAYS assign one FEMALE voice and one MALE voice for contrast
 - Female characters MUST use a voice from the FEMALE voices list above
 - Male characters MUST use a voice from the MALE voices list above
 - NEVER assign a Female voice to a male character or vice versa
 - Match voice personality to the character's role (see archetypes above)
-- Vary your selections — do not always default to the same voices
+- Vary your selections — do not always default to the same voices`}
 
 Now generate the complete test as a single JSON object:`;
 }
@@ -478,33 +499,72 @@ export function buildDialoguePrompt(
   difficulty: CEFRLevel,
   contentMode: ContentMode,
   targetDuration: number,
-  topic?: string
+  topic?: string,
+  speakerCount: SpeakerCount = 2,
+  audioFormat?: AudioFormat
 ): { instructions: string; input: string } {
   const durationInfo = getDurationGuidelines(targetDuration, difficulty);
   const contentRestrictions = getContentRestrictions(contentMode);
 
-  const instructions = `You are an expert dialogue scriptwriter for EFL (English as a Foreign Language) listening exercises. You create natural, engaging conversations between two speakers that sound like real people talking. Your dialogues are creative, topically varied, and perfectly calibrated to the target language proficiency level. You never produce generic or robotic exchanges.`;
+  const scriptType = speakerCount === 1 ? 'monologues and single-speaker recordings' : speakerCount === 3 ? 'multi-party conversations involving 3-4 speakers' : 'conversations between two speakers';
 
-  const input = `# Generate a Dialogue for an EFL Listening Exercise
+  const instructions = `You are an expert scriptwriter for EFL (English as a Foreign Language) listening exercises. You create natural, engaging ${scriptType} that sound like real people talking. Your scripts are creative, topically varied, and perfectly calibrated to the target language proficiency level. You never produce generic or robotic exchanges.`;
+
+  const input = `# Generate ${speakerCount === 1 ? 'a Monologue' : 'a Dialogue'} for an EFL Listening Exercise
 
 ## Target Level: ${difficulty} - ${CEFR_DESCRIPTIONS[difficulty]}
 
 ### Language Guidelines for ${difficulty}:
 ${CEFR_PROMPT_GUIDELINES[difficulty]}
-${contentRestrictions}
+${contentRestrictions}${audioFormat ? `
+## Audio Format: ${audioFormat.label}
+${audioFormat.promptDescription}
+Register: ${audioFormat.register}
+` : ''}
 ## Duration & Length
 - Target duration: ${targetDuration} minutes of student activity
-- Dialogue word count: approximately ${durationInfo.wordCount} words
+- ${speakerCount === 1 ? 'Monologue' : 'Dialogue'} word count: approximately ${durationInfo.wordCount} words
 
 ## Available TTS Voices (Gemini)
 ${GEMINI_VOICES_REFERENCE}
 
-## Dialogue Quality Standards
+## ${speakerCount === 1 ? 'Monologue' : 'Dialogue'} Quality Standards
 ${topic ? `- Topic: "${topic}" — interpret this creatively, make the specific scenario unique and engaging
+` : speakerCount === 1 ? `- Choose an engaging, SPECIFIC topic for the monologue
+  - Good examples: "A tour guide describing a historical castle", "A voicemail about a change in travel plans", "A news report about a local festival"
+  - Bad examples: "Someone talking about their day", "A generic announcement"
+` : speakerCount === 3 ? `- Choose an engaging, SPECIFIC topic for the group discussion
+  - Good examples: "Three students debating which topic to choose for their group project", "A panel discussing the future of electric vehicles", "Family members planning a vacation"
+  - Bad examples: "People talking about stuff", "A group chat"
 ` : `- Choose an engaging, SPECIFIC topic (NOT generic small talk)
   - Good examples: "Negotiating a deadline extension with a professor", "Debating whether to adopt a rescue dog", "Planning a surprise birthday party that's going wrong"
   - Bad examples: "Two people talking about their day", "A conversation about weather"
-`}- Give each speaker a DISTINCT personality:
+`}${speakerCount === 1 ? `- Give the speaker a clear personality and role
+  - Use a real character name (e.g., "Sarah"), NOT "Speaker1" or "Narrator"
+  - The speaker should have a clear purpose and audience in mind
+- Create a natural arc:
+  - Opening: establish context quickly
+  - Middle: develop the main content with natural progression
+  - End: reach a clear conclusion or sign-off
+- Include natural speech features appropriate for ${difficulty} level:
+  - Pauses and self-corrections
+  - Emphasis words: "actually", "importantly", "what I mean is"
+  - Transitions: "now", "moving on", "so anyway"` : speakerCount === 3 ? `- Give each speaker a DISTINCT personality and role:
+  - Different speaking styles and levels of formality
+  - Different attitudes or perspectives on the topic
+  - Use real character names (e.g., "Sarah", "Marcus", "James"), NOT "Speaker1/Speaker2/Speaker3"
+  - If the format has a moderator/host, make that role clear
+- Create a natural group conversation arc:
+  - Opening: establish the context and let speakers introduce their perspectives
+  - Middle: develop with genuine multi-way exchange, agreements, disagreements
+  - End: reach some resolution, decision, or summary
+- Vary turn lengths realistically:
+  - Mix short reactions with longer explanations
+  - NOT every speaker should talk equally
+- Include natural speech features appropriate for ${difficulty} level:
+  - Interruptions and overlapping: "Sorry, can I just—", "Wait, let me finish"
+  - Backchanneling: "Mm-hmm", "Right", "I see"
+  - Referring to other speakers: "Like Sarah said...", "I agree with Marcus on that"` : `- Give each speaker a DISTINCT personality:
   - Different speaking styles (one more formal, one more casual; one verbose, one concise)
   - Different attitudes or perspectives on the topic
   - Use real character names (e.g., "Sarah", "Marcus"), NOT "Speaker1/Speaker2"
@@ -519,21 +579,29 @@ ${topic ? `- Topic: "${topic}" — interpret this creatively, make the specific 
   - Fillers: "um", "well", "you know", "I mean"
   - Self-corrections: "It was Monday — no wait, Tuesday"
   - Reactions: "Oh!", "Hmm", "Right, right"
-  - Backchanneling and overlapping ideas
+  - Backchanneling and overlapping ideas`}
 - AVOID:
   - Robotic, equal-length ping-pong exchanges
-  - Characters that sound identical
-  - Exposition dumps disguised as dialogue
-  - Starting with greetings or pleasantries
+  - ${speakerCount === 1 ? 'Monotonous delivery without variation' : 'Characters that sound identical'}
+  - Exposition dumps disguised as ${speakerCount === 1 ? 'narration' : 'dialogue'}
+  - ${speakerCount === 1 ? 'Reading from a script (should sound natural and spoken)' : 'Starting with greetings or pleasantries'}
   - Overly educational or "textbook" sounding exchanges
 
 ## Voice Selection Rules (CRITICAL)
-- ALWAYS assign one FEMALE voice and one MALE voice for contrast
+${speakerCount === 1 ? `- Assign ONE voice that matches the speaker's character and gender
+- Choose from the FEMALE or MALE voices list above based on the character
+- Match voice personality to the character's role (see archetypes above)` : speakerCount === 3 ? `- Assign 3-4 distinct voices with a MIX of genders (at least 1 male and 1 female)
+- Each speaker MUST have a clearly different voice style for easy differentiation
+- Female characters MUST use a voice from the FEMALE voices list above
+- Male characters MUST use a voice from the MALE voices list above
+- NEVER assign a Female voice to a male character or vice versa
+- For moderator/host roles, use an authoritative voice
+- Vary your selections — do not pair voices with similar archetypes` : `- ALWAYS assign one FEMALE voice and one MALE voice for contrast
 - Female characters MUST use a voice from the FEMALE voices list above
 - Male characters MUST use a voice from the MALE voices list above
 - NEVER assign a Female voice to a male character or vice versa
 - Match voice personality to the character's role (see archetypes above)
-- Vary your selections — do not always default to the same voices
+- Vary your selections — do not always default to the same voices`}
 
 ## Output Format
 
@@ -542,16 +610,15 @@ Return a SINGLE JSON object with ONLY these fields. No markdown fences, no expla
 {
   "title": "Descriptive title for the listening exercise",
   "difficulty": "${difficulty}",
-  "transcript": "CharName1: First line of dialogue.\\n\\nCharName2: Response line.\\n\\nCharName1: Another line.",
+  "transcript": "${speakerCount === 1 ? 'CharName: Full monologue text with natural pauses between sections.' : speakerCount === 3 ? 'CharName1: First line.\\n\\nCharName2: Response.\\n\\nCharName3: Another perspective.\\n\\nCharName1: Follow-up.' : 'CharName1: First line of dialogue.\\n\\nCharName2: Response line.\\n\\nCharName1: Another line.'}",
   "voiceAssignments": {
-    "CharName1": "VoiceName",
-    "CharName2": "VoiceName"
+    ${speakerCount === 1 ? '"CharName": "VoiceName"' : speakerCount === 3 ? '"CharName1": "VoiceName",\n    "CharName2": "VoiceName",\n    "CharName3": "VoiceName"' : '"CharName1": "VoiceName",\n    "CharName2": "VoiceName"'}
   }
 }
 
-Use "Speaker: text" format with \\n\\n between turns. No stage directions, sound effects, or meta-commentary — just pure dialogue text.
+Use "Speaker: text" format with \\n\\n between turns. No stage directions, sound effects, or meta-commentary — just pure ${speakerCount === 1 ? 'monologue' : 'dialogue'} text.
 
-Now generate the dialogue as a single JSON object:`;
+Now generate the ${speakerCount === 1 ? 'monologue' : 'dialogue'} as a single JSON object:`;
 
   return { instructions, input };
 }
@@ -727,8 +794,10 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
 }) => {
   const [difficulty, setDifficulty] = useState<CEFRLevel>(defaultDifficulty);
   const [targetDuration, setTargetDuration] = useState(10); // Default 10 minutes
+  const [speakerCount, setSpeakerCount] = useState<SpeakerCount>(2);
+  const [audioFormat, setAudioFormat] = useState<AudioFormat | null>(() => getRandomFormat(2));
   const [currentTopic, setCurrentTopic] = useState(() =>
-    EFL_TOPICS[Math.floor(Math.random() * EFL_TOPICS.length)]
+    getRandomTopic(2)
   );
   const [isCustomTopic, setIsCustomTopic] = useState(false);
   const [customTopic, setCustomTopic] = useState('');
@@ -744,18 +813,21 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
   const [audioFailReason, setAudioFailReason] = useState<string>('');
 
   const shuffleTopic = () => {
-    let newTopic = EFL_TOPICS[Math.floor(Math.random() * EFL_TOPICS.length)];
-    while (newTopic === currentTopic && EFL_TOPICS.length > 1) {
-      newTopic = EFL_TOPICS[Math.floor(Math.random() * EFL_TOPICS.length)];
-    }
-    setCurrentTopic(newTopic);
+    setCurrentTopic(getRandomTopic(speakerCount, currentTopic));
+    setIsCustomTopic(false);
+  };
+
+  const handleSpeakerCountChange = (count: SpeakerCount) => {
+    setSpeakerCount(count);
+    setCurrentTopic(getRandomTopic(count));
+    setAudioFormat(getRandomFormat(count));
     setIsCustomTopic(false);
   };
 
   const effectiveTopic = isCustomTopic ? customTopic : currentTopic;
 
   const handleCopyTemplate = useCallback(async () => {
-    const template = buildTemplate(difficulty, contentMode, targetDuration, effectiveTopic);
+    const template = buildTemplate(difficulty, contentMode, targetDuration, effectiveTopic, speakerCount, audioFormat || undefined);
     try {
       await navigator.clipboard.writeText(template);
       setCopyFeedback(true);
@@ -771,7 +843,7 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
       setCopyFeedback(true);
       setTimeout(() => setCopyFeedback(false), 2000);
     }
-  }, [difficulty, contentMode, targetDuration, effectiveTopic]);
+  }, [difficulty, contentMode, targetDuration, effectiveTopic, speakerCount, audioFormat]);
 
   const processOneShot = useCallback(async () => {
     setErrorMsg('');
@@ -814,7 +886,7 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
 
       // Build multi-speaker config
       const speakers = Object.entries(speakerMapping);
-      const speechConfig = speakers.length === 2
+      const speechConfig = speakers.length >= 2
         ? {
             multiSpeakerVoiceConfig: {
               speakerVoiceConfigs: speakers.map(([speaker, voice]) => ({
@@ -1221,6 +1293,35 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
                   <p className="text-xs text-slate-500 mt-2 text-center">
                     AI determines question/vocab counts based on duration + {difficulty} level
                   </p>
+                </div>
+                <div className="mb-3">
+                  <label className="text-sm text-slate-600 mb-2 block">Speakers:</label>
+                  <div className="flex items-center gap-2 mb-3">
+                    {([1, 2, 3] as SpeakerCount[]).map((count) => (
+                      <button
+                        key={count}
+                        onClick={() => handleSpeakerCountChange(count)}
+                        className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                          speakerCount === count
+                            ? 'bg-rose-100 text-rose-700 ring-2 ring-rose-500'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        {count === 3 ? '3+' : count}
+                      </button>
+                    ))}
+                    {audioFormat && (
+                      <div className="flex-1 flex items-center gap-1 ml-2">
+                        <span className="text-xs text-slate-400 truncate">{audioFormat.label}</span>
+                        <button
+                          onClick={() => setAudioFormat(shuffleFormat(speakerCount, audioFormat.id))}
+                          className="px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded text-xs text-slate-500 transition-colors flex-shrink-0"
+                        >
+                          🎲
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div className="mb-3">
                   <label className="text-sm text-slate-600 mb-2 block">Topic:</label>
