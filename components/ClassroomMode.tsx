@@ -89,7 +89,10 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
   // Floating audio widget in fullscreen
   const [showAudioWidget, setShowAudioWidget] = useState(false);
   const [widgetPos, setWidgetPos] = useState<{ x: number; y: number } | null>(null);
+  const [dockSide, setDockSide] = useState<'left' | 'right' | null>(null);
+  const [dockPreview, setDockPreview] = useState<'left' | 'right' | null>(null);
   const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
+  const widgetRef = useRef<HTMLDivElement>(null);
 
   // Unified fullscreen slide deck: null = not in fullscreen, string = which slide
   const [fullscreenSlide, setFullscreenSlide] = useState<string | null>(null);
@@ -754,7 +757,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
       // A toggles floating audio widget in fullscreen
       if ((e.key === 'a' || e.key === 'A') && isFullscreen && selectedAudio) {
         setShowAudioWidget(prev => {
-          if (prev) setWidgetPos(null); // reset position on dismiss
+          if (prev) { setWidgetPos(null); setDockSide(null); } // reset on dismiss
           return !prev;
         });
         return;
@@ -1924,63 +1927,81 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
               )}
             </div>
 
-            {/* Floating audio widget */}
-            {showAudioWidget && selectedAudio && (
-              <div
-                className="fixed z-50 backdrop-blur bg-slate-800/95 rounded-2xl px-5 py-3 shadow-2xl border border-slate-700/50"
-                style={widgetPos
-                  ? { left: widgetPos.x, top: widgetPos.y }
-                  : { bottom: '5rem', left: '50%', transform: 'translateX(-50%)' }
-                }
-              >
+            {/* --- Audio Widget + Footer (dockable system) --- */}
+            {(() => {
+              // Shared drag handler for both docked and undocked modes
+              const startDrag = (clientX: number, clientY: number, el: HTMLElement) => {
+                const rect = el.getBoundingClientRect();
+                const isDocked = dockSide !== null;
+                let currentPreview: 'left' | 'right' | null = null;
+                dragRef.current = { startX: clientX, startY: clientY, originX: rect.left, originY: rect.top };
+
+                const onMove = (mx: number, my: number) => {
+                  if (!dragRef.current) return;
+                  const dx = mx - dragRef.current.startX;
+                  const dy = my - dragRef.current.startY;
+
+                  if (isDocked) {
+                    // Undock if dragged >40px away from start
+                    if (Math.abs(dy) > 40 || Math.abs(dx) > 40) {
+                      const newX = Math.max(0, Math.min(window.innerWidth - rect.width, dragRef.current.originX + dx));
+                      const newY = Math.max(0, Math.min(window.innerHeight - rect.height, dragRef.current.originY + dy));
+                      setDockSide(null);
+                      setWidgetPos({ x: newX, y: newY });
+                    }
+                    return;
+                  }
+
+                  const newX = Math.max(0, Math.min(window.innerWidth - rect.width, dragRef.current.originX + dx));
+                  const newY = Math.max(0, Math.min(window.innerHeight - rect.height, dragRef.current.originY + dy));
+                  setWidgetPos({ x: newX, y: newY });
+
+                  // Snap detection
+                  const inDockZone = (newY + rect.height) > (window.innerHeight - 80);
+                  if (inDockZone) {
+                    currentPreview = mx < window.innerWidth / 2 ? 'left' : 'right';
+                  } else {
+                    currentPreview = null;
+                  }
+                  setDockPreview(currentPreview);
+                };
+
+                const onMouseMove = (ev: MouseEvent) => onMove(ev.clientX, ev.clientY);
+                const onTouchMove = (ev: TouchEvent) => onMove(ev.touches[0].clientX, ev.touches[0].clientY);
+
+                const onEnd = () => {
+                  if (!isDocked && currentPreview) {
+                    setDockSide(currentPreview);
+                    setWidgetPos(null);
+                  }
+                  setDockPreview(null);
+                  dragRef.current = null;
+                  window.removeEventListener('mousemove', onMouseMove);
+                  window.removeEventListener('mouseup', onEnd);
+                  window.removeEventListener('touchmove', onTouchMove);
+                  window.removeEventListener('touchend', onEnd);
+                };
+
+                window.addEventListener('mousemove', onMouseMove);
+                window.addEventListener('mouseup', onEnd);
+                window.addEventListener('touchmove', onTouchMove, { passive: false });
+                window.addEventListener('touchend', onEnd);
+              };
+
+              // Widget controls (grip + audio controls)
+              const widgetControls = (
                 <div className="flex items-center gap-3">
                   {/* Drag grip */}
                   <div
                     className="cursor-grab active:cursor-grabbing text-slate-500 hover:text-slate-300 select-none px-1"
                     onMouseDown={(e) => {
                       e.preventDefault();
-                      const el = (e.target as HTMLElement).closest('.fixed') as HTMLElement;
-                      if (!el) return;
-                      const rect = el.getBoundingClientRect();
-                      dragRef.current = { startX: e.clientX, startY: e.clientY, originX: rect.left, originY: rect.top };
-                      const onMove = (ev: MouseEvent) => {
-                        if (!dragRef.current) return;
-                        const dx = ev.clientX - dragRef.current.startX;
-                        const dy = ev.clientY - dragRef.current.startY;
-                        const newX = Math.max(0, Math.min(window.innerWidth - rect.width, dragRef.current.originX + dx));
-                        const newY = Math.max(0, Math.min(window.innerHeight - rect.height, dragRef.current.originY + dy));
-                        setWidgetPos({ x: newX, y: newY });
-                      };
-                      const onUp = () => {
-                        dragRef.current = null;
-                        window.removeEventListener('mousemove', onMove);
-                        window.removeEventListener('mouseup', onUp);
-                      };
-                      window.addEventListener('mousemove', onMove);
-                      window.addEventListener('mouseup', onUp);
+                      const el = widgetRef.current || (e.target as HTMLElement).closest('[data-widget]') as HTMLElement;
+                      if (el) startDrag(e.clientX, e.clientY, el);
                     }}
                     onTouchStart={(e) => {
-                      const touch = e.touches[0];
-                      const el = (e.target as HTMLElement).closest('.fixed') as HTMLElement;
-                      if (!el) return;
-                      const rect = el.getBoundingClientRect();
-                      dragRef.current = { startX: touch.clientX, startY: touch.clientY, originX: rect.left, originY: rect.top };
-                      const onMove = (ev: TouchEvent) => {
-                        if (!dragRef.current) return;
-                        const t = ev.touches[0];
-                        const dx = t.clientX - dragRef.current.startX;
-                        const dy = t.clientY - dragRef.current.startY;
-                        const newX = Math.max(0, Math.min(window.innerWidth - rect.width, dragRef.current.originX + dx));
-                        const newY = Math.max(0, Math.min(window.innerHeight - rect.height, dragRef.current.originY + dy));
-                        setWidgetPos({ x: newX, y: newY });
-                      };
-                      const onUp = () => {
-                        dragRef.current = null;
-                        window.removeEventListener('touchmove', onMove);
-                        window.removeEventListener('touchend', onUp);
-                      };
-                      window.addEventListener('touchmove', onMove, { passive: false });
-                      window.addEventListener('touchend', onUp);
+                      const el = widgetRef.current || (e.target as HTMLElement).closest('[data-widget]') as HTMLElement;
+                      if (el) startDrag(e.touches[0].clientX, e.touches[0].clientY, el);
                     }}
                   >
                     <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
@@ -1989,103 +2010,122 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                       <circle cx="8" cy="18" r="1.5"/><circle cx="16" cy="18" r="1.5"/>
                     </svg>
                   </div>
-
-                  {/* Play/Pause */}
-                  <button
-                    onClick={handlePlayPause}
-                    className="w-10 h-10 flex items-center justify-center bg-indigo-600 text-white rounded-full hover:bg-indigo-500 transition-colors"
-                    title={isPlaying ? "Pause" : "Play"}
-                  >
+                  <button onClick={handlePlayPause} className="w-10 h-10 flex items-center justify-center bg-indigo-600 text-white rounded-full hover:bg-indigo-500 transition-colors" title={isPlaying ? "Pause" : "Play"}>
                     {isPlaying ? <PauseIcon className="w-5 h-5" /> : <PlayIcon className="w-5 h-5 ml-0.5" />}
                   </button>
-
-                  {/* Restart */}
-                  <button
-                    onClick={handleRestart}
-                    className="w-8 h-8 flex items-center justify-center bg-slate-700 text-slate-300 rounded-full hover:bg-slate-600 transition-colors"
-                    title="Restart"
-                  >
+                  <button onClick={handleRestart} className="w-8 h-8 flex items-center justify-center bg-slate-700 text-slate-300 rounded-full hover:bg-slate-600 transition-colors" title="Restart">
                     <RefreshIcon className="w-4 h-4" />
                   </button>
-
-                  {/* Speed */}
                   <div className="flex items-center bg-slate-700/50 rounded-lg p-0.5 gap-0.5">
                     {SPEED_OPTIONS.map((speed) => (
-                      <button
-                        key={speed}
-                        onClick={() => handleSpeedChange(speed)}
-                        className={`px-2 py-1 text-xs font-medium rounded-md transition-colors ${
-                          playbackSpeed === speed
-                            ? 'bg-indigo-600 text-white'
-                            : 'text-slate-400 hover:text-white hover:bg-slate-600'
-                        }`}
-                      >
+                      <button key={speed} onClick={() => handleSpeedChange(speed)} className={`px-2 py-1 text-xs font-medium rounded-md transition-colors ${playbackSpeed === speed ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-600'}`}>
                         {speed}x
                       </button>
                     ))}
                   </div>
-
-                  {/* Progress */}
                   <div className="w-40">
-                    <input
-                      type="range"
-                      min="0"
-                      max={duration || 0}
-                      value={currentTime}
-                      onChange={handleSeek}
-                      className="w-full h-1.5 bg-slate-600 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-indigo-500 [&::-webkit-slider-thumb]:rounded-full"
-                    />
+                    <input type="range" min="0" max={duration || 0} value={currentTime} onChange={handleSeek} className="w-full h-1.5 bg-slate-600 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-indigo-500 [&::-webkit-slider-thumb]:rounded-full" />
                     <div className="flex justify-between mt-0.5 text-[10px] text-slate-400">
                       <span>{formatTime(currentTime)}</span>
                       <span>{formatTime(duration)}</span>
                     </div>
                   </div>
-
-                  {/* Play counter */}
                   <div className="flex items-center gap-1.5 bg-slate-700/50 px-2.5 py-1 rounded-lg">
                     <span className="text-slate-400 text-xs">Plays:</span>
                     <span className="text-lg font-bold text-indigo-400">{playCount}</span>
-                    <button
-                      onClick={handleResetCounter}
-                      className="p-0.5 text-slate-500 hover:text-white transition-colors"
-                      title="Reset counter"
-                    >
+                    <button onClick={handleResetCounter} className="p-0.5 text-slate-500 hover:text-white transition-colors" title="Reset counter">
                       <RefreshIcon className="w-3 h-3" />
                     </button>
                   </div>
                 </div>
-              </div>
-            )}
+              );
 
-            {/* Unified footer — position indicator + navigation + contextual controls */}
-            <div className="fixed bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-4 backdrop-blur px-6 py-3 rounded-full text-sm bg-slate-800/90 text-white">
-              {currentSlideIndex > 0 && (
-                <span className="cursor-pointer hover:text-indigo-300 transition-colors" onClick={() => { setSlideshowActive(false); setFullscreenSlide(fullscreenSlides[currentSlideIndex - 1]); }}>
-                  <kbd className="px-2 py-1 rounded bg-slate-700">←</kbd> Prev
-                </span>
-              )}
-              <span className="text-slate-400">{currentSlideIndex + 1} / {fullscreenSlides.length}</span>
-              {currentSlideIndex < fullscreenSlides.length - 1 && (
-                <span className="cursor-pointer hover:text-indigo-300 transition-colors" onClick={() => { setSlideshowActive(false); setFullscreenSlide(fullscreenSlides[currentSlideIndex + 1]); }}>
-                  Next <kbd className="px-2 py-1 rounded bg-slate-700">→</kbd>
-                </span>
-              )}
-              {fullscreenSlide === 'vocabulary' && selectedTest.lexisAudio?.wordAudios && (
-                <span>
-                  <kbd className={`px-2 py-1 rounded ${slideshowActive ? 'bg-green-600' : 'bg-slate-700'}`}>S</kbd>
-                  {' '}{slideshowActive ? 'Stop' : 'Play All'}
-                </span>
-              )}
-              {selectedAudio && (
-                <span className="cursor-pointer hover:text-indigo-300 transition-colors" onClick={() => setShowAudioWidget(prev => !prev)}>
-                  <kbd className={`px-2 py-1 rounded ${showAudioWidget ? 'bg-indigo-600' : 'bg-slate-700'}`}>A</kbd> Audio
-                </span>
-              )}
-              <span className="cursor-pointer hover:text-indigo-300 transition-colors" onClick={() => generateQRCode(selectedTest)}>
-                <kbd className="px-2 py-1 rounded bg-slate-700">Q</kbd> QR Code
-              </span>
-              <span><kbd className="px-2 py-1 rounded bg-slate-700">Esc</kbd> Exit</span>
-            </div>
+              // Footer controls
+              const footerControls = (
+                <>
+                  {currentSlideIndex > 0 && (
+                    <span className="cursor-pointer hover:text-indigo-300 transition-colors" onClick={() => { setSlideshowActive(false); setFullscreenSlide(fullscreenSlides[currentSlideIndex - 1]); }}>
+                      <kbd className="px-2 py-1 rounded bg-slate-700">←</kbd> Prev
+                    </span>
+                  )}
+                  <span className="text-slate-400">{currentSlideIndex + 1} / {fullscreenSlides.length}</span>
+                  {currentSlideIndex < fullscreenSlides.length - 1 && (
+                    <span className="cursor-pointer hover:text-indigo-300 transition-colors" onClick={() => { setSlideshowActive(false); setFullscreenSlide(fullscreenSlides[currentSlideIndex + 1]); }}>
+                      Next <kbd className="px-2 py-1 rounded bg-slate-700">→</kbd>
+                    </span>
+                  )}
+                  {fullscreenSlide === 'vocabulary' && selectedTest.lexisAudio?.wordAudios && (
+                    <span>
+                      <kbd className={`px-2 py-1 rounded ${slideshowActive ? 'bg-green-600' : 'bg-slate-700'}`}>S</kbd>
+                      {' '}{slideshowActive ? 'Stop' : 'Play All'}
+                    </span>
+                  )}
+                  {selectedAudio && (
+                    <span className="cursor-pointer hover:text-indigo-300 transition-colors" onClick={() => { setShowAudioWidget(prev => { if (prev) { setDockSide(null); } return !prev; }); }}>
+                      <kbd className={`px-2 py-1 rounded ${showAudioWidget ? 'bg-indigo-600' : 'bg-slate-700'}`}>A</kbd> Audio
+                    </span>
+                  )}
+                  <span className="cursor-pointer hover:text-indigo-300 transition-colors" onClick={() => generateQRCode(selectedTest)}>
+                    <kbd className="px-2 py-1 rounded bg-slate-700">Q</kbd> QR Code
+                  </span>
+                  <span><kbd className="px-2 py-1 rounded bg-slate-700">Esc</kbd> Exit</span>
+                </>
+              );
+
+              const showWidget = showAudioWidget && selectedAudio;
+
+              return (
+                <>
+                  {/* Dock preview indicator */}
+                  {dockPreview && (
+                    <div className={`fixed bottom-3 h-1.5 rounded-full bg-indigo-500/60 z-50 transition-all duration-150 ${
+                      dockPreview === 'left' ? 'left-8 w-1/3' : 'right-8 w-1/3'
+                    }`} />
+                  )}
+
+                  {/* MODE: Undocked — widget and footer are separate */}
+                  {!dockSide && (
+                    <>
+                      {showWidget && (
+                        <div
+                          ref={widgetRef}
+                          data-widget
+                          className="fixed z-50 backdrop-blur bg-slate-800/95 rounded-2xl px-5 py-3 shadow-2xl border border-slate-700/50"
+                          style={widgetPos
+                            ? { left: widgetPos.x, top: widgetPos.y }
+                            : { bottom: '5rem', left: '50%', transform: 'translateX(-50%)' }
+                          }
+                        >
+                          {widgetControls}
+                        </div>
+                      )}
+                      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-4 backdrop-blur px-6 py-3 rounded-full text-sm bg-slate-800/90 text-white">
+                        {footerControls}
+                      </div>
+                    </>
+                  )}
+
+                  {/* MODE: Docked — widget and footer in one combined bar */}
+                  {dockSide && (
+                    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 z-50">
+                      {dockSide === 'left' && showWidget && (
+                        <div ref={widgetRef} data-widget className="backdrop-blur bg-slate-800/95 rounded-2xl px-5 py-3 shadow-2xl border border-slate-700/50">
+                          {widgetControls}
+                        </div>
+                      )}
+                      <div className="backdrop-blur bg-slate-800/90 rounded-full px-6 py-3 flex items-center gap-4 text-sm text-white">
+                        {footerControls}
+                      </div>
+                      {dockSide === 'right' && showWidget && (
+                        <div ref={widgetRef} data-widget className="backdrop-blur bg-slate-800/95 rounded-2xl px-5 py-3 shadow-2xl border border-slate-700/50">
+                          {widgetControls}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
         )}
 
