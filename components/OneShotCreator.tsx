@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { CEFRLevel, ContentMode } from './Settings';
 import { EngineType, SavedAudio, SpeakerVoiceMapping } from '../types';
 import { parseDialogue } from '../utils/parser';
+import { EFL_TOPICS } from '../utils/eflTopics';
 
 const API_BASE = '/api';
 
@@ -266,7 +267,8 @@ const getPreviewActivities = (difficulty: CEFRLevel): string => {
 export function buildTemplate(
   difficulty: CEFRLevel,
   contentMode: ContentMode,
-  targetDuration: number = 10
+  targetDuration: number = 10,
+  topic?: string
 ): string {
   const contentGuidelines = contentMode === 'halal'
     ? `\nCONTENT RESTRICTIONS (Halal mode):\n- No references to alcohol, pork, gambling, dating, or romantic relationships\n- Topics should be family-friendly and culturally appropriate\n- Avoid slang related to prohibited topics\n`
@@ -293,8 +295,11 @@ Create a COMPLETE listening test package designed for approximately ${targetDura
 
 ### Language Guidelines for ${difficulty}:
 ${CEFR_PROMPT_GUIDELINES[difficulty]}
-${contentGuidelines}
-## Available TTS Voices (Gemini)
+${contentGuidelines}${topic ? `## Topic
+Create the dialogue about: "${topic}"
+Make the specific scenario unique and engaging while staying on this topic.
+
+` : ''}## Available TTS Voices (Gemini)
 Choose appropriate voices for your speakers from this list:
 
 ${GEMINI_VOICES_REFERENCE}
@@ -472,7 +477,8 @@ function getContentRestrictions(contentMode: ContentMode): string {
 export function buildDialoguePrompt(
   difficulty: CEFRLevel,
   contentMode: ContentMode,
-  targetDuration: number
+  targetDuration: number,
+  topic?: string
 ): { instructions: string; input: string } {
   const durationInfo = getDurationGuidelines(targetDuration, difficulty);
   const contentRestrictions = getContentRestrictions(contentMode);
@@ -494,10 +500,11 @@ ${contentRestrictions}
 ${GEMINI_VOICES_REFERENCE}
 
 ## Dialogue Quality Standards
-- Choose an engaging, SPECIFIC topic (NOT generic small talk)
+${topic ? `- Topic: "${topic}" — interpret this creatively, make the specific scenario unique and engaging
+` : `- Choose an engaging, SPECIFIC topic (NOT generic small talk)
   - Good examples: "Negotiating a deadline extension with a professor", "Debating whether to adopt a rescue dog", "Planning a surprise birthday party that's going wrong"
   - Bad examples: "Two people talking about their day", "A conversation about weather"
-- Give each speaker a DISTINCT personality:
+`}- Give each speaker a DISTINCT personality:
   - Different speaking styles (one more formal, one more casual; one verbose, one concise)
   - Different attitudes or perspectives on the topic
   - Use real character names (e.g., "Sarah", "Marcus"), NOT "Speaker1/Speaker2"
@@ -720,6 +727,9 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
 }) => {
   const [difficulty, setDifficulty] = useState<CEFRLevel>(defaultDifficulty);
   const [targetDuration, setTargetDuration] = useState(10); // Default 10 minutes
+  const [currentTopic, setCurrentTopic] = useState(() =>
+    EFL_TOPICS[Math.floor(Math.random() * EFL_TOPICS.length)]
+  );
   const [pasteContent, setPasteContent] = useState('');
   const [copyFeedback, setCopyFeedback] = useState(false);
   const [stage, setStage] = useState<ProcessingStage>('idle');
@@ -731,8 +741,16 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
   const [pendingAnalysis, setPendingAnalysis] = useState<{ speakers: string[] } | null>(null);
   const [audioFailReason, setAudioFailReason] = useState<string>('');
 
+  const shuffleTopic = () => {
+    let newTopic = EFL_TOPICS[Math.floor(Math.random() * EFL_TOPICS.length)];
+    while (newTopic === currentTopic && EFL_TOPICS.length > 1) {
+      newTopic = EFL_TOPICS[Math.floor(Math.random() * EFL_TOPICS.length)];
+    }
+    setCurrentTopic(newTopic);
+  };
+
   const handleCopyTemplate = useCallback(async () => {
-    const template = buildTemplate(difficulty, contentMode, targetDuration);
+    const template = buildTemplate(difficulty, contentMode, targetDuration, currentTopic);
     try {
       await navigator.clipboard.writeText(template);
       setCopyFeedback(true);
@@ -1198,6 +1216,20 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
                   <p className="text-xs text-slate-500 mt-2 text-center">
                     AI determines question/vocab counts based on duration + {difficulty} level
                   </p>
+                </div>
+                <div className="mb-3">
+                  <label className="text-sm text-slate-600 mb-2 block">Topic:</label>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 px-3 py-2 bg-slate-50 rounded-lg border border-slate-200 text-sm text-slate-700 truncate">
+                      {currentTopic}
+                    </div>
+                    <button
+                      onClick={shuffleTopic}
+                      className="px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-600 transition-colors"
+                    >
+                      🎲
+                    </button>
+                  </div>
                 </div>
                 <button
                   onClick={handleCopyTemplate}

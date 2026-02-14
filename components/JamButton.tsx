@@ -3,6 +3,7 @@ import { CEFRLevel, ContentMode } from './Settings';
 import { EngineType, SavedAudio, ListeningTest, SpeakerVoiceMapping } from '../types';
 import { parseDialogue } from '../utils/parser';
 import { buildDialoguePrompt, buildTestContentPrompt, validatePayload, OneShotPayload } from './OneShotCreator';
+import { EFL_TOPICS } from '../utils/eflTopics';
 
 const API_BASE = '/api';
 
@@ -35,6 +36,7 @@ export interface JamProfile {
   includePreview: boolean;
   includeExplanations: boolean;
   explanationLanguage: 'english' | 'arabic' | 'both';
+  useReasoning: boolean; // true = low/medium reasoning, false = none (faster)
 }
 
 const DEFAULT_JAM_PROFILE: JamProfile = {
@@ -45,6 +47,7 @@ const DEFAULT_JAM_PROFILE: JamProfile = {
   includePreview: true,
   includeExplanations: true,
   explanationLanguage: 'both',
+  useReasoning: true,
 };
 
 // --- Processing stages ---
@@ -147,6 +150,22 @@ const JamSettingsModal: React.FC<{
               );
             })}
           </div>
+        </div>
+
+        {/* AI Reasoning */}
+        <div className="mb-4">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={localProfile.useReasoning}
+              onChange={(e) => setLocalProfile(p => ({ ...p, useReasoning: e.target.checked }))}
+              className="w-4 h-4 accent-red-500"
+            />
+            <span className="text-sm text-slate-700">Enable AI reasoning</span>
+          </label>
+          <p className="text-xs text-slate-500 mt-1 ml-6">
+            {localProfile.useReasoning ? 'Higher quality, slower generation' : 'Faster generation, may reduce quality'}
+          </p>
         </div>
 
         {/* Test Duration */}
@@ -261,6 +280,19 @@ export const JamButton: React.FC<JamButtonProps> = ({
   const [progress, setProgress] = useState(0);
   const [errorMsg, setErrorMsg] = useState('');
   const [generatingLabel, setGeneratingLabel] = useState('');
+
+  // Topic state
+  const [currentTopic, setCurrentTopic] = useState(() =>
+    EFL_TOPICS[Math.floor(Math.random() * EFL_TOPICS.length)]
+  );
+
+  const shuffleTopic = () => {
+    let newTopic = EFL_TOPICS[Math.floor(Math.random() * EFL_TOPICS.length)];
+    while (newTopic === currentTopic && EFL_TOPICS.length > 1) {
+      newTopic = EFL_TOPICS[Math.floor(Math.random() * EFL_TOPICS.length)];
+    }
+    setCurrentTopic(newTopic);
+  };
 
   // Pending data for audio fallback (when Gemini fails)
   const [pendingPayload, setPendingPayload] = useState<OneShotPayload | null>(null);
@@ -546,7 +578,7 @@ export const JamButton: React.FC<JamButtonProps> = ({
       }
 
       // --- Call 1: Generate dialogue + voice assignments (creative, high reasoning) ---
-      const dialoguePrompt = buildDialoguePrompt(profile.difficulty, profile.contentMode, profile.targetDuration);
+      const dialoguePrompt = buildDialoguePrompt(profile.difficulty, profile.contentMode, profile.targetDuration, currentTopic);
 
       const dialogueResponse = await fetch('https://api.openai.com/v1/responses', {
         method: 'POST',
@@ -558,7 +590,7 @@ export const JamButton: React.FC<JamButtonProps> = ({
           model: profile.contentModel,
           instructions: dialoguePrompt.instructions,
           input: dialoguePrompt.input,
-          reasoning: { effort: 'low' },
+          ...(profile.useReasoning && { reasoning: { effort: 'low' } }),
         }),
       });
 
@@ -607,7 +639,7 @@ export const JamButton: React.FC<JamButtonProps> = ({
           model: profile.contentModel,
           instructions: testPrompt.instructions,
           input: testPrompt.input,
-          reasoning: { effort: 'medium' },
+          ...(profile.useReasoning && { reasoning: { effort: 'medium' } }),
         }),
       });
 
@@ -878,6 +910,20 @@ export const JamButton: React.FC<JamButtonProps> = ({
                 {level}
               </button>
             ))}
+          </div>
+
+          {/* Topic */}
+          <div className="flex items-center gap-2 w-full max-w-sm">
+            <div className="flex-1 px-3 py-2 bg-slate-50 rounded-lg border border-slate-200 text-sm text-slate-700 truncate">
+              {currentTopic}
+            </div>
+            <button
+              onClick={shuffleTopic}
+              disabled={stage !== 'idle'}
+              className="px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-600 transition-colors disabled:opacity-50"
+            >
+              🎲
+            </button>
           </div>
 
           {/* The JAM button */}

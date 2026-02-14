@@ -658,6 +658,13 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
         return;
       }
 
+      // Escape exits fullscreen → back to presentation toolbar
+      if (e.key === 'Escape' && isFullscreen) {
+        setFullscreenSlide(null);
+        setSlideshowActive(false);
+        return;
+      }
+
       // T navigates to plenary fullscreen slide
       if (e.key === 't' || e.key === 'T') {
         if (view === 'present' && selectedTest?.transferQuestion) {
@@ -774,13 +781,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
           }
           break;
         case 'Escape':
-          // Fullscreen → back to toolbar view
-          if (isFullscreen) {
-            setFullscreenSlide(null);
-            setSlideshowActive(false);
-            break;
-          }
-          // Toolbar view → exit presentation entirely
+          // Exit presentation entirely (fullscreen Escape handled by early return above)
           if (audioRef.current) {
             audioRef.current.pause();
           }

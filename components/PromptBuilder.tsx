@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { EngineType, ElevenLabsVoice } from '../types';
 import { ClipboardIcon, CheckCircleIcon, SparklesIcon, XIcon } from './Icons';
 import { ContentMode } from './Settings';
+import { EFL_TOPICS } from '../utils/eflTopics';
 
 type CEFRLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1';
 
@@ -24,47 +25,7 @@ const CEFR_DESCRIPTIONS: Record<CEFRLevel, string> = {
   'C1': 'Advanced - Nuanced language, idiomatic expressions, sophisticated topics',
 };
 
-const EFL_TOPICS = [
-  // Daily Life
-  'Ordering food at a restaurant',
-  'Making a doctor\'s appointment',
-  'Shopping for groceries',
-  'Asking for directions',
-  'Checking into a hotel',
-  'Making travel plans',
-  'Discussing weekend plans',
-  'Talking about hobbies',
-  'Describing your daily routine',
-  'Meeting new neighbors',
-  // Work & School
-  'Job interview preparation',
-  'Discussing a group project',
-  'Asking a teacher for help',
-  'Planning a business meeting',
-  'Giving a presentation',
-  'Discussing career goals',
-  // Social
-  'Making small talk at a party',
-  'Inviting someone to an event',
-  'Apologizing for a mistake',
-  'Giving and receiving compliments',
-  'Discussing a movie or book',
-  'Planning a birthday party',
-  // Practical
-  'Returning an item to a store',
-  'Calling customer service',
-  'Booking a flight',
-  'Renting an apartment',
-  'Opening a bank account',
-  'Reporting a problem to maintenance',
-  // Cultural
-  'Discussing cultural differences',
-  'Explaining a holiday tradition',
-  'Talking about local customs',
-  'Describing your hometown',
-  'Discussing environmental issues',
-  'Talking about technology',
-];
+// EFL_TOPICS imported from ../utils/eflTopics
 
 const DURATION_PRESETS = [
   { label: '30 seconds', value: 30, words: '60-80' },
