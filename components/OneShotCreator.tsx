@@ -2,7 +2,7 @@ import React, { useState, useCallback, useMemo } from 'react';
 import { CEFRLevel, ContentMode } from './Settings';
 import { EngineType, SavedAudio, SpeakerVoiceMapping } from '../types';
 import { parseDialogue } from '../utils/parser';
-import { EFL_TOPICS, SpeakerCount, AudioFormat, getRandomTopic, getTopicsForSpeakerCount, getRandomFormat, shuffleFormat, randomSpeakerCount, resolveSpeakerDefault } from '../utils/eflTopics';
+import { EFL_TOPICS, SpeakerCount, AudioFormat, getRandomTopic, getRandomFormat, getFormatsForSpeakerCount, getCompatibleTopic, isTopicCompatible, shuffleFormat, randomSpeakerCount, resolveSpeakerDefault } from '../utils/eflTopics';
 import type { SpeakerCountDefault } from './Settings';
 
 const API_BASE = '/api';
@@ -801,10 +801,11 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
   const [speakerCount, setSpeakerCount] = useState<SpeakerCount>(initialSpeakers);
   const [audioFormat, setAudioFormat] = useState<AudioFormat | null>(() => getRandomFormat(initialSpeakers));
   const [currentTopic, setCurrentTopic] = useState(() =>
-    getRandomTopic(initialSpeakers)
+    audioFormat ? getCompatibleTopic(audioFormat) : getRandomTopic(initialSpeakers)
   );
   const [isCustomTopic, setIsCustomTopic] = useState(false);
   const [customTopic, setCustomTopic] = useState('');
+  const [showFormatPicker, setShowFormatPicker] = useState(false);
   const [pasteContent, setPasteContent] = useState('');
   const [copyFeedback, setCopyFeedback] = useState(false);
   const [stage, setStage] = useState<ProcessingStage>('idle');
@@ -817,15 +818,17 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
   const [audioFailReason, setAudioFailReason] = useState<string>('');
 
   const shuffleTopic = () => {
-    setCurrentTopic(getRandomTopic(speakerCount, currentTopic));
+    setCurrentTopic(audioFormat ? getCompatibleTopic(audioFormat, currentTopic) : getRandomTopic(speakerCount, currentTopic));
     setIsCustomTopic(false);
   };
 
   const handleSpeakerCountChange = (count: SpeakerCount) => {
     setSpeakerCount(count);
-    setCurrentTopic(getRandomTopic(count));
-    setAudioFormat(getRandomFormat(count));
+    const newFormat = getRandomFormat(count);
+    setAudioFormat(newFormat);
+    setCurrentTopic(getCompatibleTopic(newFormat));
     setIsCustomTopic(false);
+    setShowFormatPicker(false);
   };
 
   const effectiveTopic = isCustomTopic ? customTopic : currentTopic;
@@ -1318,13 +1321,11 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
                       onClick={() => {
                         const count = randomSpeakerCount(speakerCount);
                         setSpeakerCount(count);
-                        if (!getTopicsForSpeakerCount(count).includes(currentTopic)) {
-                          setCurrentTopic(getRandomTopic(count));
-                        }
-                        if (!audioFormat || audioFormat.speakerCount !== count) {
-                          setAudioFormat(getRandomFormat(count));
-                        }
+                        const newFormat = getRandomFormat(count);
+                        setAudioFormat(newFormat);
+                        setCurrentTopic(getCompatibleTopic(newFormat));
                         setIsCustomTopic(false);
+                        setShowFormatPicker(false);
                       }}
                       className="px-2.5 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-500 hover:bg-amber-50 hover:text-amber-600 transition-all"
                       title="Random speaker count"
@@ -1334,12 +1335,53 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
                     {audioFormat && (
                       <>
                         <button
-                          onClick={() => setAudioFormat(shuffleFormat(speakerCount, audioFormat.id))}
+                          onClick={() => {
+                            const newFmt = shuffleFormat(speakerCount, audioFormat.id);
+                            setAudioFormat(newFmt);
+                            setCurrentTopic(getCompatibleTopic(newFmt, currentTopic));
+                            setIsCustomTopic(false);
+                          }}
                           className="px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded text-xs text-slate-500 transition-colors flex-shrink-0 ml-2"
                         >
                           🔀
                         </button>
-                        <span className="text-xs text-slate-400 truncate">{audioFormat.label}</span>
+                        <div className="relative">
+                          <button
+                            onClick={() => setShowFormatPicker(!showFormatPicker)}
+                            className={`px-2 py-1 rounded text-xs transition-colors flex-shrink-0 ${
+                              showFormatPicker ? 'bg-rose-100 text-rose-600' : 'bg-slate-100 hover:bg-slate-200 text-slate-500'
+                            }`}
+                            title="Choose format"
+                          >
+                            ✏️
+                          </button>
+                          {showFormatPicker && (
+                            <>
+                              <div className="fixed inset-0 z-40" onClick={() => setShowFormatPicker(false)} />
+                              <div className="absolute top-full right-0 mt-1 z-50 bg-white rounded-xl shadow-xl border border-slate-200 py-1 min-w-[220px] max-h-[320px] overflow-y-auto">
+                                {getFormatsForSpeakerCount(speakerCount).map((fmt) => (
+                                  <button
+                                    key={fmt.id}
+                                    onClick={() => {
+                                      setAudioFormat(fmt);
+                                      setCurrentTopic(getCompatibleTopic(fmt, currentTopic));
+                                      setIsCustomTopic(false);
+                                      setShowFormatPicker(false);
+                                    }}
+                                    className={`w-full text-left px-3 py-2 text-sm transition-colors ${
+                                      audioFormat?.id === fmt.id
+                                        ? 'bg-rose-50 text-rose-700 font-medium'
+                                        : 'text-slate-700 hover:bg-slate-50'
+                                    }`}
+                                  >
+                                    {fmt.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                        <span className="text-xs text-slate-400 truncate">Format: {audioFormat.label}</span>
                       </>
                     )}
                   </div>

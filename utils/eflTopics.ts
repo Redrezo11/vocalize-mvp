@@ -10,6 +10,7 @@ export interface AudioFormat {
   speakerCount: SpeakerCount;
   register: RegisterType;
   promptDescription: string;
+  compatibleCategories?: string[];  // undefined = works with ALL categories for that speaker count
 }
 
 export interface TopicCategory {
@@ -28,6 +29,7 @@ export const AUDIO_FORMATS: AudioFormat[] = [
     speakerCount: 1,
     register: 'formal',
     promptDescription: 'PA announcement at airport, train station, or bus terminal. Gate changes, delays, boarding calls, platform info. Short, factual, includes numbers/times/locations.',
+    compatibleCategories: ['Transport & Travel'],
   },
   {
     id: 'announcement_public',
@@ -35,6 +37,7 @@ export const AUDIO_FORMATS: AudioFormat[] = [
     speakerCount: 1,
     register: 'formal',
     promptDescription: 'PA in a store, building, school, hospital, or event venue. Closures, emergencies, events, lost items.',
+    compatibleCategories: ['Announcements & Recorded Messages'],
   },
   {
     id: 'voicemail_personal',
@@ -42,6 +45,7 @@ export const AUDIO_FORMATS: AudioFormat[] = [
     speakerCount: 1,
     register: 'informal',
     promptDescription: 'A friend, family member, or acquaintance leaving a casual phone message. Includes reason for calling, callback details.',
+    compatibleCategories: ['Daily Life & Routines', 'Personal Stories & Narratives', 'Announcements & Recorded Messages'],
   },
   {
     id: 'voicemail_professional',
@@ -49,6 +53,7 @@ export const AUDIO_FORMATS: AudioFormat[] = [
     speakerCount: 1,
     register: 'formal',
     promptDescription: 'A business, office, doctor, or service provider leaving a message. Appointment reminders, order updates, callback requests.',
+    compatibleCategories: ['Announcements & Recorded Messages'],
   },
   {
     id: 'narrative_personal',
@@ -70,6 +75,7 @@ export const AUDIO_FORMATS: AudioFormat[] = [
     speakerCount: 1,
     register: 'neutral',
     promptDescription: 'Step-by-step instructions for a task. Imperatives, sequence markers (first, then, next, finally).',
+    compatibleCategories: ['Instructional & How-To'],
   },
   {
     id: 'instructional_tour',
@@ -77,6 +83,7 @@ export const AUDIO_FORMATS: AudioFormat[] = [
     speakerCount: 1,
     register: 'semi-formal',
     promptDescription: 'A tour guide leading visitors through a location. History, descriptions, directions within a space.',
+    compatibleCategories: ['Transport & Travel', 'Academic & Informational'],
   },
   {
     id: 'instructional_safety',
@@ -84,6 +91,7 @@ export const AUDIO_FORMATS: AudioFormat[] = [
     speakerCount: 1,
     register: 'formal',
     promptDescription: 'Safety instructions on a plane, at a workplace, or before an activity. Procedures, warnings, imperatives.',
+    compatibleCategories: ['Instructional & How-To', 'Transport & Travel'],
   },
   {
     id: 'lecture_academic',
@@ -91,6 +99,7 @@ export const AUDIO_FORMATS: AudioFormat[] = [
     speakerCount: 1,
     register: 'formal',
     promptDescription: 'A professor or expert explaining a topic. Main argument, supporting points, examples, transitions.',
+    compatibleCategories: ['Academic & Informational'],
   },
   {
     id: 'lecture_informational',
@@ -98,6 +107,7 @@ export const AUDIO_FORMATS: AudioFormat[] = [
     speakerCount: 1,
     register: 'semi-formal',
     promptDescription: 'A speaker presenting facts about a topic to a general audience. TED-talk style, accessible language.',
+    compatibleCategories: ['Academic & Informational', 'Broadcast & Media'],
   },
   {
     id: 'broadcast_news',
@@ -105,6 +115,7 @@ export const AUDIO_FORMATS: AudioFormat[] = [
     speakerCount: 1,
     register: 'formal',
     promptDescription: 'A radio or TV news anchor reporting a story. 5W structure, formal tone, quotes from sources.',
+    compatibleCategories: ['Broadcast & Media', 'Academic & Informational', 'Transport & Travel'],
   },
   {
     id: 'broadcast_weather',
@@ -112,6 +123,7 @@ export const AUDIO_FORMATS: AudioFormat[] = [
     speakerCount: 1,
     register: 'formal',
     promptDescription: 'A weather presenter giving conditions, temperatures, and forecasts for the coming days.',
+    compatibleCategories: ['Broadcast & Media'],
   },
   {
     id: 'broadcast_sports',
@@ -119,6 +131,7 @@ export const AUDIO_FORMATS: AudioFormat[] = [
     speakerCount: 1,
     register: 'semi-formal',
     promptDescription: 'A sports anchor summarizing scores, highlights, standings. Fast-paced, enthusiastic.',
+    compatibleCategories: ['Broadcast & Media'],
   },
   {
     id: 'advertisement',
@@ -126,6 +139,7 @@ export const AUDIO_FORMATS: AudioFormat[] = [
     speakerCount: 1,
     register: 'semi-formal',
     promptDescription: 'A radio or TV ad promoting a product, service, event, or place. Persuasive, includes offers and contact info.',
+    compatibleCategories: ['Advertisements & Promotions'],
   },
   {
     id: 'automated_menu',
@@ -133,6 +147,7 @@ export const AUDIO_FORMATS: AudioFormat[] = [
     speakerCount: 1,
     register: 'formal',
     promptDescription: 'A recorded phone menu or automated message. "Press 1 for...", business hours, hold messages.',
+    compatibleCategories: ['Announcements & Recorded Messages'],
   },
   {
     id: 'review_solo',
@@ -140,6 +155,7 @@ export const AUDIO_FORMATS: AudioFormat[] = [
     speakerCount: 1,
     register: 'informal',
     promptDescription: 'One person reviewing a movie, book, restaurant, product, or experience. Opinions, ratings, recommendations.',
+    compatibleCategories: ['Broadcast & Media', 'Advertisements & Promotions', 'Daily Life & Routines'],
   },
 
   // ===== 2-Speaker Formats (14) =====
@@ -149,6 +165,7 @@ export const AUDIO_FORMATS: AudioFormat[] = [
     speakerCount: 2,
     register: 'transactional',
     promptDescription: 'Customer and service provider face-to-face. Ordering, purchasing, checking in, returning items.',
+    compatibleCategories: ['Transactions & Services'],
   },
   {
     id: 'transaction_phone',
@@ -156,6 +173,7 @@ export const AUDIO_FORMATS: AudioFormat[] = [
     speakerCount: 2,
     register: 'transactional',
     promptDescription: 'Customer calling a business. Booking, inquiring, complaining, requesting information.',
+    compatibleCategories: ['Phone Calls & Customer Service'],
   },
   {
     id: 'interview_job',
@@ -163,6 +181,7 @@ export const AUDIO_FORMATS: AudioFormat[] = [
     speakerCount: 2,
     register: 'formal',
     promptDescription: 'Interviewer and candidate. Questions about experience, skills, availability. Formal Q&A structure.',
+    compatibleCategories: ['Interviews & Consultations'],
   },
   {
     id: 'interview_radio',
@@ -170,12 +189,14 @@ export const AUDIO_FORMATS: AudioFormat[] = [
     speakerCount: 2,
     register: 'semi-formal',
     promptDescription: 'Host interviewing a guest about their expertise, experience, or opinions. Structured but conversational.',
+    compatibleCategories: ['Interviews & Consultations'],
   },
   {
     id: 'interview_informational',
     label: 'Informational Interview',
     speakerCount: 2,
     register: 'neutral',
+    compatibleCategories: ['Interviews & Consultations', 'Academic'],
     promptDescription: 'One person asking another for advice or information. Student\u2013advisor, newcomer\u2013local, patient\u2013doctor.',
   },
   {
@@ -198,6 +219,7 @@ export const AUDIO_FORMATS: AudioFormat[] = [
     speakerCount: 2,
     register: 'neutral',
     promptDescription: 'Two people meeting for the first time. Small talk, introductions, finding common ground.',
+    compatibleCategories: ['Social & Casual', 'Directions & Navigation'],
   },
   {
     id: 'problem_solving',
@@ -205,6 +227,7 @@ export const AUDIO_FORMATS: AudioFormat[] = [
     speakerCount: 2,
     register: 'varies',
     promptDescription: 'Two people identifying and solving a problem together. Complaint + resolution, troubleshooting, negotiation.',
+    compatibleCategories: ['Problem-Solving & Negotiation'],
   },
   {
     id: 'directions',
@@ -212,6 +235,7 @@ export const AUDIO_FORMATS: AudioFormat[] = [
     speakerCount: 2,
     register: 'neutral',
     promptDescription: 'One person asking, another giving directions. Landmarks, turns, distances, transportation options.',
+    compatibleCategories: ['Directions & Navigation'],
   },
   {
     id: 'phone_personal',
@@ -225,6 +249,7 @@ export const AUDIO_FORMATS: AudioFormat[] = [
     label: 'Professional Consultation',
     speakerCount: 2,
     register: 'semi-formal',
+    compatibleCategories: ['Interviews & Consultations'],
     promptDescription: 'Expert advising a client. Doctor\u2013patient, lawyer\u2013client, financial advisor\u2013customer, tutor\u2013student.',
   },
   {
@@ -233,6 +258,7 @@ export const AUDIO_FORMATS: AudioFormat[] = [
     speakerCount: 2,
     register: 'varies',
     promptDescription: 'Two people negotiating terms. Price, schedule, responsibilities, compromises.',
+    compatibleCategories: ['Problem-Solving & Negotiation', 'Transactions & Services'],
   },
   {
     id: 'debate_casual',
@@ -248,6 +274,7 @@ export const AUDIO_FORMATS: AudioFormat[] = [
     label: 'Work Meeting',
     speakerCount: 3,
     register: 'semi-formal',
+    compatibleCategories: ['Work Meetings'],
     promptDescription: 'Team discussing project updates, decisions, task assignments. Agenda-driven. Use 3\u20134 speakers.',
   },
   {
@@ -255,6 +282,7 @@ export const AUDIO_FORMATS: AudioFormat[] = [
     label: 'Academic Group Meeting',
     speakerCount: 3,
     register: 'neutral',
+    compatibleCategories: ['Academic Group Work'],
     promptDescription: 'Students planning a group project, dividing tasks, debating approaches. Use 3\u20134 speakers.',
   },
   {
@@ -276,6 +304,7 @@ export const AUDIO_FORMATS: AudioFormat[] = [
     label: 'Classroom Discussion',
     speakerCount: 3,
     register: 'formal',
+    compatibleCategories: ['Academic Group Work'],
     promptDescription: 'Professor lecturing with student questions and comments throughout. Use 3\u20134 speakers.',
   },
   {
@@ -283,6 +312,7 @@ export const AUDIO_FORMATS: AudioFormat[] = [
     label: 'Radio Panel Show',
     speakerCount: 3,
     register: 'semi-formal',
+    compatibleCategories: ['Panel / Podcast / Radio Shows'],
     promptDescription: 'Host moderating a discussion between 2\u20133 guests on a topic. Use 3\u20134 speakers.',
   },
   {
@@ -290,6 +320,7 @@ export const AUDIO_FORMATS: AudioFormat[] = [
     label: 'Podcast Roundtable',
     speakerCount: 3,
     register: 'semi-formal',
+    compatibleCategories: ['Panel / Podcast / Radio Shows'],
     promptDescription: 'Co-hosts or host + guests discussing a theme. Conversational but structured. Use 3 speakers.',
   },
   {
@@ -297,6 +328,7 @@ export const AUDIO_FORMATS: AudioFormat[] = [
     label: 'Family Discussion',
     speakerCount: 3,
     register: 'informal',
+    compatibleCategories: ['Social & Family'],
     promptDescription: 'Family members making a decision together. Vacation plans, household issues, celebrations. Use 3\u20134 speakers.',
   },
   {
@@ -304,6 +336,7 @@ export const AUDIO_FORMATS: AudioFormat[] = [
     label: 'Community / Committee Meeting',
     speakerCount: 3,
     register: 'semi-formal',
+    compatibleCategories: ['Community & Public'],
     promptDescription: 'Residents or members discussing local issues, planning events, voting on decisions. Use 3\u20134 speakers.',
   },
   {
@@ -311,6 +344,7 @@ export const AUDIO_FORMATS: AudioFormat[] = [
     label: 'Multi-Party Scenario',
     speakerCount: 3,
     register: 'varies',
+    compatibleCategories: ['Multi-Party Scenarios', 'Social & Family'],
     promptDescription: 'A real-world scene with multiple participants. Airport check-in with two travelers and agent, restaurant with waiter and two diners, etc. Use 3 speakers.',
   },
 ];
@@ -707,6 +741,41 @@ export function shuffleFormat(speakerCount: SpeakerCount, excludeId?: string): A
 /** Get a format by its ID */
 export function getFormatById(id: string): AudioFormat | undefined {
   return AUDIO_FORMATS.find(f => f.id === id);
+}
+
+/** Get a random topic compatible with the given format */
+export function getCompatibleTopic(format: AudioFormat, exclude?: string): string {
+  const pool = format.compatibleCategories
+    ? TOPIC_CATEGORIES
+        .filter(cat => cat.speakerCount === format.speakerCount && format.compatibleCategories!.includes(cat.name))
+        .flatMap(cat => cat.topics)
+    : getTopicsForSpeakerCount(format.speakerCount);
+  if (pool.length === 0) return getRandomTopic(format.speakerCount, exclude);
+  if (pool.length === 1) return pool[0];
+  let topic = pool[Math.floor(Math.random() * pool.length)];
+  while (topic === exclude) topic = pool[Math.floor(Math.random() * pool.length)];
+  return topic;
+}
+
+/** Check if a topic is compatible with a format */
+export function isTopicCompatible(format: AudioFormat, topic: string): boolean {
+  if (!format.compatibleCategories) return true;
+  return TOPIC_CATEGORIES
+    .filter(cat => cat.speakerCount === format.speakerCount && format.compatibleCategories!.includes(cat.name))
+    .some(cat => cat.topics.includes(topic));
+}
+
+/** Get a random format compatible with the current topic */
+export function getCompatibleFormat(speakerCount: SpeakerCount, topic: string): AudioFormat {
+  const topicCategory = TOPIC_CATEGORIES.find(
+    cat => cat.speakerCount === speakerCount && cat.topics.includes(topic)
+  );
+  const pool = getFormatsForSpeakerCount(speakerCount).filter(f =>
+    !f.compatibleCategories || (topicCategory && f.compatibleCategories.includes(topicCategory.name))
+  );
+  return pool.length > 0
+    ? pool[Math.floor(Math.random() * pool.length)]
+    : getRandomFormat(speakerCount);
 }
 
 /** Pick a random speaker count (1, 2, or 3), optionally excluding the current one */

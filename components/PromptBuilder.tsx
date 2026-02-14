@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { EngineType, ElevenLabsVoice } from '../types';
 import { ClipboardIcon, CheckCircleIcon, SparklesIcon, XIcon } from './Icons';
 import { ContentMode, SpeakerCountDefault } from './Settings';
-import { EFL_TOPICS, SpeakerCount, AudioFormat, getRandomTopic, getTopicsForSpeakerCount, getRandomFormat, shuffleFormat, randomSpeakerCount, resolveSpeakerDefault } from '../utils/eflTopics';
+import { EFL_TOPICS, SpeakerCount, AudioFormat, getRandomTopic, getRandomFormat, getCompatibleTopic, isTopicCompatible, shuffleFormat, randomSpeakerCount, resolveSpeakerDefault } from '../utils/eflTopics';
 
 type CEFRLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1';
 
@@ -291,7 +291,7 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
   const [audioFormat, setAudioFormat] = useState<AudioFormat | null>(() => getRandomFormat(initialSpeakers));
   const [useRandomTopic, setUseRandomTopic] = useState(true);
   const [currentRandomTopic, setCurrentRandomTopic] = useState(() =>
-    getRandomTopic(initialSpeakers)
+    audioFormat ? getCompatibleTopic(audioFormat) : getRandomTopic(initialSpeakers)
   );
   const [duration, setDuration] = useState(90);
   const [customDuration, setCustomDuration] = useState('');
@@ -677,14 +677,18 @@ Now generate the listening exercise:`;
   };
 
   const shuffleTopic = () => {
-    setCurrentRandomTopic(getRandomTopic(speakerCount, currentRandomTopic));
+    const newTopic = audioFormat
+      ? getCompatibleTopic(audioFormat, currentRandomTopic)
+      : getRandomTopic(speakerCount, currentRandomTopic);
+    setCurrentRandomTopic(newTopic);
     setUseRandomTopic(true);
   };
 
   const handleSpeakerCountChange = (count: SpeakerCount) => {
     setSpeakerCount(count);
-    setCurrentRandomTopic(getRandomTopic(count));
-    setAudioFormat(getRandomFormat(count));
+    const newFormat = getRandomFormat(count);
+    setAudioFormat(newFormat);
+    setCurrentRandomTopic(getCompatibleTopic(newFormat));
     setUseRandomTopic(true);
   };
 
@@ -834,12 +838,9 @@ Now generate the listening exercise:`;
                 onClick={() => {
                   const count = randomSpeakerCount(speakerCount);
                   setSpeakerCount(count);
-                  if (!getTopicsForSpeakerCount(count).includes(currentRandomTopic)) {
-                    setCurrentRandomTopic(getRandomTopic(count));
-                  }
-                  if (!audioFormat || audioFormat.speakerCount !== count) {
-                    setAudioFormat(getRandomFormat(count));
-                  }
+                  const newFormat = getRandomFormat(count);
+                  setAudioFormat(newFormat);
+                  setCurrentRandomTopic(getCompatibleTopic(newFormat));
                 }}
                 className="px-2.5 py-2 rounded-xl text-sm font-medium bg-slate-100 text-slate-500 hover:bg-amber-50 hover:text-amber-600 transition-all"
                 title="Random speaker count"
@@ -849,12 +850,17 @@ Now generate the listening exercise:`;
               {audioFormat && (
                 <div className="flex items-center gap-1 ml-auto">
                   <button
-                    onClick={() => setAudioFormat(shuffleFormat(speakerCount, audioFormat.id))}
+                    onClick={() => {
+                      const newFmt = shuffleFormat(speakerCount, audioFormat.id);
+                      setAudioFormat(newFmt);
+                      setCurrentRandomTopic(getCompatibleTopic(newFmt, currentRandomTopic));
+                      setUseRandomTopic(true);
+                    }}
                     className="px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded text-xs text-slate-500 transition-colors flex-shrink-0"
                   >
                     🔀
                   </button>
-                  <span className="text-xs text-slate-500 truncate max-w-[140px]">{audioFormat.label}</span>
+                  <span className="text-xs text-slate-500 truncate max-w-[140px]">Format: {audioFormat.label}</span>
                 </div>
               )}
             </div>

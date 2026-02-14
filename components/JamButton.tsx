@@ -3,7 +3,7 @@ import { CEFRLevel, ContentMode } from './Settings';
 import { EngineType, SavedAudio, ListeningTest, SpeakerVoiceMapping } from '../types';
 import { parseDialogue } from '../utils/parser';
 import { buildDialoguePrompt, buildTestContentPrompt, validatePayload, OneShotPayload } from './OneShotCreator';
-import { EFL_TOPICS, SpeakerCount, AudioFormat, getRandomTopic, getTopicsForSpeakerCount, getRandomFormat, shuffleFormat, randomSpeakerCount } from '../utils/eflTopics';
+import { EFL_TOPICS, SpeakerCount, AudioFormat, getRandomTopic, getRandomFormat, getCompatibleTopic, shuffleFormat, randomSpeakerCount } from '../utils/eflTopics';
 
 const API_BASE = '/api';
 
@@ -290,20 +290,21 @@ export const JamButton: React.FC<JamButtonProps> = ({
 
   // Topic state
   const [currentTopic, setCurrentTopic] = useState(() =>
-    getRandomTopic(profile.speakerCount || 2)
+    audioFormat ? getCompatibleTopic(audioFormat) : getRandomTopic(profile.speakerCount || 2)
   );
   const [isCustomTopic, setIsCustomTopic] = useState(false);
   const [customTopic, setCustomTopic] = useState('');
 
   const shuffleTopic = () => {
-    setCurrentTopic(getRandomTopic(speakerCount, currentTopic));
+    setCurrentTopic(audioFormat ? getCompatibleTopic(audioFormat, currentTopic) : getRandomTopic(speakerCount, currentTopic));
     setIsCustomTopic(false);
   };
 
   const handleSpeakerCountChange = (count: SpeakerCount) => {
     setSpeakerCount(count);
-    setCurrentTopic(getRandomTopic(count));
-    setAudioFormat(getRandomFormat(count));
+    const newFormat = getRandomFormat(count);
+    setAudioFormat(newFormat);
+    setCurrentTopic(getCompatibleTopic(newFormat));
     setIsCustomTopic(false);
   };
 
@@ -947,12 +948,9 @@ export const JamButton: React.FC<JamButtonProps> = ({
               onClick={() => {
                 const count = randomSpeakerCount(speakerCount);
                 setSpeakerCount(count);
-                if (!getTopicsForSpeakerCount(count).includes(currentTopic)) {
-                  setCurrentTopic(getRandomTopic(count));
-                }
-                if (!audioFormat || audioFormat.speakerCount !== count) {
-                  setAudioFormat(getRandomFormat(count));
-                }
+                const newFormat = getRandomFormat(count);
+                setAudioFormat(newFormat);
+                setCurrentTopic(getCompatibleTopic(newFormat));
                 setIsCustomTopic(false);
               }}
               disabled={stage !== 'idle'}
