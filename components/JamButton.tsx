@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { CEFRLevel, ContentMode } from './Settings';
 import { EngineType, SavedAudio, ListeningTest, SpeakerVoiceMapping } from '../types';
-import { parseDialogue } from '../utils/parser';
+import { parseDialogue, assignOpenAIVoices } from '../utils/parser';
+import { concatenateAudioBlobs } from '../hooks/useElevenLabsTTS';
 import { buildDialoguePrompt, buildTestContentPrompt, validatePayload, OneShotPayload } from './OneShotCreator';
 import { EFL_TOPICS, SpeakerCount, AudioFormat, getRandomTopic, getRandomFormat, getCompatibleTopic, shuffleFormat, randomSpeakerCount } from '../utils/eflTopics';
 
@@ -392,27 +393,47 @@ export const JamButton: React.FC<JamButtonProps> = ({
     return blobToBase64(wavBlob);
   };
 
-  // Generate audio with OpenAI TTS (returns base64 MP3)
+  // Generate audio with OpenAI TTS (returns base64, multi-voice for dialogues)
   const generateOpenAIAudio = async (transcript: string): Promise<string> => {
     const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
     if (!apiKey || apiKey === 'PLACEHOLDER_API_KEY') {
       throw new Error('OpenAI API key not configured');
     }
 
-    // For dialogues, we just read the whole transcript with one voice
-    // OpenAI TTS doesn't support multi-speaker, so we strip speaker labels
-    const cleanTranscript = transcript
-      .split('\n')
-      .map(line => {
-        const colonIndex = line.indexOf(':');
-        if (colonIndex > 0 && colonIndex < 30) {
-          return line.substring(colonIndex + 1).trim();
-        }
-        return line;
-      })
-      .filter(line => line.trim())
-      .join(' ');
+    const analysis = parseDialogue(transcript);
 
+    // Multi-speaker: generate each segment with a different voice
+    if (analysis.isDialogue && analysis.segments.length > 1) {
+      const openaiMapping = assignOpenAIVoices(analysis.speakers);
+
+      const blobs: Blob[] = [];
+      for (const segment of analysis.segments) {
+        const voice = openaiMapping[segment.speaker] || 'alloy';
+        const response = await fetch('https://api.openai.com/v1/audio/speech', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model: 'tts-1',
+            input: segment.text,
+            voice,
+            response_format: 'mp3',
+          }),
+        });
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({}));
+          throw new Error(error.error?.message || `OpenAI TTS error: ${response.status}`);
+        }
+        blobs.push(await response.blob());
+      }
+
+      const combined = await concatenateAudioBlobs(blobs);
+      return blobToBase64(combined);
+    }
+
+    // Single speaker — one voice
     const response = await fetch('https://api.openai.com/v1/audio/speech', {
       method: 'POST',
       headers: {
@@ -421,19 +442,16 @@ export const JamButton: React.FC<JamButtonProps> = ({
       },
       body: JSON.stringify({
         model: 'tts-1',
-        input: cleanTranscript,
-        voice: 'alloy', // Natural-sounding voice
+        input: transcript,
+        voice: 'alloy',
         response_format: 'mp3',
       }),
     });
-
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
       throw new Error(error.error?.message || `OpenAI TTS error: ${response.status}`);
     }
-
-    const audioBlob = await response.blob();
-    return blobToBase64(audioBlob);
+    return blobToBase64(await response.blob());
   };
 
   // Save entry and test (shared by all audio paths)

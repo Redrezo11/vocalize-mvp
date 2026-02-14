@@ -28,7 +28,7 @@ interface ClassroomModeProps {
   onExit: () => void;
   onPreviewStudent: (test: ListeningTest) => void;
   onEditTest?: (test: ListeningTest) => void;
-  onDeleteTest?: (test: ListeningTest) => void;
+  onDeleteTest?: (test: ListeningTest) => Promise<void> | void;
   onUpdateTest?: (test: ListeningTest) => void;  // To save lexisAudio
 }
 
@@ -49,6 +49,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [testToDelete, setTestToDelete] = useState<ListeningTest | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [lexisViewMode, setLexisViewMode] = useState<'overview' | 'focus'>('overview');
   const [focusedLexisIndex, setFocusedLexisIndex] = useState(0);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -983,12 +984,25 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
     setShowDeleteConfirm(true);
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (testToDelete && onDeleteTest) {
-      onDeleteTest(testToDelete);
+      console.log('[DELETE] Starting delete for test:', testToDelete.id, '| title:', testToDelete.title);
+      console.log('[DELETE] test object keys:', Object.keys(testToDelete));
+      console.log('[DELETE] test._id:', (testToDelete as any)._id, '| test.id:', testToDelete.id);
+      setIsDeleting(true);
+      try {
+        await onDeleteTest(testToDelete);
+        console.log('[DELETE] Success for test:', testToDelete.id);
+        setShowDeleteConfirm(false);
+        setTestToDelete(null);
+      } catch (err) {
+        console.error('[DELETE] Failed for test:', testToDelete.id, err);
+        setShowDeleteConfirm(false);
+        setTestToDelete(null);
+      } finally {
+        setIsDeleting(false);
+      }
     }
-    setShowDeleteConfirm(false);
-    setTestToDelete(null);
   };
 
   const handleCancelDelete = () => {
@@ -1146,15 +1160,17 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
             <div className="flex gap-3">
               <button
                 onClick={handleCancelDelete}
-                className={`flex-1 px-4 py-3 rounded-xl font-medium transition-colors ${isDark ? 'bg-slate-700 text-slate-300 hover:bg-slate-600' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}
+                disabled={isDeleting}
+                className={`flex-1 px-4 py-3 rounded-xl font-medium transition-colors ${isDark ? 'bg-slate-700 text-slate-300 hover:bg-slate-600' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'} ${isDeleting ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 Cancel
               </button>
               <button
                 onClick={handleConfirmDelete}
-                className="flex-1 px-4 py-3 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 transition-colors"
+                disabled={isDeleting}
+                className={`flex-1 px-4 py-3 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 transition-colors ${isDeleting ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
-                Delete Test
+                {isDeleting ? 'Deleting...' : 'Delete Test'}
               </button>
             </div>
           </div>

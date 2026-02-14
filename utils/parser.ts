@@ -1,4 +1,4 @@
-import { DialogueAnalysis, SpeakerSegment } from '../types';
+import { DialogueAnalysis, SpeakerSegment, SpeakerVoiceMapping, OPENAI_VOICES } from '../types';
 
 const MALE_NAMES = new Set([
   'john', 'james', 'robert', 'michael', 'william', 'david', 'richard', 'joseph', 'thomas', 'charles', 
@@ -193,3 +193,32 @@ export const parseDialogue = (text: string): DialogueAnalysis => {
     segments
   };
 };
+
+export function assignOpenAIVoices(speakers: string[]): SpeakerVoiceMapping {
+  const femaleVoices = OPENAI_VOICES.filter(v => v.gender === 'Female');
+  const maleVoices = OPENAI_VOICES.filter(v => v.gender === 'Male');
+  let femaleIdx = 0;
+  let maleIdx = 0;
+
+  const mapping: SpeakerVoiceMapping = {};
+  for (const speaker of speakers) {
+    const gender = guessGender(speaker);
+    if (gender === 'Female') {
+      mapping[speaker] = femaleVoices[femaleIdx % femaleVoices.length].name;
+      femaleIdx++;
+    } else if (gender === 'Male') {
+      mapping[speaker] = maleVoices[maleIdx % maleVoices.length].name;
+      maleIdx++;
+    } else {
+      // Neutral — alternate male/female for variety
+      if (maleIdx <= femaleIdx) {
+        mapping[speaker] = maleVoices[maleIdx % maleVoices.length].name;
+        maleIdx++;
+      } else {
+        mapping[speaker] = femaleVoices[femaleIdx % femaleVoices.length].name;
+        femaleIdx++;
+      }
+    }
+  }
+  return mapping;
+}

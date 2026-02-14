@@ -563,11 +563,14 @@ app.put('/api/tests/:id', async (req, res) => {
 
 // Delete test
 app.delete('/api/tests/:id', async (req, res) => {
+  console.log('[DELETE /api/tests/:id] Requested ID:', req.params.id, '| type:', typeof req.params.id, '| length:', req.params.id?.length);
   try {
     const test = await ListeningTest.findByIdAndDelete(req.params.id);
     if (!test) {
+      console.log('[DELETE /api/tests/:id] Test NOT FOUND for ID:', req.params.id);
       return res.status(404).json({ error: 'Test not found' });
     }
+    console.log('[DELETE /api/tests/:id] Deleted test:', test._id, '| title:', test.title);
 
     // Clean up Cloudinary audio assets (fire-and-forget)
     const testId = test._id.toString();
@@ -589,6 +592,7 @@ app.delete('/api/tests/:id', async (req, res) => {
 
     res.json({ message: 'Test deleted' });
   } catch (error) {
+    console.error('[DELETE /api/tests/:id] ERROR for ID:', req.params.id, error);
     res.status(500).json({ error: error.message });
   }
 });

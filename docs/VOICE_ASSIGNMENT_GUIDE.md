@@ -7,9 +7,10 @@ This document provides comprehensive voice information and selection flowcharts 
 ## Table of Contents
 
 1. [Gemini TTS Voice Reference](#gemini-tts-voice-reference)
-2. [ElevenLabs Voice Reference](#elevenlabs-voice-reference)
-3. [Voice Selection Flowcharts](#voice-selection-flowcharts)
-4. [LLM Prompt Template](#llm-prompt-template)
+2. [OpenAI TTS Voice Reference](#openai-tts-voice-reference)
+3. [ElevenLabs Voice Reference](#elevenlabs-voice-reference)
+4. [Voice Selection Flowcharts](#voice-selection-flowcharts)
+5. [LLM Prompt Template](#llm-prompt-template)
 
 ---
 
@@ -65,6 +66,62 @@ Gemini TTS supports natural language style instructions. You can enhance voice d
 - **Emotion**: "with barely contained excitement", "with a hint of sadness"
 - **Pacing**: "slowly and deliberately", "rapid-fire delivery"
 - **Physical cues**: "as if smiling", "with a whisper"
+
+---
+
+## OpenAI TTS Voice Reference
+
+OpenAI TTS offers 11 voices via the `tts-1` and `tts-1-hd` models. All voices are available to any OpenAI API user — there are no tier restrictions. Voices have a neutral American English accent by default.
+
+> **Multi-speaker implementation**: DialogueForge generates each dialogue segment separately with the appropriate voice, then concatenates the audio. Voice assignment is automatic based on speaker gender inference.
+
+### Female Voices (5 voices)
+
+| Voice Name | Style | Best For | Character Archetypes |
+|------------|-------|----------|---------------------|
+| **nova** | Bright | Energetic content, young characters | Young professional, enthusiastic guide, student |
+| **shimmer** | Soft | Gentle narration, calm content | Meditation guide, caregiver, soft narrator |
+| **coral** | Warm | Conversational, friendly dialogue | Friendly colleague, customer service, host |
+| **sage** | Calm | Professional content, serious tone | Teacher, counselor, business presenter |
+| **ballad** | Melodic | Expressive content, storytelling | Storyteller, audiobook narrator, dramatic reader |
+
+### Male Voices (5 voices)
+
+| Voice Name | Style | Best For | Character Archetypes |
+|------------|-------|----------|---------------------|
+| **echo** | Deep | Authoritative content, drama | News anchor, authority figure, commander |
+| **fable** | Warm | Storytelling, friendly narration | Mentor, narrator, warm teacher |
+| **onyx** | Authoritative | Powerful delivery, serious content | Executive, movie trailer, announcer |
+| **ash** | Clear | Precise content, professional | Instructor, technical narrator, presenter |
+| **verse** | Versatile | Dynamic content, variety | Talk show host, entertainer, podcaster |
+
+### Neutral Voice (1 voice)
+
+| Voice Name | Style | Best For | Character Archetypes |
+|------------|-------|----------|---------------------|
+| **alloy** | Balanced | General purpose, default fallback | Narrator, any neutral character |
+
+### OpenAI Voice Quick Reference
+
+```
+NARRATOR TYPE          → RECOMMENDED OPENAI VOICE
+───────────────────────────────────────────────────
+Neutral/Professional   → sage (F), ash (M)
+Warm Storyteller       → coral (F), fable (M)
+Authoritative          → sage (F), onyx (M)
+Young/Energetic        → nova (F), verse (M)
+Calm/Meditative        → shimmer (F), fable (M)
+News/Formal            → sage (F), echo (M)
+Dramatic/Expressive    → ballad (F), echo (M)
+General Purpose        → alloy (Neutral)
+```
+
+### OpenAI TTS Notes
+
+- **No accent selection**: All voices use neutral American English
+- **No style prompting**: Unlike Gemini, you cannot modify voice delivery with text instructions
+- **Model variants**: `tts-1` (faster, lower quality) and `tts-1-hd` (slower, higher quality)
+- **Auto-assignment**: DialogueForge uses gender inference (`guessGender()`) to automatically assign voices — female speakers get female voices (nova, shimmer, coral, sage, ballad), male speakers get male voices (echo, fable, onyx, ash, verse), cycling through to ensure uniqueness
 
 ---
 
@@ -259,6 +316,47 @@ NARRATOR    TEACHER     STORYTELLER YOUTH      VILLAIN/DRAMA
       FINAL SELECTION
 ```
 
+### OpenAI Voice Selection Flowchart
+
+```
+START: Character/Narrator Analysis
+            │
+            ▼
+┌─────────────────────────────┐
+│  What is the character's    │
+│  GENDER?                    │
+└─────────────────────────────┘
+            │
+     ┌──────┼──────┐
+     ▼      ▼      ▼
+  FEMALE  MALE   NEUTRAL/UNKNOWN
+     │      │      │
+     │      │      └──► alloy (balanced, default)
+     │      │
+     ▼      ▼
+┌─────────────────────────────┐
+│  What is the PRIMARY TONE?  │
+└─────────────────────────────┘
+            │
+┌───────────┼───────────┬───────────┬───────────┐
+▼           ▼           ▼           ▼           ▼
+AUTHORITATIVE  WARM/FRIENDLY  ENERGETIC   CALM/SOFT   EXPRESSIVE
+│           │           │           │           │
+│ FEMALE:   │ FEMALE:   │ FEMALE:   │ FEMALE:   │ FEMALE:
+│ • sage    │ • coral   │ • nova    │ • shimmer │ • ballad
+│           │           │           │           │
+│ MALE:     │ MALE:     │ MALE:     │ MALE:     │ MALE:
+│ • onyx    │ • fable   │ • verse   │ • fable   │ • echo
+│ • echo    │           │ • ash     │           │
+            │
+            ▼
+      FINAL SELECTION
+
+Auto-assignment order (DialogueForge cycles through these):
+  Female speakers: nova → shimmer → coral → sage → ballad
+  Male speakers:   echo → fable → onyx → ash → verse
+```
+
 ### ElevenLabs Voice Selection Flowchart
 
 ```
@@ -378,24 +476,25 @@ FREE TIER VOICE QUALITIES:
       FINAL SELECTION
 ```
 
-### Quick Reference Decision Tree
+### Quick Reference Decision Tree (All Engines)
 
 ```
-NARRATOR TYPE          → GEMINI PICK      → ELEVENLABS FREE    → ELEVENLABS PAID
-──────────────────────────────────────────────────────────────────────────────────
-Neutral/Professional   → Charon, Erinome  → Rachel, Antoni     → + Alice, Drew
-Warm Storyteller       → Autonoe, Achird  → Dorothy, Adam      → + Matilda, Bill
-Authoritative          → Orus, Kore       → Adam, Daniel       → + Bill, James
-Young/Energetic        → Puck, Leda       → Josh, Domi         → + Jeremy, Patrick
-Calm/Meditative        → Laomedeia, Umbriel→ Thomas, Emily     → + Nicole, Ethan
-News/Formal            → Sadachbia, Schedar→ Sarah, Daniel     → + Alice, Drew
-Character Voice (M)    → Algenib, Fenrir  → Clyde, Callum      → + Jessie, Giovanni
-Character Voice (F)    → Gacrux, Zephyr   → Charlotte, Domi    → + Glinda, Lily
-Children's Content     → Callirhoe, Leda  → Gigi, Dorothy      → + Mimi
-Edgy/Dramatic          → Enceladus, Iapetus→ Sam, George       → + Brian, Jessie
+NARRATOR TYPE          → GEMINI PICK       → OPENAI PICK     → ELEVENLABS FREE    → ELEVENLABS PAID
+────────────────────────────────────────────────────────────────────────────────────────────────────
+Neutral/Professional   → Charon, Erinome   → sage, ash       → Rachel, Antoni     → + Alice, Drew
+Warm Storyteller       → Autonoe, Achird   → coral, fable    → Dorothy, Adam      → + Matilda, Bill
+Authoritative          → Orus, Kore        → sage, onyx      → Adam, Daniel       → + Bill, James
+Young/Energetic        → Puck, Leda        → nova, verse     → Josh, Domi         → + Jeremy, Patrick
+Calm/Meditative        → Laomedeia, Umbriel→ shimmer, fable  → Thomas, Emily      → + Nicole, Ethan
+News/Formal            → Sadachbia, Schedar→ sage, echo      → Sarah, Daniel      → + Alice, Drew
+Character Voice (M)    → Algenib, Fenrir   → echo, onyx      → Clyde, Callum      → + Jessie, Giovanni
+Character Voice (F)    → Gacrux, Zephyr    → ballad, nova    → Charlotte, Domi    → + Glinda, Lily
+Children's Content     → Callirhoe, Leda   → nova, shimmer   → Gigi, Dorothy      → + Mimi
+Edgy/Dramatic          → Enceladus, Iapetus→ ballad, echo    → Sam, George        → + Brian, Jessie
 
 ✓ = Available on FREE tier
 + = Additional options on PAID tier only
+All OpenAI voices are available to all API users (no tier restrictions)
 ```
 
 ---
@@ -519,8 +618,8 @@ Your output MUST follow this exact format:
 Title: [Descriptive title for the audio]
 
 Voice Assignments:
-- [Speaker Name]: [Voice Name] (Gemini) or [Voice Name] (ElevenLabs)
-- [Speaker Name]: [Voice Name] (Gemini) or [Voice Name] (ElevenLabs)
+- [Speaker Name]: [Voice Name] (Gemini/OpenAI/ElevenLabs)
+- [Speaker Name]: [Voice Name] (Gemini/OpenAI/ElevenLabs)
 
 ---
 
@@ -535,10 +634,19 @@ Voice Assignments:
 
 The user will specify one of the following:
 - **Gemini TTS**: All 30 voices are available (no tier restrictions)
+- **OpenAI TTS**: All 11 voices are available (no tier restrictions)
 - **ElevenLabs FREE**: Only use the 21 free tier voices listed below
 - **ElevenLabs PAID**: All 43+ default voices are available
 
 ## Available Voices
+
+### For OpenAI TTS (All 11 voices available):
+Female: nova (Bright), shimmer (Soft), coral (Warm), sage (Calm), ballad (Melodic)
+Male:   echo (Deep), fable (Warm), onyx (Authoritative), ash (Clear), verse (Versatile)
+Neutral: alloy (Balanced)
+
+> Note: OpenAI TTS voices have neutral American English accent. No accent or style customization.
+> DialogueForge auto-assigns OpenAI voices by speaker gender — no manual assignment needed.
 
 ### For Gemini TTS (All voices available):
 Female: Aoede (Breezy), Kore (Firm), Leda (Youthful), Zephyr (Bright), Autonoe (Warm),
@@ -771,6 +879,12 @@ Before finalizing voice assignments, verify:
 - [ ] All voice names are spelled correctly
 - [ ] Voice gender matches character gender (unless intentionally different)
 
+**OpenAI TTS-specific checks:**
+- [ ] Voice names are lowercase (nova, echo, alloy — not Nova, Echo, Alloy)
+- [ ] Female speakers assigned female voices (nova, shimmer, coral, sage, ballad)
+- [ ] Male speakers assigned male voices (echo, fable, onyx, ash, verse)
+- [ ] No more than 5 speakers per gender (5 unique female + 5 unique male voices available)
+
 **ElevenLabs-specific checks:**
 - [ ] Accents match character nationalities/backgrounds when specified
 - [ ] British voices used for UK characters (Dorothy, Dave, Daniel, George on FREE)
@@ -785,6 +899,8 @@ Before finalizing voice assignments, verify:
 
 - [Google Gemini Speech Generation Documentation](https://ai.google.dev/gemini-api/docs/speech-generation)
 - [Google Gemini 2.5 TTS Improvements Blog](https://blog.google/technology/developers/gemini-2-5-text-to-speech/)
+- [OpenAI TTS API Documentation](https://platform.openai.com/docs/guides/text-to-speech)
+- [OpenAI TTS API Reference](https://platform.openai.com/docs/api-reference/audio/createSpeech)
 - [ElevenLabs Voice Library Documentation](https://elevenlabs.io/docs/creative-platform/voices/voice-library)
 - [ElevenLabs Voices Overview](https://elevenlabs.io/docs/overview/capabilities/voices)
 - [ElevenLabs Premade Voices Reference](https://elevenlabs-sdk.mintlify.app/voices/premade-voices)

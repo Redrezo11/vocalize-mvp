@@ -86,6 +86,23 @@ export const GEMINI_VOICES = [
   { name: 'Zubenelgenubi', gender: 'Male', style: 'Casual' },
 ];
 
+export const OPENAI_VOICES = [
+  // Female voices
+  { name: 'nova', gender: 'Female', style: 'Bright' },
+  { name: 'shimmer', gender: 'Female', style: 'Soft' },
+  { name: 'coral', gender: 'Female', style: 'Warm' },
+  { name: 'sage', gender: 'Female', style: 'Calm' },
+  { name: 'ballad', gender: 'Female', style: 'Melodic' },
+  // Male voices
+  { name: 'echo', gender: 'Male', style: 'Deep' },
+  { name: 'fable', gender: 'Male', style: 'Warm' },
+  { name: 'onyx', gender: 'Male', style: 'Authoritative' },
+  { name: 'ash', gender: 'Male', style: 'Clear' },
+  { name: 'verse', gender: 'Male', style: 'Versatile' },
+  // Neutral
+  { name: 'alloy', gender: 'Neutral', style: 'Balanced' },
+];
+
 // Saved Audio types for CRUD operations
 export interface SavedAudio {
   id: string;

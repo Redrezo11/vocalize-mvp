@@ -1675,17 +1675,26 @@ const App: React.FC = () => {
             setCurrentView('test-builder');
           }}
           onDeleteTest={async (test) => {
+            console.log('[App onDeleteTest] Called with test.id:', test.id, '| _id:', (test as any)._id, '| title:', test.title);
+            console.log('[App onDeleteTest] DELETE URL:', `${API_BASE}/tests/${test.id}`);
             try {
               const response = await fetch(`${API_BASE}/tests/${test.id}`, {
                 method: 'DELETE',
               });
-              if (!response.ok) throw new Error('Failed to delete test');
+              console.log('[App onDeleteTest] Response status:', response.status);
+              if (!response.ok) {
+                const body = await response.json().catch(() => ({}));
+                console.error('[App onDeleteTest] Error body:', body);
+                throw new Error(body.error || `Failed to delete test (${response.status})`);
+              }
+              console.log('[App onDeleteTest] Success, removing from state');
               // Update both local state lists
               setAllTests(prev => prev.filter(t => t.id !== test.id));
               setAudioTests(prev => prev.filter(t => t.id !== test.id));
             } catch (error) {
-              console.error('Failed to delete test:', error);
+              console.error('[App onDeleteTest] Failed:', error);
               alert('Failed to delete test. Please try again.');
+              throw error; // Re-throw so ClassroomMode's catch can see it
             }
           }}
           onUpdateTest={async (test) => {

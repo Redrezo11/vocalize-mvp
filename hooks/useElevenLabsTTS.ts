@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { ElevenLabsVoice, SpeakerVoiceMapping } from '../types';
 
 // Concatenate multiple audio blobs into one
-const concatenateAudioBlobs = async (blobs: Blob[]): Promise<Blob> => {
+export const concatenateAudioBlobs = async (blobs: Blob[]): Promise<Blob> => {
   if (blobs.length === 0) throw new Error('No audio blobs to concatenate');
   if (blobs.length === 1) return blobs[0];
 
