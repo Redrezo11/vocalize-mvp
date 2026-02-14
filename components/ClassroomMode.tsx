@@ -86,6 +86,11 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
   const plenaryAudioRef = useRef<HTMLAudioElement>(null);
 
 
+  // Floating audio widget in fullscreen
+  const [showAudioWidget, setShowAudioWidget] = useState(false);
+  const [widgetPos, setWidgetPos] = useState<{ x: number; y: number } | null>(null);
+  const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
+
   // Unified fullscreen slide deck: null = not in fullscreen, string = which slide
   const [fullscreenSlide, setFullscreenSlide] = useState<string | null>(null);
   const [playingWordId, setPlayingWordId] = useState<string | null>(null);
@@ -746,6 +751,15 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
         return;
       }
 
+      // A toggles floating audio widget in fullscreen
+      if ((e.key === 'a' || e.key === 'A') && isFullscreen && selectedAudio) {
+        setShowAudioWidget(prev => {
+          if (prev) setWidgetPos(null); // reset position on dismiss
+          return !prev;
+        });
+        return;
+      }
+
       // Escape exits fullscreen → back to presentation toolbar
       if (e.key === 'Escape' && isFullscreen) {
         setFullscreenSlide(null);
@@ -883,7 +897,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [view, isPlaying, showQRModal, selectedTest, selectedAudio, lexisViewMode, slideshowActive, isFullscreen, fullscreenSlide, fullscreenSlides, currentSlideIndex]);
+  }, [view, isPlaying, showQRModal, selectedTest, selectedAudio, lexisViewMode, slideshowActive, isFullscreen, fullscreenSlide, fullscreenSlides, currentSlideIndex, showAudioWidget]);
 
   // Get test type label
   const getTestTypeLabel = (type: string): string => {
@@ -1910,6 +1924,139 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
               )}
             </div>
 
+            {/* Floating audio widget */}
+            {showAudioWidget && selectedAudio && (
+              <div
+                className="fixed z-50 backdrop-blur bg-slate-800/95 rounded-2xl px-5 py-3 shadow-2xl border border-slate-700/50"
+                style={widgetPos
+                  ? { left: widgetPos.x, top: widgetPos.y }
+                  : { bottom: '5rem', left: '50%', transform: 'translateX(-50%)' }
+                }
+              >
+                <div className="flex items-center gap-3">
+                  {/* Drag grip */}
+                  <div
+                    className="cursor-grab active:cursor-grabbing text-slate-500 hover:text-slate-300 select-none px-1"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      const el = (e.target as HTMLElement).closest('.fixed') as HTMLElement;
+                      if (!el) return;
+                      const rect = el.getBoundingClientRect();
+                      dragRef.current = { startX: e.clientX, startY: e.clientY, originX: rect.left, originY: rect.top };
+                      const onMove = (ev: MouseEvent) => {
+                        if (!dragRef.current) return;
+                        const dx = ev.clientX - dragRef.current.startX;
+                        const dy = ev.clientY - dragRef.current.startY;
+                        const newX = Math.max(0, Math.min(window.innerWidth - rect.width, dragRef.current.originX + dx));
+                        const newY = Math.max(0, Math.min(window.innerHeight - rect.height, dragRef.current.originY + dy));
+                        setWidgetPos({ x: newX, y: newY });
+                      };
+                      const onUp = () => {
+                        dragRef.current = null;
+                        window.removeEventListener('mousemove', onMove);
+                        window.removeEventListener('mouseup', onUp);
+                      };
+                      window.addEventListener('mousemove', onMove);
+                      window.addEventListener('mouseup', onUp);
+                    }}
+                    onTouchStart={(e) => {
+                      const touch = e.touches[0];
+                      const el = (e.target as HTMLElement).closest('.fixed') as HTMLElement;
+                      if (!el) return;
+                      const rect = el.getBoundingClientRect();
+                      dragRef.current = { startX: touch.clientX, startY: touch.clientY, originX: rect.left, originY: rect.top };
+                      const onMove = (ev: TouchEvent) => {
+                        if (!dragRef.current) return;
+                        const t = ev.touches[0];
+                        const dx = t.clientX - dragRef.current.startX;
+                        const dy = t.clientY - dragRef.current.startY;
+                        const newX = Math.max(0, Math.min(window.innerWidth - rect.width, dragRef.current.originX + dx));
+                        const newY = Math.max(0, Math.min(window.innerHeight - rect.height, dragRef.current.originY + dy));
+                        setWidgetPos({ x: newX, y: newY });
+                      };
+                      const onUp = () => {
+                        dragRef.current = null;
+                        window.removeEventListener('touchmove', onMove);
+                        window.removeEventListener('touchend', onUp);
+                      };
+                      window.addEventListener('touchmove', onMove, { passive: false });
+                      window.addEventListener('touchend', onUp);
+                    }}
+                  >
+                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                      <circle cx="8" cy="6" r="1.5"/><circle cx="16" cy="6" r="1.5"/>
+                      <circle cx="8" cy="12" r="1.5"/><circle cx="16" cy="12" r="1.5"/>
+                      <circle cx="8" cy="18" r="1.5"/><circle cx="16" cy="18" r="1.5"/>
+                    </svg>
+                  </div>
+
+                  {/* Play/Pause */}
+                  <button
+                    onClick={handlePlayPause}
+                    className="w-10 h-10 flex items-center justify-center bg-indigo-600 text-white rounded-full hover:bg-indigo-500 transition-colors"
+                    title={isPlaying ? "Pause" : "Play"}
+                  >
+                    {isPlaying ? <PauseIcon className="w-5 h-5" /> : <PlayIcon className="w-5 h-5 ml-0.5" />}
+                  </button>
+
+                  {/* Restart */}
+                  <button
+                    onClick={handleRestart}
+                    className="w-8 h-8 flex items-center justify-center bg-slate-700 text-slate-300 rounded-full hover:bg-slate-600 transition-colors"
+                    title="Restart"
+                  >
+                    <RefreshIcon className="w-4 h-4" />
+                  </button>
+
+                  {/* Speed */}
+                  <div className="flex items-center bg-slate-700/50 rounded-lg p-0.5 gap-0.5">
+                    {SPEED_OPTIONS.map((speed) => (
+                      <button
+                        key={speed}
+                        onClick={() => handleSpeedChange(speed)}
+                        className={`px-2 py-1 text-xs font-medium rounded-md transition-colors ${
+                          playbackSpeed === speed
+                            ? 'bg-indigo-600 text-white'
+                            : 'text-slate-400 hover:text-white hover:bg-slate-600'
+                        }`}
+                      >
+                        {speed}x
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Progress */}
+                  <div className="w-40">
+                    <input
+                      type="range"
+                      min="0"
+                      max={duration || 0}
+                      value={currentTime}
+                      onChange={handleSeek}
+                      className="w-full h-1.5 bg-slate-600 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-indigo-500 [&::-webkit-slider-thumb]:rounded-full"
+                    />
+                    <div className="flex justify-between mt-0.5 text-[10px] text-slate-400">
+                      <span>{formatTime(currentTime)}</span>
+                      <span>{formatTime(duration)}</span>
+                    </div>
+                  </div>
+
+                  {/* Play counter */}
+                  <div className="flex items-center gap-1.5 bg-slate-700/50 px-2.5 py-1 rounded-lg">
+                    <span className="text-slate-400 text-xs">Plays:</span>
+                    <span className="text-lg font-bold text-indigo-400">{playCount}</span>
+                    <button
+                      onClick={handleResetCounter}
+                      className="p-0.5 text-slate-500 hover:text-white transition-colors"
+                      title="Reset counter"
+                    >
+                      <RefreshIcon className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Unified footer — position indicator + navigation + contextual controls */}
             <div className="fixed bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-4 backdrop-blur px-6 py-3 rounded-full text-sm bg-slate-800/90 text-white">
               {currentSlideIndex > 0 && (
@@ -1927,6 +2074,11 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                 <span>
                   <kbd className={`px-2 py-1 rounded ${slideshowActive ? 'bg-green-600' : 'bg-slate-700'}`}>S</kbd>
                   {' '}{slideshowActive ? 'Stop' : 'Play All'}
+                </span>
+              )}
+              {selectedAudio && (
+                <span className="cursor-pointer hover:text-indigo-300 transition-colors" onClick={() => setShowAudioWidget(prev => !prev)}>
+                  <kbd className={`px-2 py-1 rounded ${showAudioWidget ? 'bg-indigo-600' : 'bg-slate-700'}`}>A</kbd> Audio
                 </span>
               )}
               <span className="cursor-pointer hover:text-indigo-300 transition-colors" onClick={() => generateQRCode(selectedTest)}>
@@ -1979,6 +2131,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
             {/* Footer hint */}
             <div className="fixed bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-4 backdrop-blur px-6 py-3 rounded-full text-sm bg-white/10 text-white">
               <span><kbd className="px-2 py-1 rounded bg-white/20">Q</kbd> Back to Presentation</span>
+              <span><kbd className="px-2 py-1 rounded bg-white/20">Esc</kbd> Close</span>
             </div>
           </div>
         )}
