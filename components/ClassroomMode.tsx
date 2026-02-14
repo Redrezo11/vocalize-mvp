@@ -78,6 +78,13 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
   const [isPlayingPreListeningAudio, setIsPlayingPreListeningAudio] = useState(false);
   const preListeningAudioRef = useRef<HTMLAudioElement>(null);
 
+  // Plenary Arabic text toggle and audio (used in fullscreen plenary slide)
+  const [showPlenaryArabic, setShowPlenaryArabic] = useState(false);
+  const [isGeneratingPlenaryAudio, setIsGeneratingPlenaryAudio] = useState(false);
+  const [plenaryAudioLang, setPlenaryAudioLang] = useState<'en' | 'ar' | null>(null);
+  const [isPlayingPlenaryAudio, setIsPlayingPlenaryAudio] = useState(false);
+  const plenaryAudioRef = useRef<HTMLAudioElement>(null);
+
 
   // Unified fullscreen slide deck: null = not in fullscreen, string = which slide
   const [fullscreenSlide, setFullscreenSlide] = useState<string | null>(null);
@@ -549,6 +556,87 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
       audioEl.src = src;
       audioEl.play();
       setIsPlayingPreListeningAudio(true);
+    }
+  };
+
+  // --- Plenary audio handlers (same pattern as pre-listening) ---
+  const handleGeneratePlenaryAudio = async (language: 'en' | 'ar') => {
+    if (!selectedTest?.transferQuestion) return;
+    const tq = selectedTest.transferQuestion;
+
+    setIsGeneratingPlenaryAudio(true);
+    setPlenaryAudioLang(language);
+
+    try {
+      const apiKey = (import.meta as any).env?.VITE_OPENAI_API_KEY;
+      if (!apiKey || apiKey === 'PLACEHOLDER_API_KEY') {
+        throw new Error('OpenAI API key not configured');
+      }
+
+      const text = language === 'en' ? tq.en : tq.ar;
+      const instructions = language === 'en'
+        ? 'Read clearly and slowly for an English language classroom.'
+        : 'Read clearly and slowly in Arabic for a language classroom.';
+
+      const response = await fetch('https://api.openai.com/v1/audio/speech', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini-tts',
+          input: text,
+          voice: language === 'en' ? 'nova' : 'onyx',
+          instructions,
+          response_format: 'mp3'
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        console.error('[ClassroomMode] Plenary TTS error:', error);
+        throw new Error('Audio generation failed');
+      }
+
+      const audioBlob = await response.blob();
+      const arrayBuffer = await audioBlob.arrayBuffer();
+      const base64 = btoa(
+        new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
+      );
+      const dataUrl = `data:audio/mpeg;base64,${base64}`;
+
+      const updatedTQ = {
+        ...tq,
+        [language === 'en' ? 'audioEn' : 'audioAr']: dataUrl
+      };
+      const updatedTest: ListeningTest = {
+        ...selectedTest,
+        transferQuestion: updatedTQ
+      };
+      setSelectedTest(updatedTest);
+      if (onUpdateTest) onUpdateTest(updatedTest);
+      fullTestCache.set(updatedTest.id, updatedTest);
+
+    } catch (error) {
+      console.error('[ClassroomMode] Plenary audio error:', error);
+    } finally {
+      setIsGeneratingPlenaryAudio(false);
+      setPlenaryAudioLang(null);
+    }
+  };
+
+  const handlePlayPlenaryAudio = (src: string) => {
+    const audioEl = plenaryAudioRef.current;
+    if (!audioEl) return;
+
+    if (isPlayingPlenaryAudio && audioEl.src === src) {
+      audioEl.pause();
+      setIsPlayingPlenaryAudio(false);
+    } else {
+      audioEl.src = src;
+      audioEl.play();
+      setIsPlayingPlenaryAudio(true);
     }
   };
 
@@ -1743,20 +1831,88 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                     </h2>
                   </div>
                   <div className="flex-1 overflow-y-auto p-8 pb-20">
-                    <div className="max-w-4xl w-full mx-auto space-y-6">
-                      <div className="rounded-2xl p-8 bg-slate-800/50 border border-slate-700/50">
-                        <p className="text-3xl leading-relaxed font-medium text-white">
+                    <div className="max-w-5xl w-full mx-auto space-y-6">
+                      <div>
+                        <div className="flex items-center gap-3 mb-4">
+                          <span className="text-4xl">🗣️</span>
+                          <h3 className="text-4xl font-bold text-white">Discussion Question</h3>
+                        </div>
+                        <p className="text-3xl leading-loose text-slate-200">
                           {selectedTest.transferQuestion.en}
                         </p>
+                        {showPlenaryArabic && (
+                          <p className="text-2xl leading-loose mt-3 text-slate-400" dir="rtl">
+                            {selectedTest.transferQuestion.ar}
+                          </p>
+                        )}
                       </div>
-                      <div className="rounded-2xl p-8 bg-slate-800/50 border border-slate-700/50">
-                        <p className="text-3xl leading-relaxed font-medium text-slate-300 text-right" dir="rtl">
-                          {selectedTest.transferQuestion.ar}
-                        </p>
-                      </div>
-                      <p className="text-center text-xl pt-4 text-slate-500">
+                      <hr className="border-slate-700" />
+                      <p className="text-center text-xl pt-2 text-slate-500">
                         Discuss as a class · ناقشوا كصف
                       </p>
+                      {/* Audio + Arabic toggle buttons */}
+                      <div className="flex items-center justify-center gap-4 flex-wrap">
+                        {selectedTest.transferQuestion.audioEn ? (
+                          <button
+                            onClick={() => handlePlayPlenaryAudio(selectedTest.transferQuestion!.audioEn!)}
+                            className={`flex items-center gap-2 px-6 py-3 rounded-xl text-lg font-medium transition-colors ${
+                              isPlayingPlenaryAudio ? 'bg-indigo-600 text-white' : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
+                            }`}
+                          >
+                            <span>{isPlayingPlenaryAudio ? '⏸' : '▶'}</span> Play
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleGeneratePlenaryAudio('en')}
+                            disabled={isGeneratingPlenaryAudio}
+                            className={`flex items-center gap-2 px-6 py-3 rounded-xl text-lg font-medium transition-colors ${
+                              isGeneratingPlenaryAudio && plenaryAudioLang === 'en'
+                                ? 'bg-indigo-500 text-white opacity-75'
+                                : 'bg-indigo-600 text-white hover:bg-indigo-500'
+                            }`}
+                          >
+                            {isGeneratingPlenaryAudio && plenaryAudioLang === 'en' ? (
+                              <><svg className="w-5 h-5 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg> Generating...</>
+                            ) : (<><span>🔊</span> Generate Audio</>)}
+                          </button>
+                        )}
+                        {selectedTest.transferQuestion.audioAr ? (
+                          <button
+                            onClick={() => handlePlayPlenaryAudio(selectedTest.transferQuestion!.audioAr!)}
+                            className={`flex items-center gap-2 px-6 py-3 rounded-xl text-lg font-medium transition-colors ${
+                              isPlayingPlenaryAudio ? 'bg-amber-600 text-white' : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
+                            }`}
+                          >
+                            <span>{isPlayingPlenaryAudio ? '⏸' : '▶'}</span> عربي
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleGeneratePlenaryAudio('ar')}
+                            disabled={isGeneratingPlenaryAudio}
+                            className={`flex items-center gap-2 px-6 py-3 rounded-xl text-lg font-medium transition-colors ${
+                              isGeneratingPlenaryAudio && plenaryAudioLang === 'ar'
+                                ? 'bg-amber-500 text-white opacity-75'
+                                : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
+                            }`}
+                          >
+                            {isGeneratingPlenaryAudio && plenaryAudioLang === 'ar' ? (
+                              <><svg className="w-5 h-5 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg> جاري التوليد...</>
+                            ) : (<><span>🔊</span> Generate عربي</>)}
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setShowPlenaryArabic(!showPlenaryArabic)}
+                          className={`flex items-center gap-2 px-6 py-3 rounded-xl text-lg font-medium transition-colors ${
+                            showPlenaryArabic ? 'bg-purple-600 text-white' : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
+                          }`}
+                        >
+                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
+                          </svg>
+                          {showPlenaryArabic ? 'Hide Arabic' : 'Show Arabic'}
+                        </button>
+                      </div>
+                      <audio ref={plenaryAudioRef} preload="metadata" className="hidden" onEnded={() => setIsPlayingPlenaryAudio(false)} />
                     </div>
                   </div>
                 </div>
