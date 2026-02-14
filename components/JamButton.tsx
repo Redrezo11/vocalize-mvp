@@ -93,6 +93,7 @@ interface JamButtonProps {
   defaultProfile?: Partial<JamProfile>;
   defaultDifficulty?: CEFRLevel;
   contentMode?: ContentMode;
+  topic?: string;
   autoStart?: boolean;
   onComplete: (result: { audioEntry: SavedAudio; test: ListeningTest }) => void;
   onError?: (error: string) => void;
@@ -259,6 +260,7 @@ export const JamButton: React.FC<JamButtonProps> = ({
   defaultProfile,
   defaultDifficulty,
   contentMode,
+  topic,
   autoStart = false,
   onComplete,
   onError,
@@ -578,7 +580,7 @@ export const JamButton: React.FC<JamButtonProps> = ({
       }
 
       // --- Call 1: Generate dialogue + voice assignments (creative, high reasoning) ---
-      const dialoguePrompt = buildDialoguePrompt(profile.difficulty, profile.contentMode, profile.targetDuration, currentTopic);
+      const dialoguePrompt = buildDialoguePrompt(profile.difficulty, profile.contentMode, profile.targetDuration, topic || currentTopic);
 
       const dialogueResponse = await fetch('https://api.openai.com/v1/responses', {
         method: 'POST',

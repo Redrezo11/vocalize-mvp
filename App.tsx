@@ -126,7 +126,8 @@ const App: React.FC = () => {
   const [showOneShotCreator, setShowOneShotCreator] = useState(false);
   const [showJamButton, setShowJamButton] = useState(false);
   const [jamDifficulty, setJamDifficulty] = useState<import('./components/Settings').CEFRLevel>('B1');
-  const [jamSettings, setJamSettings] = useState<{ targetDuration: number; contentMode: import('./components/Settings').ContentMode; contentModel?: import('./components/HomePage').ContentModel } | null>(null);
+  const [jamSettings, setJamSettings] = useState<{ targetDuration: number; contentMode: import('./components/Settings').ContentMode; contentModel?: import('./components/HomePage').ContentModel; useReasoning?: boolean } | null>(null);
+  const [jamTopic, setJamTopic] = useState<string | undefined>();
   const [autoSelectTestId, setAutoSelectTestId] = useState<string | null>(null);
   const settingsHook = useSettings();
 
@@ -1258,10 +1259,11 @@ const App: React.FC = () => {
   // Handle JAM generation from homepage
   const handleJamGenerate = (
     difficulty: import('./components/Settings').CEFRLevel,
-    settings?: { targetDuration: number; contentMode: import('./components/Settings').ContentMode; contentModel?: import('./components/HomePage').ContentModel }
+    settings?: { targetDuration: number; contentMode: import('./components/Settings').ContentMode; contentModel?: import('./components/HomePage').ContentModel; useReasoning?: boolean; topic?: string }
   ) => {
     setJamDifficulty(difficulty);
-    setJamSettings(settings || null);
+    setJamTopic(settings?.topic);
+    setJamSettings(settings ? { targetDuration: settings.targetDuration, contentMode: settings.contentMode, contentModel: settings.contentModel, useReasoning: settings.useReasoning } : null);
     setShowJamButton(true);
   };
 
@@ -1798,7 +1800,9 @@ const App: React.FC = () => {
                 defaultProfile={jamSettings ? {
                   targetDuration: jamSettings.targetDuration,
                   contentModel: jamSettings.contentModel,
+                  useReasoning: jamSettings.useReasoning,
                 } : undefined}
+                topic={jamTopic}
                 autoStart={true}
                 onComplete={handleJamComplete}
                 onError={(error) => {

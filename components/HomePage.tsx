@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { CEFRLevel, ContentMode, ContentModel } from './Settings';
+import { EFL_TOPICS } from '../utils/eflTopics';
 
 export type CreationMethod = 'audio' | 'transcript' | 'import' | 'oneshot' | 'jam';
 export type { ContentModel } from './Settings';
@@ -26,11 +27,12 @@ interface JamSettings {
   targetDuration: number; // 5-30 minutes
   contentMode: ContentMode;
   contentModel: ContentModel;
+  useReasoning: boolean;
 }
 
 interface HomePageProps {
   onSelect: (method: CreationMethod) => void;
-  onJamGenerate?: (difficulty: CEFRLevel, settings?: JamSettings) => void;
+  onJamGenerate?: (difficulty: CEFRLevel, settings?: JamSettings & { topic?: string }) => void;
   defaultDifficulty?: CEFRLevel;
   defaultContentMode?: ContentMode;
   defaultTargetDuration?: number;
@@ -98,16 +100,29 @@ export const HomePage: React.FC<HomePageProps> = ({
     targetDuration: defaultTargetDuration,
     contentMode: defaultContentMode,
     contentModel: defaultContentModel,
+    useReasoning: true,
   });
+  const [currentTopic, setCurrentTopic] = useState(() =>
+    EFL_TOPICS[Math.floor(Math.random() * EFL_TOPICS.length)]
+  );
+
+  const shuffleTopic = () => {
+    let newTopic = EFL_TOPICS[Math.floor(Math.random() * EFL_TOPICS.length)];
+    while (newTopic === currentTopic && EFL_TOPICS.length > 1) {
+      newTopic = EFL_TOPICS[Math.floor(Math.random() * EFL_TOPICS.length)];
+    }
+    setCurrentTopic(newTopic);
+  };
 
   // Sync state with global settings when they load/change
   useEffect(() => {
     setSelectedDifficulty(defaultDifficulty);
-    setJamSettings({
+    setJamSettings(s => ({
+      ...s,
       targetDuration: defaultTargetDuration,
       contentMode: defaultContentMode,
       contentModel: defaultContentModel,
-    });
+    }));
   }, [defaultDifficulty, defaultTargetDuration, defaultContentMode, defaultContentModel]);
 
   const methods = [
@@ -165,7 +180,7 @@ export const HomePage: React.FC<HomePageProps> = ({
 
   const handleGenerateClick = () => {
     if (onJamGenerate) {
-      onJamGenerate(selectedDifficulty, jamSettings);
+      onJamGenerate(selectedDifficulty, { ...jamSettings, topic: currentTopic });
     } else {
       onSelect('jam');
     }
@@ -274,6 +289,22 @@ export const HomePage: React.FC<HomePageProps> = ({
                   </div>
                 </div>
 
+                {/* Topic */}
+                <div className="w-full">
+                  <label className="block text-sm font-medium text-slate-600 mb-2 text-center">Topic</label>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 px-3 py-2 bg-slate-50 rounded-lg border border-slate-200 text-sm text-slate-700 truncate">
+                      {currentTopic}
+                    </div>
+                    <button
+                      onClick={shuffleTopic}
+                      className="px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-600 transition-colors"
+                    >
+                      🎲
+                    </button>
+                  </div>
+                </div>
+
                 {/* Settings Toggle */}
                 <button
                   onClick={() => setShowSettings(!showSettings)}
@@ -348,6 +379,22 @@ export const HomePage: React.FC<HomePageProps> = ({
                       </div>
                       <p className="text-[10px] text-slate-500 mt-2">
                         AI determines question and vocabulary counts based on duration and level
+                      </p>
+                    </div>
+
+                    {/* AI Reasoning */}
+                    <div>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={jamSettings.useReasoning}
+                          onChange={(e) => setJamSettings(s => ({ ...s, useReasoning: e.target.checked }))}
+                          className="w-4 h-4 accent-red-500"
+                        />
+                        <span className="text-xs text-slate-700">Enable AI reasoning</span>
+                      </label>
+                      <p className="text-[10px] text-slate-500 mt-1 ml-6">
+                        {jamSettings.useReasoning ? 'Higher quality, slower generation' : 'Faster generation, may reduce quality'}
                       </p>
                     </div>
                   </div>
