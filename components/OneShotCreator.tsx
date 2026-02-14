@@ -730,6 +730,8 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
   const [currentTopic, setCurrentTopic] = useState(() =>
     EFL_TOPICS[Math.floor(Math.random() * EFL_TOPICS.length)]
   );
+  const [isCustomTopic, setIsCustomTopic] = useState(false);
+  const [customTopic, setCustomTopic] = useState('');
   const [pasteContent, setPasteContent] = useState('');
   const [copyFeedback, setCopyFeedback] = useState(false);
   const [stage, setStage] = useState<ProcessingStage>('idle');
@@ -747,10 +749,13 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
       newTopic = EFL_TOPICS[Math.floor(Math.random() * EFL_TOPICS.length)];
     }
     setCurrentTopic(newTopic);
+    setIsCustomTopic(false);
   };
 
+  const effectiveTopic = isCustomTopic ? customTopic : currentTopic;
+
   const handleCopyTemplate = useCallback(async () => {
-    const template = buildTemplate(difficulty, contentMode, targetDuration, currentTopic);
+    const template = buildTemplate(difficulty, contentMode, targetDuration, effectiveTopic);
     try {
       await navigator.clipboard.writeText(template);
       setCopyFeedback(true);
@@ -766,7 +771,7 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
       setCopyFeedback(true);
       setTimeout(() => setCopyFeedback(false), 2000);
     }
-  }, [difficulty, contentMode, targetDuration]);
+  }, [difficulty, contentMode, targetDuration, effectiveTopic]);
 
   const processOneShot = useCallback(async () => {
     setErrorMsg('');
@@ -1220,14 +1225,33 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
                 <div className="mb-3">
                   <label className="text-sm text-slate-600 mb-2 block">Topic:</label>
                   <div className="flex items-center gap-2">
-                    <div className="flex-1 px-3 py-2 bg-slate-50 rounded-lg border border-slate-200 text-sm text-slate-700 truncate">
-                      {currentTopic}
-                    </div>
+                    {isCustomTopic ? (
+                      <input
+                        type="text"
+                        value={customTopic}
+                        onChange={(e) => setCustomTopic(e.target.value)}
+                        placeholder="Type a custom topic..."
+                        className="flex-1 px-3 py-2 bg-white rounded-lg border border-slate-200 text-sm text-slate-700 focus:ring-2 focus:ring-rose-500 focus:border-rose-500 outline-none"
+                        autoFocus
+                      />
+                    ) : (
+                      <div className="flex-1 px-3 py-2 bg-slate-50 rounded-lg border border-slate-200 text-sm text-slate-700 truncate">
+                        {currentTopic}
+                      </div>
+                    )}
                     <button
-                      onClick={shuffleTopic}
+                      onClick={() => { shuffleTopic(); setIsCustomTopic(false); }}
                       className="px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-600 transition-colors"
                     >
                       🎲
+                    </button>
+                    <button
+                      onClick={() => setIsCustomTopic(!isCustomTopic)}
+                      className={`px-3 py-2 rounded-lg transition-colors ${
+                        isCustomTopic ? 'bg-rose-100 text-rose-600' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                      }`}
+                    >
+                      ✏️
                     </button>
                   </div>
                 </div>

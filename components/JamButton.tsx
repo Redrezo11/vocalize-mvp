@@ -287,6 +287,8 @@ export const JamButton: React.FC<JamButtonProps> = ({
   const [currentTopic, setCurrentTopic] = useState(() =>
     EFL_TOPICS[Math.floor(Math.random() * EFL_TOPICS.length)]
   );
+  const [isCustomTopic, setIsCustomTopic] = useState(false);
+  const [customTopic, setCustomTopic] = useState('');
 
   const shuffleTopic = () => {
     let newTopic = EFL_TOPICS[Math.floor(Math.random() * EFL_TOPICS.length)];
@@ -294,6 +296,7 @@ export const JamButton: React.FC<JamButtonProps> = ({
       newTopic = EFL_TOPICS[Math.floor(Math.random() * EFL_TOPICS.length)];
     }
     setCurrentTopic(newTopic);
+    setIsCustomTopic(false);
   };
 
   // Pending data for audio fallback (when Gemini fails)
@@ -580,7 +583,8 @@ export const JamButton: React.FC<JamButtonProps> = ({
       }
 
       // --- Call 1: Generate dialogue + voice assignments (creative, high reasoning) ---
-      const dialoguePrompt = buildDialoguePrompt(profile.difficulty, profile.contentMode, profile.targetDuration, topic || currentTopic);
+      const effectiveTopic = topic || (isCustomTopic ? customTopic : currentTopic);
+      const dialoguePrompt = buildDialoguePrompt(profile.difficulty, profile.contentMode, profile.targetDuration, effectiveTopic);
 
       const dialogueResponse = await fetch('https://api.openai.com/v1/responses', {
         method: 'POST',
@@ -916,15 +920,35 @@ export const JamButton: React.FC<JamButtonProps> = ({
 
           {/* Topic */}
           <div className="flex items-center gap-2 w-full max-w-sm">
-            <div className="flex-1 px-3 py-2 bg-slate-50 rounded-lg border border-slate-200 text-sm text-slate-700 truncate">
-              {currentTopic}
-            </div>
+            {isCustomTopic ? (
+              <input
+                type="text"
+                value={customTopic}
+                onChange={(e) => setCustomTopic(e.target.value)}
+                placeholder="Type a custom topic..."
+                className="flex-1 px-3 py-2 bg-white rounded-lg border border-slate-200 text-sm text-slate-700 focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none"
+                autoFocus
+              />
+            ) : (
+              <div className="flex-1 px-3 py-2 bg-slate-50 rounded-lg border border-slate-200 text-sm text-slate-700 truncate">
+                {currentTopic}
+              </div>
+            )}
             <button
               onClick={shuffleTopic}
               disabled={stage !== 'idle'}
               className="px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-600 transition-colors disabled:opacity-50"
             >
               🎲
+            </button>
+            <button
+              onClick={() => setIsCustomTopic(!isCustomTopic)}
+              disabled={stage !== 'idle'}
+              className={`px-3 py-2 rounded-lg transition-colors disabled:opacity-50 ${
+                isCustomTopic ? 'bg-red-100 text-red-600' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+              }`}
+            >
+              ✏️
             </button>
           </div>
 

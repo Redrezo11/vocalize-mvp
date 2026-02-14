@@ -105,6 +105,8 @@ export const HomePage: React.FC<HomePageProps> = ({
   const [currentTopic, setCurrentTopic] = useState(() =>
     EFL_TOPICS[Math.floor(Math.random() * EFL_TOPICS.length)]
   );
+  const [isCustomTopic, setIsCustomTopic] = useState(false);
+  const [customTopic, setCustomTopic] = useState('');
 
   const shuffleTopic = () => {
     let newTopic = EFL_TOPICS[Math.floor(Math.random() * EFL_TOPICS.length)];
@@ -112,6 +114,7 @@ export const HomePage: React.FC<HomePageProps> = ({
       newTopic = EFL_TOPICS[Math.floor(Math.random() * EFL_TOPICS.length)];
     }
     setCurrentTopic(newTopic);
+    setIsCustomTopic(false);
   };
 
   // Sync state with global settings when they load/change
@@ -180,7 +183,7 @@ export const HomePage: React.FC<HomePageProps> = ({
 
   const handleGenerateClick = () => {
     if (onJamGenerate) {
-      onJamGenerate(selectedDifficulty, { ...jamSettings, topic: currentTopic });
+      onJamGenerate(selectedDifficulty, { ...jamSettings, topic: isCustomTopic ? customTopic : currentTopic });
     } else {
       onSelect('jam');
     }
@@ -293,14 +296,33 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <div className="w-full">
                   <label className="block text-sm font-medium text-slate-600 mb-2 text-center">Topic</label>
                   <div className="flex items-center gap-2">
-                    <div className="flex-1 px-3 py-2 bg-slate-50 rounded-lg border border-slate-200 text-sm text-slate-700 truncate">
-                      {currentTopic}
-                    </div>
+                    {isCustomTopic ? (
+                      <input
+                        type="text"
+                        value={customTopic}
+                        onChange={(e) => setCustomTopic(e.target.value)}
+                        placeholder="Type a custom topic..."
+                        className="flex-1 px-3 py-2 bg-white rounded-lg border border-slate-200 text-sm text-slate-700 focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none"
+                        autoFocus
+                      />
+                    ) : (
+                      <div className="flex-1 px-3 py-2 bg-slate-50 rounded-lg border border-slate-200 text-sm text-slate-700 truncate">
+                        {currentTopic}
+                      </div>
+                    )}
                     <button
                       onClick={shuffleTopic}
                       className="px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-600 transition-colors"
                     >
                       🎲
+                    </button>
+                    <button
+                      onClick={() => setIsCustomTopic(!isCustomTopic)}
+                      className={`px-3 py-2 rounded-lg transition-colors ${
+                        isCustomTopic ? 'bg-red-100 text-red-600' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                      }`}
+                    >
+                      ✏️
                     </button>
                   </div>
                 </div>
