@@ -2,7 +2,7 @@ import React, { useState, useCallback, useMemo } from 'react';
 import { CEFRLevel, ContentMode } from './Settings';
 import { EngineType, SavedAudio, SpeakerVoiceMapping } from '../types';
 import { parseDialogue } from '../utils/parser';
-import { EFL_TOPICS, SpeakerCount, AudioFormat, getRandomTopic, getRandomFormat, shuffleFormat, randomSpeakerCount, resolveSpeakerDefault } from '../utils/eflTopics';
+import { EFL_TOPICS, SpeakerCount, AudioFormat, getRandomTopic, getTopicsForSpeakerCount, getRandomFormat, shuffleFormat, randomSpeakerCount, resolveSpeakerDefault } from '../utils/eflTopics';
 import type { SpeakerCountDefault } from './Settings';
 
 const API_BASE = '/api';
@@ -1316,10 +1316,14 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
                     ))}
                     <button
                       onClick={() => {
-                        const count = randomSpeakerCount();
+                        const count = randomSpeakerCount(speakerCount);
                         setSpeakerCount(count);
-                        setCurrentTopic(getRandomTopic(count));
-                        setAudioFormat(getRandomFormat(count));
+                        if (!getTopicsForSpeakerCount(count).includes(currentTopic)) {
+                          setCurrentTopic(getRandomTopic(count));
+                        }
+                        if (!audioFormat || audioFormat.speakerCount !== count) {
+                          setAudioFormat(getRandomFormat(count));
+                        }
                         setIsCustomTopic(false);
                       }}
                       className="px-2.5 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-500 hover:bg-amber-50 hover:text-amber-600 transition-all"

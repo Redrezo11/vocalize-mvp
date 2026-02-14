@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { CEFRLevel, ContentMode, ContentModel } from './Settings';
-import { EFL_TOPICS, SpeakerCount, getRandomTopic, randomSpeakerCount, resolveSpeakerDefault } from '../utils/eflTopics';
+import { EFL_TOPICS, SpeakerCount, getRandomTopic, getTopicsForSpeakerCount, randomSpeakerCount, resolveSpeakerDefault } from '../utils/eflTopics';
 import type { SpeakerCountDefault } from './Settings';
 
 export type CreationMethod = 'audio' | 'transcript' | 'import' | 'oneshot' | 'jam';
@@ -319,9 +319,11 @@ export const HomePage: React.FC<HomePageProps> = ({
                     ))}
                     <button
                       onClick={() => {
-                        const count = randomSpeakerCount();
+                        const count = randomSpeakerCount(speakerCount);
                         setSpeakerCount(count);
-                        setCurrentTopic(getRandomTopic(count));
+                        if (!getTopicsForSpeakerCount(count).includes(currentTopic)) {
+                          setCurrentTopic(getRandomTopic(count));
+                        }
                         setIsCustomTopic(false);
                       }}
                       className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-500 hover:bg-amber-50 hover:text-amber-600 transition-all"

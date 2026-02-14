@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { EngineType, ElevenLabsVoice } from '../types';
 import { ClipboardIcon, CheckCircleIcon, SparklesIcon, XIcon } from './Icons';
 import { ContentMode, SpeakerCountDefault } from './Settings';
-import { EFL_TOPICS, SpeakerCount, AudioFormat, getRandomTopic, getRandomFormat, shuffleFormat, randomSpeakerCount, resolveSpeakerDefault } from '../utils/eflTopics';
+import { EFL_TOPICS, SpeakerCount, AudioFormat, getRandomTopic, getTopicsForSpeakerCount, getRandomFormat, shuffleFormat, randomSpeakerCount, resolveSpeakerDefault } from '../utils/eflTopics';
 
 type CEFRLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1';
 
@@ -832,10 +832,14 @@ Now generate the listening exercise:`;
               ))}
               <button
                 onClick={() => {
-                  const count = randomSpeakerCount();
+                  const count = randomSpeakerCount(speakerCount);
                   setSpeakerCount(count);
-                  setCurrentRandomTopic(getRandomTopic(count));
-                  setAudioFormat(getRandomFormat(count));
+                  if (!getTopicsForSpeakerCount(count).includes(currentRandomTopic)) {
+                    setCurrentRandomTopic(getRandomTopic(count));
+                  }
+                  if (!audioFormat || audioFormat.speakerCount !== count) {
+                    setAudioFormat(getRandomFormat(count));
+                  }
                 }}
                 className="px-2.5 py-2 rounded-xl text-sm font-medium bg-slate-100 text-slate-500 hover:bg-amber-50 hover:text-amber-600 transition-all"
                 title="Random speaker count"

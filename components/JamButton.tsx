@@ -3,7 +3,7 @@ import { CEFRLevel, ContentMode } from './Settings';
 import { EngineType, SavedAudio, ListeningTest, SpeakerVoiceMapping } from '../types';
 import { parseDialogue } from '../utils/parser';
 import { buildDialoguePrompt, buildTestContentPrompt, validatePayload, OneShotPayload } from './OneShotCreator';
-import { EFL_TOPICS, SpeakerCount, AudioFormat, getRandomTopic, getRandomFormat, shuffleFormat, randomSpeakerCount } from '../utils/eflTopics';
+import { EFL_TOPICS, SpeakerCount, AudioFormat, getRandomTopic, getTopicsForSpeakerCount, getRandomFormat, shuffleFormat, randomSpeakerCount } from '../utils/eflTopics';
 
 const API_BASE = '/api';
 
@@ -945,10 +945,14 @@ export const JamButton: React.FC<JamButtonProps> = ({
             ))}
             <button
               onClick={() => {
-                const count = randomSpeakerCount();
+                const count = randomSpeakerCount(speakerCount);
                 setSpeakerCount(count);
-                setCurrentTopic(getRandomTopic(count));
-                setAudioFormat(getRandomFormat(count));
+                if (!getTopicsForSpeakerCount(count).includes(currentTopic)) {
+                  setCurrentTopic(getRandomTopic(count));
+                }
+                if (!audioFormat || audioFormat.speakerCount !== count) {
+                  setAudioFormat(getRandomFormat(count));
+                }
                 setIsCustomTopic(false);
               }}
               disabled={stage !== 'idle'}

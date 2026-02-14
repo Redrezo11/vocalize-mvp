@@ -709,9 +709,10 @@ export function getFormatById(id: string): AudioFormat | undefined {
   return AUDIO_FORMATS.find(f => f.id === id);
 }
 
-/** Pick a random speaker count (1, 2, or 3) */
-export function randomSpeakerCount(): SpeakerCount {
-  return ([1, 2, 3] as SpeakerCount[])[Math.floor(Math.random() * 3)];
+/** Pick a random speaker count (1, 2, or 3), optionally excluding the current one */
+export function randomSpeakerCount(exclude?: SpeakerCount): SpeakerCount {
+  const options = ([1, 2, 3] as SpeakerCount[]).filter(c => c !== exclude);
+  return options[Math.floor(Math.random() * options.length)];
 }
 
 /** Resolve a speaker-count default setting to a concrete SpeakerCount */
