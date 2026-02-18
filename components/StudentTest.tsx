@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { ListeningTest, TestSessionLog, MatchPhaseResult, GapFillPhaseResult, PreviewPhaseResult, QuestionsItemResult } from '../types';
+import { ListeningTest, TestQuestion, TestSessionLog, MatchPhaseResult, GapFillPhaseResult, PreviewPhaseResult, QuestionsItemResult } from '../types';
 import { CheckCircleIcon } from './Icons';
 import { ClassroomTheme, ContentModel } from './Settings';
 import { LexisMatchGame } from './LexisMatchGame';
@@ -61,6 +61,55 @@ const getInitialTestPhase = (test: ListeningTest, isPreview: boolean): TestPhase
   return 'questions';
 };
 
+// OpenAI Responses API helper (same pattern as FollowUpQuestions)
+async function callOpenAI(model: string, instructions: string, input: string): Promise<string> {
+  const apiKey = (import.meta as any).env?.VITE_OPENAI_API_KEY;
+  if (!apiKey || apiKey === 'PLACEHOLDER_API_KEY') {
+    throw new Error('OpenAI API key not configured');
+  }
+  const response = await fetch('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+    body: JSON.stringify({ model, instructions, input }),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.error?.message || `API error: ${response.status}`);
+  }
+  const data = await response.json();
+  const messageOutput = data.output?.find((o: { type: string }) => o.type === 'message');
+  return messageOutput?.content?.[0]?.text || '';
+}
+
+function buildBonusPrompt(count: number, difficulty: string, isReading: boolean): string {
+  const contentType = isReading ? 'reading passage' : 'listening transcript';
+  return `You are an ESL test question generator. Generate exactly ${count} NEW multiple-choice comprehension questions based on the provided ${contentType}.
+
+## Rules
+- Each question must have exactly 4 options (A, B, C, D)
+- "correctAnswer" must match one option exactly (character-for-character)
+- Test a variety of skills: main ideas, specific details, inferences, vocabulary in context, speaker/author intent
+- Include an "explanation" in English explaining why the correct answer is right
+- Include an "explanationArabic" with an Arabic explanation
+- Do NOT repeat any of the existing questions provided
+- Difficulty level: ${difficulty}
+- Questions should be progressively challenging within the set
+
+## Output format
+Return ONLY valid JSON:
+{
+  "questions": [
+    {
+      "questionText": "What is the main idea of...?",
+      "options": ["Option A", "Option B", "Option C", "Option D"],
+      "correctAnswer": "Option B",
+      "explanation": "English explanation of why this is correct",
+      "explanationArabic": "شرح بالعربية"
+    }
+  ]
+}`;
+}
+
 export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light', isPreview = false, onExitPreview, contentModel = 'gpt-5-mini' }) => {
   const isDark = theme === 'dark';
   const appMode = useAppMode();
@@ -84,6 +133,14 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [score, setScore] = useState<number | null>(savedState?.score ?? null);
   const [showDiscussion, setShowDiscussion] = useState(savedState?.showDiscussion || false);
+
+  // Bonus practice rounds
+  const [bonusRounds, setBonusRounds] = useState<TestQuestion[][]>([]);
+  const [bonusAnswers, setBonusAnswers] = useState<{ [questionId: string]: string }>({});
+  const [bonusSubmitted, setBonusSubmitted] = useState<Set<number>>(new Set());
+  const [bonusScores, setBonusScores] = useState<{ score: number; correct: number; total: number }[]>([]);
+  const [isGeneratingBonus, setIsGeneratingBonus] = useState(false);
+  const [bonusError, setBonusError] = useState<string | null>(null);
 
   // Single state machine for test phase: match → gapfill → preview → questions
   const [testPhase, setTestPhase] = useState<TestPhase>(
@@ -214,6 +271,76 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
 
   const handleBackFromDiscussion = () => {
     setShowDiscussion(false);
+  };
+
+  // Bonus practice: generate additional questions
+  const handleGenerateBonus = useCallback(async (count: 5 | 10) => {
+    setIsGeneratingBonus(true);
+    setBonusError(null);
+    try {
+      const allExistingQuestions = [
+        ...test.questions.map(q => q.questionText),
+        ...bonusRounds.flat().map(q => q.questionText),
+      ];
+
+      const input = JSON.stringify({
+        transcript: (transcript || test.sourceText || '').slice(0, 4000),
+        existingQuestions: allExistingQuestions,
+      });
+
+      const text = await callOpenAI(
+        contentModel,
+        buildBonusPrompt(count, test.difficulty || 'B1', isReading),
+        input,
+      );
+
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error('No JSON in response');
+
+      const parsed = JSON.parse(jsonMatch[0]);
+      const qs: TestQuestion[] = (parsed.questions || []).map((q: any, i: number) => ({
+        ...q,
+        id: `bonus-${bonusRounds.length}-${i}`,
+      }));
+
+      if (qs.length === 0) throw new Error('No questions generated');
+
+      setBonusRounds(prev => [...prev, qs]);
+    } catch (err) {
+      console.error('[Bonus] Generate error:', err);
+      setBonusError(err instanceof Error ? err.message : 'Failed to generate questions');
+    } finally {
+      setIsGeneratingBonus(false);
+    }
+  }, [test, transcript, contentModel, isReading, bonusRounds]);
+
+  // Bonus practice: submit a round
+  const handleSubmitBonus = useCallback((roundIndex: number) => {
+    const round = bonusRounds[roundIndex];
+    if (!round) return;
+    let correct = 0;
+    for (const q of round) {
+      const userAnswer = (bonusAnswers[q.id] || '').toLowerCase().trim();
+      const correctAnswer = q.correctAnswer.toLowerCase().trim();
+      if (userAnswer === correctAnswer) correct++;
+    }
+    const scoreVal = Math.round((correct / round.length) * 100);
+    setBonusScores(prev => {
+      const updated = [...prev];
+      updated[roundIndex] = { score: scoreVal, correct, total: round.length };
+      return updated;
+    });
+    setBonusSubmitted(prev => new Set(prev).add(roundIndex));
+  }, [bonusRounds, bonusAnswers]);
+
+  // Bonus answer status helper
+  const getBonusAnswerStatus = (questionId: string, roundIndex: number) => {
+    if (!bonusSubmitted.has(roundIndex)) return null;
+    const round = bonusRounds[roundIndex];
+    const question = round?.find(q => q.id === questionId);
+    if (!question) return null;
+    const userAnswer = (bonusAnswers[questionId] || '').toLowerCase().trim();
+    return userAnswer === question.correctAnswer.toLowerCase().trim() ? 'correct' : 'incorrect';
   };
 
   const answeredCount = Object.keys(answers).length;
@@ -393,12 +520,17 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
               <span className="ml-2 text-sm opacity-90">
                 ({test.questions.filter(q => getAnswerStatus(q.id) === 'correct').length}/{totalQuestions} correct)
               </span>
+              {bonusScores.length > 0 && (
+                <span className="ml-2 text-sm opacity-90">
+                  + Bonus: {bonusScores[bonusScores.length - 1].score}%
+                </span>
+              )}
             </div>
             <button
               onClick={handleStartDiscussion}
               className="px-3 py-1 bg-white/20 rounded text-sm font-medium hover:bg-white/30"
             >
-              Discussion
+              {isReading ? 'Post-Reading Task' : 'Post-Listening Task'}
             </button>
           </div>
         </div>
@@ -442,6 +574,176 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
                 </div>
               )}
             </div>
+          )}
+
+          {/* Bonus Practice Section — only after submission */}
+          {isSubmitted && (
+            <>
+              {/* CTA card */}
+              {!isGeneratingBonus && (
+                <div className={`rounded-xl border mb-3 p-4 text-center ${isDark ? 'border-indigo-700 bg-indigo-900/20' : 'border-indigo-200 bg-indigo-50'}`}>
+                  <p className={`font-medium text-sm mb-3 ${isDark ? 'text-indigo-300' : 'text-indigo-800'}`}>
+                    Want more practice?
+                  </p>
+                  <div className="flex gap-3 justify-center">
+                    <button
+                      onClick={() => handleGenerateBonus(5)}
+                      className="px-4 py-2 rounded-lg text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-500 transition-colors"
+                    >
+                      +5 Questions
+                    </button>
+                    <button
+                      onClick={() => handleGenerateBonus(10)}
+                      className="px-4 py-2 rounded-lg text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-500 transition-colors"
+                    >
+                      +10 Questions
+                    </button>
+                  </div>
+                  {bonusError && (
+                    <p className="text-xs text-red-500 mt-2">{bonusError}</p>
+                  )}
+                </div>
+              )}
+
+              {/* Loading state */}
+              {isGeneratingBonus && (
+                <div className={`rounded-xl border mb-3 p-6 text-center ${isDark ? 'border-indigo-700 bg-indigo-900/20' : 'border-indigo-200 bg-indigo-50'}`}>
+                  <svg className="w-6 h-6 animate-spin mx-auto mb-2 text-indigo-500" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  <p className={`text-sm font-medium ${isDark ? 'text-indigo-300' : 'text-indigo-700'}`}>
+                    Generating new questions...
+                  </p>
+                </div>
+              )}
+
+              {/* Bonus rounds (newest first) */}
+              {[...bonusRounds].reverse().map((round, revIdx) => {
+                const roundIndex = bonusRounds.length - 1 - revIdx;
+                const roundSubmitted = bonusSubmitted.has(roundIndex);
+                const roundScore = bonusScores[roundIndex];
+                const allAnswered = round.every(q => bonusAnswers[q.id]?.trim());
+
+                return (
+                  <div key={roundIndex} className="mb-3">
+                    {/* Round header */}
+                    <div className={`flex items-center justify-between px-2 py-1.5 mb-1.5 ${isDark ? 'text-indigo-300' : 'text-indigo-700'}`}>
+                      <span className="text-xs font-bold uppercase tracking-wider">
+                        Bonus Round {roundIndex + 1}
+                        {roundSubmitted && roundScore && (
+                          <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-bold ${
+                            roundScore.score >= 70 ? 'bg-green-500 text-white' : 'bg-amber-500 text-white'
+                          }`}>
+                            {roundScore.score}% ({roundScore.correct}/{roundScore.total})
+                          </span>
+                        )}
+                      </span>
+                    </div>
+
+                    {/* Questions in this round */}
+                    <div className="space-y-2">
+                      {round.map((question, qIdx) => {
+                        const status = getBonusAnswerStatus(question.id, roundIndex);
+                        return (
+                          <div
+                            key={question.id}
+                            className={`rounded-xl border transition-colors ${
+                              status === 'correct'
+                                ? isDark ? 'border-green-600 bg-green-900/30' : 'border-green-300 bg-green-50'
+                                : status === 'incorrect'
+                                ? isDark ? 'border-red-600 bg-red-900/30' : 'border-red-300 bg-red-50'
+                                : isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-white'
+                            }`}
+                          >
+                            <div className="px-3 py-2 flex items-start gap-2">
+                              <span className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                                status === 'correct' ? 'bg-green-500 text-white'
+                                : status === 'incorrect' ? 'bg-red-500 text-white'
+                                : isDark ? 'bg-indigo-600 text-white' : 'bg-indigo-500 text-white'
+                              }`}>
+                                {qIdx + 1}
+                              </span>
+                              <p className={`text-sm leading-snug pt-0.5 ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
+                                {question.questionText}
+                              </p>
+                            </div>
+                            {/* Options */}
+                            {question.options && (
+                              <div className="px-3 pb-2 grid grid-cols-2 gap-1.5">
+                                {question.options.map((option, optIndex) => {
+                                  const letter = String.fromCharCode(65 + optIndex);
+                                  const isSelected = bonusAnswers[question.id] === option;
+                                  const isCorrectAnswer = option === question.correctAnswer;
+                                  return (
+                                    <button
+                                      key={optIndex}
+                                      onClick={() => {
+                                        if (!roundSubmitted) {
+                                          setBonusAnswers(prev => ({ ...prev, [question.id]: option }));
+                                        }
+                                      }}
+                                      disabled={roundSubmitted}
+                                      className={`p-2 rounded-lg border text-left text-xs transition-colors ${
+                                        roundSubmitted
+                                          ? isCorrectAnswer
+                                            ? isDark ? 'border-green-500 bg-green-900/40 text-green-300' : 'border-green-400 bg-green-100 text-green-800'
+                                            : isSelected && !isCorrectAnswer
+                                            ? isDark ? 'border-red-500 bg-red-900/40 text-red-300' : 'border-red-400 bg-red-100 text-red-800'
+                                            : isDark ? 'border-slate-700 bg-slate-800/50 text-slate-500' : 'border-slate-200 bg-slate-50 text-slate-400'
+                                          : isSelected
+                                          ? isDark ? 'border-indigo-500 bg-indigo-900/50 text-white' : 'border-indigo-500 bg-indigo-50 text-indigo-900'
+                                          : isDark ? 'border-slate-600 bg-slate-700/50 text-slate-300 hover:border-indigo-500' : 'border-slate-200 bg-white text-slate-700 hover:border-indigo-400'
+                                      }`}
+                                    >
+                                      <span className="font-medium mr-1">{letter}.</span>
+                                      {option}
+                                      {roundSubmitted && isCorrectAnswer && (
+                                        <span className="ml-1 text-green-500"><CheckCircleIcon /></span>
+                                      )}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+                            {/* Explanation for incorrect answers */}
+                            {roundSubmitted && status === 'incorrect' && (question.explanation || question.explanationArabic) && (
+                              <div className="mx-3 mb-2 px-2 py-1.5 rounded text-xs bg-amber-100 text-amber-800">
+                                {question.explanation && question.explanationArabic ? (
+                                  <div className="space-y-1">
+                                    <p>{question.explanation}</p>
+                                    <p className="text-right" dir="rtl">{question.explanationArabic}</p>
+                                  </div>
+                                ) : (
+                                  <p className={question.explanationArabic ? 'text-right' : ''} dir={question.explanationArabic ? 'rtl' : 'ltr'}>
+                                    {question.explanation || question.explanationArabic}
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Submit button for this round */}
+                    {!roundSubmitted && (
+                      <button
+                        onClick={() => handleSubmitBonus(roundIndex)}
+                        disabled={!allAnswered}
+                        className={`w-full mt-2 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
+                          allAnswered
+                            ? 'bg-indigo-600 text-white hover:bg-indigo-500'
+                            : isDark ? 'bg-slate-700 text-slate-500' : 'bg-slate-200 text-slate-400'
+                        }`}
+                      >
+                        Submit Bonus Round {roundIndex + 1}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </>
           )}
 
           {test.questions.map((question, index) => {

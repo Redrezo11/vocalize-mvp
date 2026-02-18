@@ -1017,6 +1017,8 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
           break;
         case 'v':
         case 'V':
+          // Skip if viewing passage tab (vocab not visible)
+          if (appMode === 'reading' && selectedTest?.sourceText && selectedTest?.lexis?.length && contentTab === 'passage') break;
           // 2-way toggle: overview ↔ focus. If in fullscreen: exit → overview
           if (isFullscreen) {
             setFullscreenSlide(null);
