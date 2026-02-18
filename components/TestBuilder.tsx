@@ -4,9 +4,18 @@ import { ArrowLeftIcon, PlusIcon, TrashIcon, SparklesIcon, CopyIcon, DownloadIco
 import { parseDialogue } from '../utils/parser';
 import { CEFRLevel } from './Settings';
 import DocumentImport from './DocumentImport';
+import { useAppMode } from '../contexts/AppModeContext';
+import { modeLabel } from '../utils/modeLabels';
+
+export interface ReadingPassage {
+  title: string;
+  text: string;
+  difficulty?: CEFRLevel;
+}
 
 interface TestBuilderProps {
-  audio: SavedAudio;
+  audio?: SavedAudio;
+  readingPassage?: ReadingPassage;
   existingTest?: ListeningTest;
   defaultDifficulty?: CEFRLevel;
   onSave: (test: Omit<ListeningTest, 'id' | 'createdAt' | 'updatedAt'>) => void;
@@ -76,7 +85,9 @@ const getLLMTemplate = (
 
   const levelDescription = getCEFRDescription(difficultyLevel);
 
-  const baseInstructions = `Based on the following transcript, generate questions for a listening comprehension test.
+  const contentLabel = testType.startsWith('reading') ? 'passage' : 'transcript';
+  const activityLabel = testType.startsWith('reading') ? 'reading comprehension' : 'listening comprehension';
+  const baseInstructions = `Based on the following ${contentLabel}, generate questions for a ${activityLabel} test.
 
 TARGET LEARNER LEVEL: ${difficultyLevel.toUpperCase()}
 ${levelDescription}
@@ -88,7 +99,7 @@ ${transcript}
 
 ${customPrompt ? `ADDITIONAL INSTRUCTIONS:\n${customPrompt}\n\n` : ''}IMPORTANT: Return ONLY a valid JSON array. Do not include any other text, markdown, or explanation.`;
 
-  if (testType === 'listening-comprehension') {
+  if ((testType === 'listening-comprehension' || testType === 'reading-comprehension')) {
     return `${baseInstructions}
 
 Generate ${questionCount} multiple choice questions. Each question should test understanding of the content.
@@ -286,9 +297,17 @@ const generateDefaultTitle = (audioTitle: string, difficulty: CEFRLevel = 'B1'):
   return `${audioTitle} (${difficulty})`;
 };
 
-export const TestBuilder: React.FC<TestBuilderProps> = ({ audio, existingTest, defaultDifficulty = 'B1', onSave, onCancel }) => {
-  const [testType, setTestType] = useState<TestType>(existingTest?.type || 'listening-comprehension');
-  const [testTitle, setTestTitle] = useState(existingTest?.title || generateDefaultTitle(audio.title, defaultDifficulty));
+export const TestBuilder: React.FC<TestBuilderProps> = ({ audio, readingPassage, existingTest, defaultDifficulty = 'B1', onSave, onCancel }) => {
+  const appMode = useAppMode();
+  const labels = modeLabel(appMode);
+
+  // Derive common content from either audio or reading passage
+  const contentTitle = audio?.title || readingPassage?.title || existingTest?.title || 'Untitled';
+  const contentText = audio?.transcript || readingPassage?.text || existingTest?.sourceText || '';
+  const isReading = appMode === 'reading';
+
+  const [testType, setTestType] = useState<TestType>(existingTest?.type || labels.testType);
+  const [testTitle, setTestTitle] = useState(existingTest?.title || generateDefaultTitle(contentTitle, defaultDifficulty));
   const [questions, setQuestions] = useState<TestQuestion[]>(existingTest?.questions || []);
   const [isGenerating, setIsGenerating] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
@@ -326,7 +345,7 @@ export const TestBuilder: React.FC<TestBuilderProps> = ({ audio, existingTest, d
   const [showLexisImportSection, setShowLexisImportSection] = useState(false);
   const [isGeneratingLexis, setIsGeneratingLexis] = useState(false);
   const [lexisCount, setLexisCount] = useState<number>(() =>
-    existingTest?.lexis?.length || getSuggestedLexisCount(audio.transcript)
+    existingTest?.lexis?.length || getSuggestedLexisCount(contentText)
   );
 
   // Preview activities state (bundled with lexis generation)
@@ -341,8 +360,8 @@ export const TestBuilder: React.FC<TestBuilderProps> = ({ audio, existingTest, d
   // Track if there are unsaved changes
   const [isDirty, setIsDirty] = useState(false);
 
-  const analysis = useMemo(() => parseDialogue(audio.transcript), [audio.transcript]);
-  const words = useMemo<string[]>(() => extractWords(audio.transcript), [audio.transcript]);
+  const analysis = useMemo(() => parseDialogue(contentText), [contentText]);
+  const words = useMemo<string[]>(() => extractWords(contentText), [contentText]);
 
   // Copy to clipboard helper
   const copyToClipboard = async (text: string, feedbackMessage: string) => {
@@ -358,12 +377,12 @@ export const TestBuilder: React.FC<TestBuilderProps> = ({ audio, existingTest, d
 
   // Copy transcript
   const handleCopyTranscript = () => {
-    copyToClipboard(audio.transcript, 'Transcript copied!');
+    copyToClipboard(contentText, isReading ? 'Passage copied!' : 'Transcript copied!');
   };
 
   // Copy LLM template
   const handleCopyTemplate = () => {
-    const template = getLLMTemplate(testType, audio.transcript, customPrompt, includeExplanations, explanationStyle, questionCount, explanationLanguage, difficultyLevel);
+    const template = getLLMTemplate(testType, contentText, customPrompt, includeExplanations, explanationStyle, questionCount, explanationLanguage, difficultyLevel);
     copyToClipboard(template, 'Template copied!');
     setShowTemplateModal(false);
   };
@@ -504,7 +523,7 @@ JSON FORMAT (return exactly this structure):
 
   // Copy lexis LLM template
   const handleCopyLexisTemplate = () => {
-    const template = getLexisLLMTemplate(audio.transcript, lexisCustomPrompt, lexisCount, difficultyLevel);
+    const template = getLexisLLMTemplate(contentText, lexisCustomPrompt, lexisCount, difficultyLevel);
     copyToClipboard(template, 'Lexis template copied!');
     setShowLexisImportSection(true);
   };
@@ -600,7 +619,7 @@ JSON FORMAT (return exactly this structure):
         return;
       }
 
-      const prompt = getLexisLLMTemplate(audio.transcript.slice(0, 3000), lexisCustomPrompt, lexisCount, difficultyLevel);
+      const prompt = getLexisLLMTemplate(contentText.slice(0, 3000), lexisCustomPrompt, lexisCount, difficultyLevel);
 
       const response = await fetch('https://api.openai.com/v1/responses', {
         method: 'POST',
@@ -745,7 +764,7 @@ JSON FORMAT (return exactly this structure):
       const newQuestions: TestQuestion[] = parsed.map(q => ({
         id: generateId(),
         questionText: q.questionText || '',
-        options: testType === 'listening-comprehension' ? (q.options || ['', '', '', '']) : undefined,
+        options: (testType === 'listening-comprehension' || testType === 'reading-comprehension') ? (q.options || ['', '', '', '']) : undefined,
         correctAnswer: q.correctAnswer || '',
         explanation: q.explanation || undefined,
         explanationArabic: q.explanationArabic || undefined,
@@ -770,11 +789,11 @@ JSON FORMAT (return exactly this structure):
 
   // Handle difficulty change - update title if using default pattern
   const handleDifficultyChange = (newDifficulty: CEFRLevel) => {
-    const oldDefault = generateDefaultTitle(audio.title, difficultyLevel);
+    const oldDefault = generateDefaultTitle(contentTitle, difficultyLevel);
     setDifficultyLevel(newDifficulty);
     // Update title if it matches the old default
     if (!isEditMode && testTitle === oldDefault) {
-      setTestTitle(generateDefaultTitle(audio.title, newDifficulty));
+      setTestTitle(generateDefaultTitle(contentTitle, newDifficulty));
     }
   };
 
@@ -783,7 +802,7 @@ JSON FORMAT (return exactly this structure):
     const newQuestion: TestQuestion = {
       id: generateId(),
       questionText: '',
-      options: testType === 'listening-comprehension' ? ['', '', '', ''] : undefined,
+      options: (testType === 'listening-comprehension' || testType === 'reading-comprehension') ? ['', '', '', ''] : undefined,
       correctAnswer: '',
     };
     setQuestions([...questions, newQuestion]);
@@ -835,7 +854,7 @@ JSON FORMAT (return exactly this structure):
         return;
       }
 
-      const prompt = getLLMTemplate(testType, audio.transcript.slice(0, 2000), customPrompt, includeExplanations, explanationStyle, questionCount, explanationLanguage, difficultyLevel);
+      const prompt = getLLMTemplate(testType, contentText.slice(0, 2000), customPrompt, includeExplanations, explanationStyle, questionCount, explanationLanguage, difficultyLevel);
 
       const response = await fetch('https://api.openai.com/v1/responses', {
         method: 'POST',
@@ -864,7 +883,7 @@ JSON FORMAT (return exactly this structure):
         const newQuestions: TestQuestion[] = parsed.map(q => ({
           id: generateId(),
           questionText: q.questionText || '',
-          options: testType === 'listening-comprehension' ? q.options : undefined,
+          options: (testType === 'listening-comprehension' || testType === 'reading-comprehension') ? q.options : undefined,
           correctAnswer: q.correctAnswer || '',
           explanation: q.explanation || undefined,
           explanationArabic: q.explanationArabic || undefined,
@@ -884,11 +903,11 @@ JSON FORMAT (return exactly this structure):
 
   // Simple fallback question generation
   const generateSimpleQuestions = () => {
-    if (testType === 'listening-comprehension') {
+    if ((testType === 'listening-comprehension' || testType === 'reading-comprehension')) {
       const newQuestions: TestQuestion[] = [
         {
           id: generateId(),
-          questionText: 'What is the main topic of this audio?',
+          questionText: `What is the main topic of this ${testType.startsWith('reading') ? 'passage' : 'audio'}?`,
           options: ['Topic A', 'Topic B', 'Topic C', 'Topic D'],
           correctAnswer: 'Topic A',
         },
@@ -913,7 +932,7 @@ JSON FORMAT (return exactly this structure):
       const uniqueWords = Array.from(new Set<string>(words)).slice(0, 5);
       const newQuestions: TestQuestion[] = uniqueWords.map((word: string) => ({
         id: generateId(),
-        questionText: `Fill in the blank: The audio mentions "_____" (hint: ${word.slice(0, 2)}...)`,
+        questionText: `Fill in the blank: The ${testType.startsWith('reading') ? 'passage' : 'audio'} mentions "_____" (hint: ${word.slice(0, 2)}...)`,
         correctAnswer: word,
       }));
       setQuestions(newQuestions);
@@ -922,7 +941,7 @@ JSON FORMAT (return exactly this structure):
       setQuestions([{
         id: generateId(),
         questionText: 'Listen and write what you hear',
-        correctAnswer: audio.transcript.slice(0, 200),
+        correctAnswer: contentText.slice(0, 200),
       }]);
       setIsDirty(true);
     }
@@ -941,13 +960,14 @@ JSON FORMAT (return exactly this structure):
     }
 
     const test: Omit<ListeningTest, 'id' | 'createdAt' | 'updatedAt'> = {
-      audioId: audio.id,
+      audioId: isReading ? undefined : (audio?.id || ''),
       title: testTitle,
       type: testType,
       questions,
       lexis: lexis.length > 0 ? lexis : undefined,
       preview: preview.length > 0 ? preview : undefined,
       difficulty: difficultyLevel,
+      ...(isReading && readingPassage ? { sourceText: readingPassage.text } : {}),
     };
 
     console.log('[TestBuilder] Saving test with lexis:', test.lexis);
@@ -993,23 +1013,23 @@ JSON FORMAT (return exactly this structure):
         </button>
       )}
 
-      {/* Audio Reference with Copy Button */}
+      {/* Content Reference with Copy Button */}
       <div className="bg-slate-100 rounded-xl p-4 mb-6">
         <div className="flex items-start justify-between">
           <div>
             <p className="text-sm text-slate-500">Creating test for:</p>
-            <p className="font-medium text-slate-900">{audio.title}</p>
+            <p className="font-medium text-slate-900">{contentTitle}</p>
           </div>
           <button
             onClick={handleCopyTranscript}
             className="flex items-center gap-2 px-3 py-1.5 text-sm bg-white text-slate-700 rounded-lg hover:bg-slate-50 border border-slate-200 transition-colors"
-            title="Copy transcript to clipboard"
+            title={isReading ? 'Copy passage to clipboard' : 'Copy transcript to clipboard'}
           >
             <CopyIcon className="w-4 h-4" />
-            Copy Transcript
+            {isReading ? 'Copy Passage' : 'Copy Transcript'}
           </button>
         </div>
-        {audio.audioUrl && (
+        {!isReading && audio?.audioUrl && (
           <audio src={audio.audioUrl} controls className="w-full mt-2 h-10" />
         )}
       </div>
@@ -1035,11 +1055,17 @@ JSON FORMAT (return exactly this structure):
               Test Type
             </label>
             <div className="grid grid-cols-3 gap-2">
-              {[
-                { type: 'listening-comprehension' as TestType, label: 'Comprehension', desc: 'Multiple choice questions' },
-                { type: 'fill-in-blank' as TestType, label: 'Fill in Blank', desc: 'Complete missing words' },
-                { type: 'dictation' as TestType, label: 'Dictation', desc: 'Write what you hear' },
-              ].map(({ type, label, desc }) => (
+              {(appMode === 'reading'
+                ? [
+                    { type: 'reading-comprehension' as TestType, label: 'Comprehension', desc: 'Multiple choice questions' },
+                    { type: 'reading-fill-in-blank' as TestType, label: 'Fill in Blank', desc: 'Complete missing words' },
+                  ]
+                : [
+                    { type: 'listening-comprehension' as TestType, label: 'Comprehension', desc: 'Multiple choice questions' },
+                    { type: 'fill-in-blank' as TestType, label: 'Fill in Blank', desc: 'Complete missing words' },
+                    { type: 'dictation' as TestType, label: 'Dictation', desc: 'Write what you hear' },
+                  ]
+              ).map(({ type, label, desc }) => (
                 <button
                   key={type}
                   onClick={() => handleTestTypeChange(type)}
@@ -1257,7 +1283,7 @@ JSON FORMAT (return exactly this structure):
                 </div>
 
                 {/* Multiple Choice Options */}
-                {testType === 'listening-comprehension' && question.options && (
+                {(testType === 'listening-comprehension' || testType === 'reading-comprehension') && question.options && (
                   <div className="ml-12 space-y-2">
                     {question.options.map((option, optIndex) => (
                       <div key={optIndex} className="flex items-center gap-2">
@@ -1357,7 +1383,7 @@ JSON FORMAT (return exactly this structure):
                   <span className="w-8 text-center font-medium text-slate-700">{lexisCount}</span>
                 </div>
                 <p className="text-xs text-slate-500 mt-1">
-                  Up to {lexisCount} items — the LLM will recommend the best count for this transcript (~{audio.transcript.split(/\s+/).length} words)
+                  Up to {lexisCount} items — the LLM will recommend the best count for this transcript (~{contentText.split(/\s+/).length} words)
                 </p>
               </div>
 
@@ -1403,7 +1429,7 @@ JSON FORMAT (return exactly this structure):
                     Generated Template Preview
                   </label>
                   <pre className="bg-slate-100 p-4 rounded-xl text-xs whitespace-pre-wrap font-mono text-slate-700 max-h-40 overflow-y-auto">
-                    {getLexisLLMTemplate(audio.transcript, lexisCustomPrompt, lexisCount, difficultyLevel)}
+                    {getLexisLLMTemplate(contentText, lexisCustomPrompt, lexisCount, difficultyLevel)}
                   </pre>
                 </div>
               )}
@@ -1654,7 +1680,7 @@ JSON FORMAT (return exactly this structure):
                   Generated Template Preview
                 </label>
                 <pre className="bg-slate-100 p-4 rounded-xl text-xs whitespace-pre-wrap font-mono text-slate-700 max-h-48 overflow-y-auto">
-                  {getLLMTemplate(testType, audio.transcript, customPrompt, includeExplanations, explanationStyle, questionCount, explanationLanguage, difficultyLevel)}
+                  {getLLMTemplate(testType, contentText, customPrompt, includeExplanations, explanationStyle, questionCount, explanationLanguage, difficultyLevel)}
                 </pre>
               </div>
             </div>

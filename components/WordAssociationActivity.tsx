@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { WordAssociationItem, PreviewWordAssocResult } from '../types';
 import { ClassroomTheme } from './Settings';
+import { useContentLabel } from '../contexts/ContentLabelContext';
 
 interface WordAssociationActivityProps {
   items: WordAssociationItem[];
@@ -16,6 +17,7 @@ export const WordAssociationActivity: React.FC<WordAssociationActivityProps> = (
   onSkip,
 }) => {
   const isDark = theme === 'dark';
+  const label = useContentLabel();
   const [selectedWords, setSelectedWords] = useState<Set<string>>(new Set());
   const [showResults, setShowResults] = useState(false);
 
@@ -72,7 +74,7 @@ export const WordAssociationActivity: React.FC<WordAssociationActivityProps> = (
               Word Prediction
             </h1>
             <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-teal-600'}`}>
-              Which words will you hear in the dialogue?
+              Which words will you {label.verb} in {label.theType}?
             </p>
           </div>
           <button
@@ -89,10 +91,10 @@ export const WordAssociationActivity: React.FC<WordAssociationActivityProps> = (
       {/* Instructions */}
       <div className={`px-4 py-3 ${isDark ? 'bg-slate-800/50' : 'bg-white/60'}`}>
         <p className={`text-center text-sm ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-          Tap the words you think will appear in the dialogue
+          Tap the words you think will appear in {label.theType}
         </p>
         <p className={`text-center text-sm mt-1 ${isDark ? 'text-slate-500' : 'text-slate-500'}`} dir="rtl">
-          اضغط على الكلمات التي تعتقد أنها ستظهر في الحوار
+          اضغط على الكلمات التي تعتقد أنها ستظهر في {label.verb === 'read' ? 'النص' : 'الحوار'}
         </p>
       </div>
 
@@ -165,7 +167,7 @@ export const WordAssociationActivity: React.FC<WordAssociationActivityProps> = (
         <div className={`px-4 py-4 ${scorePercent >= 70 ? 'bg-green-500' : 'bg-amber-500'} text-white`}>
           <div className="text-center">
             <p className="font-bold text-xl">{correctCount} / {inDialogueCount} correct</p>
-            <p className="text-sm opacity-90">Now listen and see how many you got right!</p>
+            <p className="text-sm opacity-90">Now {label.verb} and see how many you got right!</p>
           </div>
         </div>
       )}
@@ -207,7 +209,7 @@ export const WordAssociationActivity: React.FC<WordAssociationActivityProps> = (
             }}
             className="w-full py-3 rounded-xl font-semibold bg-gradient-to-r from-teal-500 to-cyan-500 text-white"
           >
-            Continue to Listening
+            Continue to {label.imperative}ing
           </button>
         )}
       </div>

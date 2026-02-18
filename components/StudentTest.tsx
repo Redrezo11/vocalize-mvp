@@ -6,6 +6,9 @@ import { LexisMatchGame } from './LexisMatchGame';
 import { LexisGapFillGame } from './LexisGapFillGame';
 import { PreviewPhase } from './PreviewPhase';
 import { FollowUpQuestions } from './FollowUpQuestions';
+import { useAppMode } from '../contexts/AppModeContext';
+import { ContentLabelProvider } from '../contexts/ContentLabelContext';
+import { getContentLabels } from '../utils/contentLabels';
 
 interface StudentTestProps {
   test: ListeningTest;
@@ -60,6 +63,10 @@ const getInitialTestPhase = (test: ListeningTest, isPreview: boolean): TestPhase
 
 export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light', isPreview = false, onExitPreview, contentModel = 'gpt-5-mini' }) => {
   const isDark = theme === 'dark';
+  const appMode = useAppMode();
+  const isReading = appMode === 'reading';
+  const contentLabel = useMemo(() => getContentLabels(test.speakerCount, appMode), [test.speakerCount, appMode]);
+  const [passageExpanded, setPassageExpanded] = useState(true);
 
   // Try to restore session state from sessionStorage (survives tab suspension)
   const savedState = useMemo<SavedSessionState | null>(() => {
@@ -81,16 +88,19 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
     savedState?.testPhase || (() => getInitialTestPhase(test, isPreview))
   );
 
-  // Pre-fetch transcript on mount so it's ready when discussion starts
-  const [transcript, setTranscript] = useState('');
+  // Pre-fetch transcript/source text on mount so it's ready when discussion starts
+  const [transcript, setTranscript] = useState(test.sourceText || '');
   useEffect(() => {
-    if (test.audioId) {
+    // Reading tests already have sourceText; listening tests fetch from audio entry
+    if (test.sourceText) {
+      setTranscript(test.sourceText);
+    } else if (test.audioId) {
       fetch(`/api/audio-entries/${test.audioId}`)
         .then(r => r.ok ? r.json() : null)
         .then(data => { if (data?.transcript) setTranscript(data.transcript); })
         .catch(() => {}); // Silent fail — FollowUpQuestions has its own fallback
     }
-  }, [test.audioId]);
+  }, [test.audioId, test.sourceText]);
 
   // Session performance log — restore from saved state if available
   const sessionLog = useRef<TestSessionLog>(savedState?.sessionLog || { testId: test.id });
@@ -235,12 +245,14 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
   // Phase 3: Show Preview Activities (prediction, word association, true/false)
   if (testPhase === 'preview' && test.preview && test.preview.length > 0) {
     return (
-      <PreviewPhase
-        activities={test.preview}
-        theme={theme}
-        onComplete={advanceFromPreview}
-        onSkip={advanceFromPreview}
-      />
+      <ContentLabelProvider label={contentLabel}>
+        <PreviewPhase
+          activities={test.preview}
+          theme={theme}
+          onComplete={advanceFromPreview}
+          onSkip={advanceFromPreview}
+        />
+      </ContentLabelProvider>
     );
   }
 
@@ -249,14 +261,16 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
   // Full-screen discussion mode (after clicking "Continue to Discussion")
   if (isSubmitted && showDiscussion) {
     return (
-      <FollowUpQuestions
-        sessionLog={sessionLog.current}
-        transcript={transcript}
-        test={test}
-        contentModel={contentModel}
-        theme={theme}
-        onBack={handleBackFromDiscussion}
-      />
+      <ContentLabelProvider label={contentLabel}>
+        <FollowUpQuestions
+          sessionLog={sessionLog.current}
+          transcript={transcript}
+          test={test}
+          contentModel={contentModel}
+          theme={theme}
+          onBack={handleBackFromDiscussion}
+        />
+      </ContentLabelProvider>
     );
   }
 
@@ -331,6 +345,31 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
       {/* Scrollable Questions List */}
       <div className="flex-1 overflow-y-auto">
         <div className="px-3 py-3 space-y-2 max-w-2xl mx-auto">
+          {/* Reading Passage Panel — shown for reading tests */}
+          {isReading && test.sourceText && (
+            <div className={`rounded-xl border mb-3 ${isDark ? 'border-emerald-700 bg-emerald-900/20' : 'border-emerald-200 bg-emerald-50'}`}>
+              <button
+                onClick={() => setPassageExpanded(!passageExpanded)}
+                className={`w-full px-4 py-3 flex items-center justify-between ${isDark ? 'text-emerald-300' : 'text-emerald-800'}`}
+              >
+                <span className="font-semibold text-sm flex items-center gap-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" />
+                  </svg>
+                  Reading Passage
+                </span>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${passageExpanded ? 'rotate-180' : ''}`}>
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+              {passageExpanded && (
+                <div className={`px-4 pb-4 text-sm leading-relaxed whitespace-pre-wrap ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                  {test.sourceText}
+                </div>
+              )}
+            </div>
+          )}
+
           {test.questions.map((question, index) => {
             const status = getAnswerStatus(question.id);
 
@@ -360,7 +399,7 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
                 </div>
 
                 {/* Multiple Choice - Compact Grid */}
-                {test.type === 'listening-comprehension' && question.options && (
+                {(test.type === 'listening-comprehension' || test.type === 'reading-comprehension') && question.options && (
                   <div className="px-3 pb-2 grid grid-cols-2 gap-1.5">
                     {question.options.map((option, optIndex) => {
                       const letter = String.fromCharCode(65 + optIndex);

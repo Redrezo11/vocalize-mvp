@@ -136,7 +136,9 @@ export interface AudioEntryRow {
 export type AppView = 'home' | 'editor' | 'library' | 'detail' | 'test-builder' | 'test-take' | 'classroom' | 'student-test' | 'transcript';
 
 // Test/Exercise Types
-export type TestType = 'listening-comprehension' | 'fill-in-blank' | 'dictation';
+export type TestType =
+  | 'listening-comprehension' | 'fill-in-blank' | 'dictation'
+  | 'reading-comprehension' | 'reading-fill-in-blank';
 
 export interface TestQuestion {
   id: string;
@@ -210,15 +212,17 @@ export interface ClassroomActivity {
 
 export interface ListeningTest {
   id: string;
-  audioId: string;
+  audioId?: string | null;
   title: string;
   type: TestType;
   questions: TestQuestion[];
   lexis?: LexisItem[];             // Optional vocabulary items
   lexisAudio?: LexisAudio;         // Generated vocabulary audio
-  preview?: PreviewActivity[];     // Pre-listening preview activities
-  classroomActivity?: ClassroomActivity; // Pre-listening classroom discussion
+  preview?: PreviewActivity[];     // Pre-listening/pre-reading preview activities
+  classroomActivity?: ClassroomActivity; // Pre-activity classroom discussion
   transferQuestion?: { en: string; ar: string; audioEn?: string; audioAr?: string }; // Plenary transfer question for whole-class discussion
+  speakerCount?: number | null;    // Number of speakers (null for reading tests)
+  sourceText?: string;             // Reading passage (null for listening tests)
   difficulty?: string;             // CEFR level (A1, A2, B1, B2, C1)
   createdAt: string;
   updatedAt: string;

@@ -1,5 +1,6 @@
 import React from 'react';
 import { XIcon } from './Icons';
+import type { AppMode } from '../contexts/AppModeContext';
 
 export type CEFRLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1';
 export type ContentMode = 'standard' | 'halal' | 'elsd';
@@ -8,6 +9,7 @@ export type ContentModel = 'gpt-5-mini' | 'gpt-5.2';
 export type SpeakerCountDefault = 'random' | 1 | 2 | 3;
 
 export interface AppSettings {
+  appMode: AppMode;
   difficultyLevel: CEFRLevel;
   contentMode: ContentMode;
   classroomTheme: ClassroomTheme;
@@ -18,6 +20,7 @@ export interface AppSettings {
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
+  appMode: 'listening',
   difficultyLevel: 'B1',
   contentMode: 'standard',
   classroomTheme: 'light',
@@ -124,6 +127,48 @@ export const Settings: React.FC<SettingsProps> = ({
 
         {/* Scrollable Content */}
         <div className="px-6 py-5 overflow-y-auto flex-1">
+          {/* App Mode Toggle */}
+          <div className="mb-6">
+            <label className="block text-sm font-semibold text-slate-700 mb-2">
+              App Mode
+            </label>
+            <p className="text-xs text-slate-500 mb-3">
+              Switch between listening and reading test generation
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div
+                onClick={() => setLocalSettings({ ...localSettings, appMode: 'listening' })}
+                className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                  localSettings.appMode === 'listening'
+                    ? 'border-indigo-500 bg-indigo-50'
+                    : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                }`}
+              >
+                <span className="text-2xl">&#127911;</span>
+                <div>
+                  <span className={`block text-sm font-semibold ${localSettings.appMode === 'listening' ? 'text-indigo-700' : 'text-slate-700'}`}>Listening</span>
+                  <span className="block text-xs text-slate-500">Audio dialogues</span>
+                </div>
+              </div>
+              <div
+                onClick={() => setLocalSettings({ ...localSettings, appMode: 'reading' })}
+                className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                  localSettings.appMode === 'reading'
+                    ? 'border-emerald-500 bg-emerald-50'
+                    : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                }`}
+              >
+                <span className="text-2xl">&#128214;</span>
+                <div>
+                  <span className={`block text-sm font-semibold ${localSettings.appMode === 'reading' ? 'text-emerald-700' : 'text-slate-700'}`}>Reading</span>
+                  <span className="block text-xs text-slate-500">Text passages</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-slate-200 mb-6"></div>
+
           {/* Desktop: Two-column layout, Mobile: Single column */}
           <div className="lg:grid lg:grid-cols-2 lg:gap-8">
             {/* Left Column: Difficulty Level */}

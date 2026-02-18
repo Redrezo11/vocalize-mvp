@@ -3,8 +3,10 @@ import { CEFRLevel, ContentMode } from './Settings';
 import { EngineType, SavedAudio, ListeningTest, SpeakerVoiceMapping } from '../types';
 import { parseDialogue, assignOpenAIVoices } from '../utils/parser';
 import { concatenateAudioBlobs } from '../hooks/useElevenLabsTTS';
-import { buildDialoguePrompt, buildTestContentPrompt, validatePayload, OneShotPayload } from './OneShotCreator';
+import { buildDialoguePrompt, buildPassagePrompt, buildTestContentPrompt, validatePayload, OneShotPayload } from './OneShotCreator';
 import { EFL_TOPICS, SpeakerCount, AudioFormat, getRandomTopic, getRandomFormat, getCompatibleTopic, shuffleFormat, randomSpeakerCount } from '../utils/eflTopics';
+import { getRandomReadingTopic, getRandomReadingGenre, getCompatibleReadingTopic, shuffleReadingGenre } from '../utils/readingTopics';
+import { useAppMode } from '../contexts/AppModeContext';
 
 const API_BASE = '/api';
 
@@ -97,7 +99,7 @@ interface JamButtonProps {
   contentMode?: ContentMode;
   topic?: string;
   autoStart?: boolean;
-  onComplete: (result: { audioEntry: SavedAudio; test: ListeningTest }) => void;
+  onComplete: (result: { audioEntry: SavedAudio | null; test: ListeningTest }) => void;
   onError?: (error: string) => void;
 }
 
@@ -267,6 +269,9 @@ export const JamButton: React.FC<JamButtonProps> = ({
   onComplete,
   onError,
 }) => {
+  const appMode = useAppMode();
+  const isReading = appMode === 'reading';
+
   // Profile state - merge defaults with any passed profile/settings
   const [profile, setProfile] = useState<JamProfile>({
     ...DEFAULT_JAM_PROFILE,
@@ -285,19 +290,35 @@ export const JamButton: React.FC<JamButtonProps> = ({
   const [errorMsg, setErrorMsg] = useState('');
   const [generatingLabel, setGeneratingLabel] = useState('');
 
-  // Speaker count & format state
+  // Speaker count & format state (listening mode)
   const [speakerCount, setSpeakerCount] = useState<SpeakerCount>(profile.speakerCount || 2);
   const [audioFormat, setAudioFormat] = useState<AudioFormat | null>(() => getRandomFormat(profile.speakerCount || 2));
 
+  // Reading genre state
+  const [readingGenre, setReadingGenre] = useState(() => getRandomReadingGenre());
+
   // Topic state
   const [currentTopic, setCurrentTopic] = useState(() =>
-    audioFormat ? getCompatibleTopic(audioFormat) : getRandomTopic(profile.speakerCount || 2)
+    isReading
+      ? getRandomReadingTopic()
+      : (audioFormat ? getCompatibleTopic(audioFormat) : getRandomTopic(profile.speakerCount || 2))
   );
   const [isCustomTopic, setIsCustomTopic] = useState(false);
   const [customTopic, setCustomTopic] = useState('');
 
   const shuffleTopic = () => {
-    setCurrentTopic(audioFormat ? getCompatibleTopic(audioFormat, currentTopic) : getRandomTopic(speakerCount, currentTopic));
+    if (isReading) {
+      setCurrentTopic(getCompatibleReadingTopic(readingGenre, currentTopic));
+    } else {
+      setCurrentTopic(audioFormat ? getCompatibleTopic(audioFormat, currentTopic) : getRandomTopic(speakerCount, currentTopic));
+    }
+    setIsCustomTopic(false);
+  };
+
+  const shuffleGenre = () => {
+    const newGenre = shuffleReadingGenre(readingGenre.id);
+    setReadingGenre(newGenre);
+    setCurrentTopic(getCompatibleReadingTopic(newGenre, currentTopic));
     setIsCustomTopic(false);
   };
 
@@ -507,6 +528,7 @@ export const JamButton: React.FC<JamButtonProps> = ({
         audioId: savedAudio.id,
         title: payload.title,
         type: 'listening-comprehension',
+        speakerCount: speakers.length,
         questions: payload.questions.map(q => ({
           ...q,
           id: generateId(),
@@ -601,7 +623,7 @@ export const JamButton: React.FC<JamButtonProps> = ({
     setStage('generating');
     setProgress(10);
     setErrorMsg('');
-    setGeneratingLabel('Generating dialogue...');
+    setGeneratingLabel(isReading ? 'Generating passage...' : 'Generating dialogue...');
 
     try {
       const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
@@ -609,9 +631,11 @@ export const JamButton: React.FC<JamButtonProps> = ({
         throw new Error('OpenAI API key not configured');
       }
 
-      // --- Call 1: Generate dialogue + voice assignments (creative, high reasoning) ---
+      // --- Call 1: Generate content (dialogue for listening, passage for reading) ---
       const effectiveTopic = topic || (isCustomTopic ? customTopic : currentTopic);
-      const dialoguePrompt = buildDialoguePrompt(profile.difficulty, profile.contentMode, profile.targetDuration, effectiveTopic, speakerCount, audioFormat || undefined);
+      const dialoguePrompt = isReading
+        ? buildPassagePrompt(profile.difficulty, profile.contentMode, profile.targetDuration, effectiveTopic, readingGenre)
+        : buildDialoguePrompt(profile.difficulty, profile.contentMode, profile.targetDuration, effectiveTopic, speakerCount, audioFormat || undefined);
 
       const dialogueResponse = await fetch('https://api.openai.com/v1/responses', {
         method: 'POST',
@@ -641,15 +665,27 @@ export const JamButton: React.FC<JamButtonProps> = ({
         throw new Error('No valid JSON found in dialogue response');
       }
 
-      let dialogueResult: { title: string; difficulty: string; transcript: string; voiceAssignments: Record<string, string> };
+      let dialogueResult: { title: string; difficulty: string; transcript: string; passage?: string; voiceAssignments: Record<string, string> };
       try {
         dialogueResult = JSON.parse(dialogueJsonMatch[0]);
       } catch {
         throw new Error('Failed to parse dialogue JSON');
       }
 
-      if (!dialogueResult.title || !dialogueResult.transcript || !dialogueResult.voiceAssignments) {
-        throw new Error('Dialogue response missing required fields (title, transcript, voiceAssignments)');
+      // Reading mode: accept "passage" as alias for "transcript"
+      if (dialogueResult.passage && !dialogueResult.transcript) {
+        dialogueResult.transcript = dialogueResult.passage;
+      }
+
+      if (isReading) {
+        if (!dialogueResult.title || !dialogueResult.transcript) {
+          throw new Error('Passage response missing required fields (title, passage)');
+        }
+        dialogueResult.voiceAssignments = dialogueResult.voiceAssignments || {};
+      } else {
+        if (!dialogueResult.title || !dialogueResult.transcript || !dialogueResult.voiceAssignments) {
+          throw new Error('Dialogue response missing required fields (title, transcript, voiceAssignments)');
+        }
       }
 
       // --- Call 2: Generate test content (analytical, medium reasoning) ---
@@ -715,6 +751,66 @@ export const JamButton: React.FC<JamButtonProps> = ({
       }));
 
       setGeneratingLabel('');
+
+      // --- Reading mode: skip audio, save test directly ---
+      if (isReading) {
+        setStage('saving');
+        setProgress(80);
+
+        const testData = {
+          title: mergedPayload.title,
+          type: 'reading-comprehension',
+          difficulty: mergedPayload.difficulty,
+          sourceText: mergedPayload.transcript, // passage text stored as source_text
+          questions: mergedPayload.questions.map(q => ({
+            ...q,
+            id: generateId(),
+          })),
+          lexis: mergedPayload.lexis?.map(l => ({
+            ...l,
+            id: generateId(),
+          })) || [],
+          preview: mergedPayload.preview?.map(p => ({
+            ...p,
+            items: p.items.map((item: any) => ({ ...item, id: generateId() })),
+          })) || [],
+          classroomActivity: mergedPayload.classroomActivity || undefined,
+          transferQuestion: mergedPayload.transferQuestion || undefined,
+        };
+
+        const testResponse = await fetch(`${API_BASE}/tests`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(testData),
+        });
+
+        if (!testResponse.ok) throw new Error('Failed to save test');
+        const testDataResult = await testResponse.json();
+
+        const savedTest: ListeningTest = {
+          id: testDataResult._id,
+          audioId: '',
+          title: testDataResult.title,
+          type: testDataResult.type,
+          questions: testDataResult.questions?.map((q: any) => ({ ...q, id: q._id || generateId() })) || [],
+          lexis: testDataResult.lexis?.map((l: any) => ({ ...l, id: l._id || generateId() })),
+          preview: testDataResult.preview,
+          classroomActivity: testDataResult.classroomActivity,
+          transferQuestion: testDataResult.transferQuestion,
+          sourceText: testDataResult.source_text,
+          difficulty: testDataResult.difficulty,
+          createdAt: testDataResult.created_at,
+          updatedAt: testDataResult.updated_at,
+        };
+
+        setStage('done');
+        setProgress(100);
+
+        setTimeout(() => {
+          onComplete({ audioEntry: null, test: savedTest });
+        }, 500);
+        return;
+      }
 
       // --- Stage 2: Generate audio with Gemini TTS ---
       setStage('audio');
@@ -945,39 +1041,57 @@ export const JamButton: React.FC<JamButtonProps> = ({
             ))}
           </div>
 
-          {/* Speaker Count */}
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-slate-500 mr-1">Speakers:</span>
-            {([1, 2, 3] as SpeakerCount[]).map((count) => (
+          {isReading ? (
+            /* Genre control — reading mode */
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-slate-500 mr-1">Genre:</span>
+              <div className="px-3 py-1.5 bg-emerald-50 rounded-lg border border-emerald-200 text-sm text-emerald-700 font-medium truncate">
+                {readingGenre.label}
+              </div>
               <button
-                key={count}
-                onClick={() => handleSpeakerCountChange(count)}
+                onClick={shuffleGenre}
                 disabled={stage !== 'idle'}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                  speakerCount === count
-                    ? 'bg-indigo-100 text-indigo-700 ring-2 ring-indigo-500'
-                    : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
-                } disabled:opacity-50`}
+                className="px-2.5 py-1.5 rounded-lg text-sm font-medium bg-slate-200 text-slate-500 hover:bg-emerald-50 hover:text-emerald-600 transition-all disabled:opacity-50"
+                title="Shuffle genre"
               >
-                {count === 3 ? '3+' : count}
+                🎲
               </button>
-            ))}
-            <button
-              onClick={() => {
-                const count = randomSpeakerCount(speakerCount);
-                setSpeakerCount(count);
-                const newFormat = getRandomFormat(count);
-                setAudioFormat(newFormat);
-                setCurrentTopic(getCompatibleTopic(newFormat));
-                setIsCustomTopic(false);
-              }}
-              disabled={stage !== 'idle'}
-              className="px-2.5 py-1.5 rounded-lg text-sm font-medium bg-slate-200 text-slate-500 hover:bg-amber-50 hover:text-amber-600 transition-all disabled:opacity-50"
-              title="Random speaker count"
-            >
-              🎲
-            </button>
-          </div>
+            </div>
+          ) : (
+            /* Speaker Count — listening mode */
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-slate-500 mr-1">Speakers:</span>
+              {([1, 2, 3] as SpeakerCount[]).map((count) => (
+                <button
+                  key={count}
+                  onClick={() => handleSpeakerCountChange(count)}
+                  disabled={stage !== 'idle'}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                    speakerCount === count
+                      ? 'bg-indigo-100 text-indigo-700 ring-2 ring-indigo-500'
+                      : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
+                  } disabled:opacity-50`}
+                >
+                  {count === 3 ? '3+' : count}
+                </button>
+              ))}
+              <button
+                onClick={() => {
+                  const count = randomSpeakerCount(speakerCount);
+                  setSpeakerCount(count);
+                  const newFormat = getRandomFormat(count);
+                  setAudioFormat(newFormat);
+                  setCurrentTopic(getCompatibleTopic(newFormat));
+                  setIsCustomTopic(false);
+                }}
+                disabled={stage !== 'idle'}
+                className="px-2.5 py-1.5 rounded-lg text-sm font-medium bg-slate-200 text-slate-500 hover:bg-amber-50 hover:text-amber-600 transition-all disabled:opacity-50"
+                title="Random speaker count"
+              >
+                🎲
+              </button>
+            </div>
+          )}
 
           {/* Topic */}
           <div className="flex items-center gap-2 w-full max-w-sm">

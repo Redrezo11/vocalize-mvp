@@ -1,10 +1,12 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { SavedAudio, ListeningTest, LexisAudio } from '../types';
 import { ArrowLeftIcon, PlayIcon, PauseIcon, RefreshIcon, ChevronRightIcon } from './Icons';
 import { ClassroomTheme } from './Settings';
 import QRCode from 'qrcode';
 import { generateLexisAudio, generateAllWordAudios, LexisTTSEngine } from '../utils/lexisTTS';
 import { fullTestCache } from '../utils/testCache';
+import { useAppMode } from '../contexts/AppModeContext';
+import { modeLabel, isTestTypeForMode } from '../utils/modeLabels';
 
 // Map server test document to client ListeningTest format
 const mapTestFromServer = (t: any): ListeningTest => ({
@@ -12,11 +14,155 @@ const mapTestFromServer = (t: any): ListeningTest => ({
   id: t._id || t.id,
   createdAt: t.created_at || t.createdAt,
   updatedAt: t.updated_at || t.updatedAt,
+  sourceText: t.source_text || t.sourceText || undefined,
   questions: (t.questions || []).map((q: any) => ({ ...q, id: q._id || q.id || Math.random().toString(36).substring(2, 11) })),
   lexis: t.lexis?.map((l: any) => ({ ...l, id: l._id || l.id || Math.random().toString(36).substring(2, 11) })),
   lexisAudio: t.lexisAudio,
   classroomActivity: t.classroomActivity,
 });
+
+// --- Tap-to-speak: click any word to hear its pronunciation via TTS ---
+const pronunciationCache = new Map<string, string>(); // word → blob URL (persists across re-renders)
+let currentPronunciationAudio: HTMLAudioElement | null = null;
+
+const speakWord = async (rawWord: string, onStateChange?: (word: string, state: 'loading' | 'playing' | 'idle') => void) => {
+  // Strip punctuation but keep Arabic characters, hyphens, apostrophes
+  const clean = rawWord.replace(/[^\p{L}\p{N}'-]/gu, '').trim();
+  if (!clean) return;
+  const cacheKey = clean.toLowerCase();
+
+  // Stop any currently playing pronunciation
+  if (currentPronunciationAudio) {
+    currentPronunciationAudio.pause();
+    currentPronunciationAudio = null;
+  }
+
+  onStateChange?.(rawWord, 'loading');
+
+  try {
+    let blobUrl = pronunciationCache.get(cacheKey);
+    if (!blobUrl) {
+      const apiKey = (import.meta as any).env?.VITE_OPENAI_API_KEY;
+      if (!apiKey) throw new Error('No API key');
+      const response = await fetch('https://api.openai.com/v1/audio/speech', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: 'tts-1', input: clean, voice: 'nova', response_format: 'mp3' }),
+      });
+      if (!response.ok) throw new Error('TTS failed');
+      const blob = await response.blob();
+      blobUrl = URL.createObjectURL(blob);
+      pronunciationCache.set(cacheKey, blobUrl);
+    }
+
+    const audio = new Audio(blobUrl);
+    currentPronunciationAudio = audio;
+    onStateChange?.(rawWord, 'playing');
+    audio.onended = () => {
+      currentPronunciationAudio = null;
+      onStateChange?.(rawWord, 'idle');
+    };
+    await audio.play();
+  } catch {
+    onStateChange?.(rawWord, 'idle');
+  }
+};
+
+const SpeakableText: React.FC<{
+  text: string;
+  className?: string;
+  dir?: string;
+}> = ({ text, className, dir }) => {
+  const [activeWord, setActiveWord] = useState<{ word: string; state: 'loading' | 'playing' | 'idle' } | null>(null);
+
+  const handleClick = useCallback((word: string) => {
+    speakWord(word, (w, state) => {
+      if (state === 'idle') setActiveWord(null);
+      else setActiveWord({ word: w, state });
+    });
+  }, []);
+
+  // Split text into words and whitespace, preserving spaces
+  const tokens = text.split(/(\s+)/);
+
+  return (
+    <p className={className} dir={dir}>
+      {tokens.map((token, i) => {
+        // Whitespace tokens render as-is
+        if (/^\s+$/.test(token)) return token;
+
+        const isActive = activeWord?.word === token;
+        const isLoading = isActive && activeWord?.state === 'loading';
+        const isPlaying = isActive && activeWord?.state === 'playing';
+
+        return (
+          <span
+            key={`${i}-${token}`}
+            onClick={() => handleClick(token)}
+            className={`cursor-pointer transition-all duration-200 rounded-sm ${
+              isLoading ? 'animate-pulse opacity-60' :
+              isPlaying ? 'text-indigo-400' : ''
+            }`}
+            style={{
+              textDecoration: 'none',
+              borderBottom: '2px solid transparent',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.borderBottomColor = 'rgba(129, 140, 248, 0.5)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderBottomColor = 'transparent'; }}
+          >
+            {token}
+          </span>
+        );
+      })}
+    </p>
+  );
+};
+
+// Silent generation: cache word audio without playing it
+const speakWordSilent = async (rawWord: string): Promise<void> => {
+  const clean = rawWord.replace(/[^\p{L}\p{N}'-]/gu, '').trim();
+  if (!clean) return;
+  const cacheKey = clean.toLowerCase();
+  if (pronunciationCache.has(cacheKey)) return;
+
+  const apiKey = (import.meta as any).env?.VITE_OPENAI_API_KEY;
+  if (!apiKey) return;
+  const response = await fetch('https://api.openai.com/v1/audio/speech', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: 'tts-1', input: clean, voice: 'nova', response_format: 'mp3' }),
+  });
+  if (!response.ok) return;
+  const blob = await response.blob();
+  pronunciationCache.set(cacheKey, URL.createObjectURL(blob));
+};
+
+// Batch pre-generate all unique words from given texts
+const preGenerateWords = async (
+  texts: string[],
+  onProgress: (done: number, total: number) => void,
+): Promise<void> => {
+  const allWords = new Set<string>();
+  for (const text of texts) {
+    for (const token of text.split(/\s+/)) {
+      const clean = token.replace(/[^\p{L}\p{N}'-]/gu, '').trim();
+      if (clean && !pronunciationCache.has(clean.toLowerCase())) {
+        allWords.add(clean);
+      }
+    }
+  }
+
+  const words = Array.from(allWords);
+  if (words.length === 0) { onProgress(0, 0); return; }
+  let done = 0;
+  onProgress(0, words.length);
+
+  for (const word of words) {
+    await speakWordSilent(word);
+    done++;
+    onProgress(done, words.length);
+  }
+};
 
 interface ClassroomModeProps {
   tests: ListeningTest[];
@@ -35,6 +181,8 @@ interface ClassroomModeProps {
 type ClassroomView = 'select' | 'present';
 
 export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTests = false, audioEntries, theme = 'light', autoSelectTestId, onAutoSelectHandled, onExit, onPreviewStudent, onEditTest, onDeleteTest, onUpdateTest }) => {
+  const appMode = useAppMode();
+  const labels = modeLabel(appMode);
   const isDark = theme === 'dark';
   const [view, setView] = useState<ClassroomView>('select');
   const [selectedTest, setSelectedTest] = useState<ListeningTest | null>(null);
@@ -84,6 +232,10 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
   const [isGeneratingPlenaryAudio, setIsGeneratingPlenaryAudio] = useState(false);
   const [plenaryAudioLang, setPlenaryAudioLang] = useState<'en' | 'ar' | null>(null);
   const [isPlayingPlenaryAudio, setIsPlayingPlenaryAudio] = useState(false);
+
+  // Word pronunciation pre-loading state
+  const [preloadProgress, setPreloadProgress] = useState<{ done: number; total: number } | null>(null);
+  const [preloadSlide, setPreloadSlide] = useState<'preListening' | 'plenary' | null>(null);
   const plenaryAudioRef = useRef<HTMLAudioElement>(null);
 
 
@@ -103,11 +255,12 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
   const fullscreenSlides = useMemo(() => {
     if (!selectedTest) return [];
     const slides: string[] = [];
+    if (appMode === 'reading' && selectedTest.sourceText) slides.push('readingPassage');
     if (selectedTest.lexis?.length) slides.push('vocabulary');
     if (selectedTest.classroomActivity) slides.push('preListening');
     if (selectedTest.transferQuestion) slides.push('plenary');
     return slides;
-  }, [selectedTest]);
+  }, [selectedTest, appMode]);
 
   const currentSlideIndex = fullscreenSlide ? fullscreenSlides.indexOf(fullscreenSlide) : -1;
   const isFullscreen = fullscreenSlide !== null;
@@ -635,6 +788,30 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
     }
   };
 
+  const handlePreloadWords = async (slide: 'preListening' | 'plenary') => {
+    if (!selectedTest || preloadSlide) return;
+    setPreloadSlide(slide);
+
+    const texts: string[] = [];
+    if (slide === 'preListening' && selectedTest.classroomActivity) {
+      texts.push(selectedTest.classroomActivity.situationSetup.en);
+      texts.push(selectedTest.classroomActivity.discussionPrompt.en);
+      if (showPreListeningArabic) {
+        texts.push(selectedTest.classroomActivity.situationSetup.ar);
+        texts.push(selectedTest.classroomActivity.discussionPrompt.ar);
+      }
+    } else if (slide === 'plenary' && selectedTest.transferQuestion) {
+      texts.push(selectedTest.transferQuestion.en);
+      if (showPlenaryArabic) {
+        texts.push(selectedTest.transferQuestion.ar);
+      }
+    }
+
+    await preGenerateWords(texts, (done, total) => setPreloadProgress({ done, total }));
+    setPreloadProgress(null);
+    setPreloadSlide(null);
+  };
+
   const handlePlayPlenaryAudio = (src: string) => {
     const audioEl = plenaryAudioRef.current;
     if (!audioEl) return;
@@ -794,13 +971,13 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
             handlePlayWordAudio();
           } else if (lexisViewMode === 'focus' && selectedTest?.lexisAudio?.wordAudios) {
             handlePlayWordAudio();
-          } else if (selectedAudio) {
+          } else if (appMode === 'listening' && selectedAudio) {
             handlePlayPause();
           }
           break;
         case 'r':
         case 'R':
-          if (selectedAudio) {
+          if (appMode === 'listening' && selectedAudio) {
             handleRestart();
           }
           break;
@@ -888,7 +1065,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
           break;
         case 'Escape':
           // Exit presentation entirely (fullscreen Escape handled by early return above)
-          if (audioRef.current) {
+          if (appMode === 'listening' && audioRef.current) {
             audioRef.current.pause();
           }
           setIsPlaying(false);
@@ -907,6 +1084,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
   const getTestTypeLabel = (type: string): string => {
     switch (type) {
       case 'listening-comprehension': return 'Comprehension';
+      case 'reading-comprehension': return 'Reading';
       case 'fill-in-blank': return 'Fill in Blank';
       case 'dictation': return 'Dictation';
       default: return type;
@@ -917,6 +1095,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
   const getTestTypeBadge = (type: string): string => {
     switch (type) {
       case 'listening-comprehension': return 'bg-blue-500 text-white';
+      case 'reading-comprehension': return 'bg-emerald-500 text-white';
       case 'fill-in-blank': return 'bg-amber-500 text-white';
       case 'dictation': return 'bg-purple-500 text-white';
       default: return 'bg-slate-500 text-white';
@@ -1034,14 +1213,14 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
         </div>
       ) : tests.length === 0 ? (
         <div className="text-center py-24">
-          <p className={`text-2xl mb-4 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>No tests available</p>
-          <p className={isDark ? 'text-slate-500' : 'text-slate-400'}>Create tests from your audio library first</p>
+          <p className={`text-2xl mb-4 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>No {appMode === 'reading' ? 'reading' : 'listening'} tests available</p>
+          <p className={isDark ? 'text-slate-500' : 'text-slate-400'}>Create tests from your {appMode === 'reading' ? 'passages' : 'audio library'} first</p>
         </div>
       ) : (
         <div className="max-w-4xl mx-auto">
           <h2 className={`text-xl mb-6 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Select a test to present:</h2>
           <div className="space-y-4">
-            {tests.map(test => {
+            {tests.filter(t => isTestTypeForMode(t.type, appMode)).map(test => {
               const audio = getAudioForTest(test);
               return (
                 <div
@@ -1060,15 +1239,18 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                       </div>
                       <h3 className={`text-xl font-semibold mb-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>{test.title}</h3>
                       {audio && (
-                        <p className={isDark ? 'text-slate-400' : 'text-slate-500'}>Audio: {audio.title}</p>
+                        <p className={isDark ? 'text-slate-400' : 'text-slate-500'}>{labels.contentSource}: {audio.title}</p>
                       )}
-                      {!audio && test.lexis && test.lexis.length > 0 && (
+                      {appMode === 'reading' && test.sourceText && (
+                        <p className={isDark ? 'text-slate-400' : 'text-slate-500'}>Passage: {test.sourceText.slice(0, 80)}…</p>
+                      )}
+                      {appMode === 'listening' && !audio && test.lexis && test.lexis.length > 0 && (
                         <p className={`text-sm ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>No audio — vocab-only presentation</p>
                       )}
-                      {!audio && (!test.lexis || test.lexis.length === 0) && test.questions && test.questions.length > 0 && (
+                      {appMode === 'listening' && !audio && (!test.lexis || test.lexis.length === 0) && test.questions && test.questions.length > 0 && (
                         <p className={`text-sm ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>No audio — questions-only presentation</p>
                       )}
-                      {!audio && (!test.lexis || test.lexis.length === 0) && (!test.questions || test.questions.length === 0) && (
+                      {appMode === 'listening' && !audio && (!test.lexis || test.lexis.length === 0) && (!test.questions || test.questions.length === 0) && (
                         <p className="text-red-400 text-sm">No audio, vocabulary, or questions</p>
                       )}
                     </div>
@@ -1223,15 +1405,15 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                 <span className="text-sm">Preview</span>
               </button>
 
-              {/* Pre-Listening Activity Button */}
+              {/* Pre-Listening/Pre-Reading Activity Button */}
               {selectedTest.classroomActivity && (
                 <button
                   onClick={() => setFullscreenSlide(fullscreenSlide === 'preListening' ? null : 'preListening')}
                   className="flex items-center gap-2 px-3 py-2 rounded-lg transition-colors bg-slate-700 text-slate-300 hover:bg-slate-600"
-                  title="Pre-listening classroom activity"
+                  title={`${labels.preActivity} classroom activity`}
                 >
                   <span className="text-sm">💬</span>
-                  <span className="text-sm">Pre-Listening</span>
+                  <span className="text-sm">{labels.preActivity}</span>
                 </button>
               )}
 
@@ -1283,8 +1465,8 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                 </button>
               )}
 
-              {/* Play Counter - only shown with audio */}
-              {selectedAudio && (
+              {/* Play Counter - only shown with audio in listening mode */}
+              {appMode === 'listening' && selectedAudio && (
                 <div className="flex items-center gap-2 bg-slate-800 px-4 py-2 rounded-lg">
                   <span className="text-slate-400 text-sm">Plays:</span>
                   <span className="text-2xl font-bold text-indigo-400">{playCount}</span>
@@ -1299,8 +1481,8 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
               )}
             </div>
 
-            {/* Audio Player */}
-            {selectedAudio && (
+            {/* Audio Player — listening mode only */}
+            {appMode === 'listening' && selectedAudio && (
               <div className="flex items-center gap-4">
                 <button
                   onClick={handlePlayPause}
@@ -1356,14 +1538,31 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
         </div>
         )}
 
-        {/* Audio element — always mounted so it works in both toolbar and fullscreen widget */}
-        {selectedAudio?.audioUrl && (
+        {/* Audio element — listening mode only */}
+        {appMode === 'listening' && selectedAudio?.audioUrl && (
           <audio
             ref={audioRef}
             src={selectedAudio.audioUrl}
             preload="metadata"
             className="hidden"
           />
+        )}
+
+        {/* Reading Passage — reading mode only */}
+        {appMode === 'reading' && selectedTest.sourceText && (
+          <div className="max-w-4xl mx-auto px-6 py-6">
+            <div className={`rounded-2xl border p-6 ${isDark ? 'border-emerald-700 bg-emerald-900/20' : 'border-emerald-200 bg-emerald-50/80'}`}>
+              <h2 className={`text-lg font-bold mb-4 flex items-center gap-2 ${isDark ? 'text-emerald-300' : 'text-emerald-800'}`}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" />
+                </svg>
+                Reading Passage
+              </h2>
+              <div className={`text-base leading-relaxed whitespace-pre-wrap ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                {selectedTest.sourceText}
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Vocabulary / Lexis Section */}
@@ -1640,7 +1839,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
               <span><kbd className="px-2 py-1 rounded bg-slate-700">F</kbd> Fullscreen</span>
             )}
             {selectedTest?.classroomActivity && (
-              <span><kbd className="px-2 py-1 rounded bg-slate-700">A</kbd> Pre-Listening</span>
+              <span><kbd className="px-2 py-1 rounded bg-slate-700">A</kbd> {labels.preActivity}</span>
             )}
             {selectedTest?.transferQuestion && (
               <span><kbd className="px-2 py-1 rounded bg-slate-700">T</kbd> Plenary</span>
@@ -1656,12 +1855,30 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
             {/* Slide content */}
             <div className="flex-1 overflow-hidden">
 
-              {/* Pre-Listening Slide */}
+              {/* Reading Passage Slide */}
+              {fullscreenSlide === 'readingPassage' && selectedTest.sourceText && (
+                <div className="h-full flex flex-col">
+                  <div className="text-center pt-6 pb-4 flex-shrink-0">
+                    <h2 className="text-2xl font-semibold text-slate-400 tracking-wide uppercase">
+                      📖 Reading Passage
+                    </h2>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-8 pb-20">
+                    <div className="max-w-5xl w-full mx-auto">
+                      <div className="text-2xl leading-loose text-slate-200 whitespace-pre-wrap">
+                        {selectedTest.sourceText}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Pre-Listening/Pre-Reading Slide */}
               {fullscreenSlide === 'preListening' && selectedTest.classroomActivity && (
                 <div className="h-full flex flex-col">
                   <div className="text-center pt-6 pb-4 flex-shrink-0">
                     <h2 className="text-2xl font-semibold text-slate-400 tracking-wide uppercase">
-                      💬 Pre-Listening
+                      💬 {labels.preActivity}
                     </h2>
                   </div>
                   <div className="flex-1 overflow-y-auto p-8 pb-20">
@@ -1671,13 +1888,9 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                           <span className="text-4xl">🎧</span>
                           <h3 className="text-4xl font-bold text-white">Situation</h3>
                         </div>
-                        <p className="text-3xl leading-loose text-slate-200">
-                          {selectedTest.classroomActivity.situationSetup.en}
-                        </p>
+                        <SpeakableText text={selectedTest.classroomActivity.situationSetup.en} className="text-3xl leading-loose text-slate-200" />
                         {showPreListeningArabic && (
-                          <p className="text-2xl leading-loose mt-3 text-slate-400" dir="rtl">
-                            {selectedTest.classroomActivity.situationSetup.ar}
-                          </p>
+                          <SpeakableText text={selectedTest.classroomActivity.situationSetup.ar} className="text-2xl leading-loose mt-3 text-slate-400" dir="rtl" />
                         )}
                       </div>
                       <hr className="border-slate-700" />
@@ -1686,13 +1899,9 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                           <span className="text-4xl">💬</span>
                           <h3 className="text-4xl font-bold text-white">Discuss</h3>
                         </div>
-                        <p className="text-3xl leading-loose text-slate-200">
-                          {selectedTest.classroomActivity.discussionPrompt.en}
-                        </p>
+                        <SpeakableText text={selectedTest.classroomActivity.discussionPrompt.en} className="text-3xl leading-loose text-slate-200" />
                         {showPreListeningArabic && (
-                          <p className="text-2xl leading-loose mt-3 text-slate-400" dir="rtl">
-                            {selectedTest.classroomActivity.discussionPrompt.ar}
-                          </p>
+                          <SpeakableText text={selectedTest.classroomActivity.discussionPrompt.ar} className="text-2xl leading-loose mt-3 text-slate-400" dir="rtl" />
                         )}
                       </div>
                       {/* Audio + Arabic toggle buttons */}
@@ -1745,6 +1954,23 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                             ) : (<><span>🔊</span> Generate عربي</>)}
                           </button>
                         )}
+                        <button
+                          onClick={() => handlePreloadWords('preListening')}
+                          disabled={preloadSlide === 'preListening'}
+                          className={`flex items-center gap-2 px-6 py-3 rounded-xl text-lg font-medium transition-colors ${
+                            preloadSlide === 'preListening'
+                              ? 'bg-cyan-500 text-white opacity-75'
+                              : preloadProgress === null && preloadSlide === null && pronunciationCache.size > 0
+                                ? 'bg-emerald-600 text-white'
+                                : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
+                          }`}
+                        >
+                          {preloadSlide === 'preListening' ? (
+                            <><svg className="w-5 h-5 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg> Pre-loading {preloadProgress?.done}/{preloadProgress?.total}...</>
+                          ) : (
+                            <><span>📖</span> Pre-load Words</>
+                          )}
+                        </button>
                         <button
                           onClick={() => setShowPreListeningArabic(!showPreListeningArabic)}
                           className={`flex items-center gap-2 px-6 py-3 rounded-xl text-lg font-medium transition-colors ${
@@ -1863,13 +2089,9 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                           <span className="text-4xl">🗣️</span>
                           <h3 className="text-4xl font-bold text-white">Discussion Question</h3>
                         </div>
-                        <p className="text-3xl leading-loose text-slate-200">
-                          {selectedTest.transferQuestion.en}
-                        </p>
+                        <SpeakableText text={selectedTest.transferQuestion.en} className="text-3xl leading-loose text-slate-200" />
                         {showPlenaryArabic && (
-                          <p className="text-2xl leading-loose mt-3 text-slate-400" dir="rtl">
-                            {selectedTest.transferQuestion.ar}
-                          </p>
+                          <SpeakableText text={selectedTest.transferQuestion.ar} className="text-2xl leading-loose mt-3 text-slate-400" dir="rtl" />
                         )}
                       </div>
                       <hr className="border-slate-700" />
@@ -1926,6 +2148,21 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                             ) : (<><span>🔊</span> Generate عربي</>)}
                           </button>
                         )}
+                        <button
+                          onClick={() => handlePreloadWords('plenary')}
+                          disabled={preloadSlide === 'plenary'}
+                          className={`flex items-center gap-2 px-6 py-3 rounded-xl text-lg font-medium transition-colors ${
+                            preloadSlide === 'plenary'
+                              ? 'bg-cyan-500 text-white opacity-75'
+                              : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
+                          }`}
+                        >
+                          {preloadSlide === 'plenary' ? (
+                            <><svg className="w-5 h-5 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg> Pre-loading {preloadProgress?.done}/{preloadProgress?.total}...</>
+                          ) : (
+                            <><span>📖</span> Pre-load Words</>
+                          )}
+                        </button>
                         <button
                           onClick={() => setShowPlenaryArabic(!showPlenaryArabic)}
                           className={`flex items-center gap-2 px-6 py-3 rounded-xl text-lg font-medium transition-colors ${

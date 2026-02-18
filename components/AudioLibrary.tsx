@@ -3,6 +3,7 @@ import { SavedAudio, EngineType, ListeningTest } from '../types';
 import { PlayIcon, TrashIcon, PlusIcon, FileAudioIcon, FileTextIcon, ClipboardIcon, EditIcon, SquareIcon, CheckSquareIcon } from './Icons';
 import { CreationMethodSelector, CreationMethod } from './CreationMethodSelector';
 import { ImportWizard, ImportData } from './ImportWizard';
+import { useAppMode } from '../contexts/AppModeContext';
 
 type LibraryTab = 'audio' | 'transcripts' | 'tests';
 
@@ -70,7 +71,9 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
   onBatchDeleteTests,
 }) => {
   console.log('[AudioLibrary] Rendering with initialTab =', initialTab);
-  const [activeTab, setActiveTab] = useState<LibraryTab>(initialTab);
+  const appMode = useAppMode();
+  const isReading = appMode === 'reading';
+  const [activeTab, setActiveTab] = useState<LibraryTab>(isReading ? 'tests' : initialTab);
   const [showMethodSelector, setShowMethodSelector] = useState(false);
   const [showImportWizard, setShowImportWizard] = useState(false);
 
@@ -103,11 +106,12 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
     onImportComplete(data);
   };
 
-  // Sync with initialTab prop when it changes
+  // Sync with initialTab prop when it changes; reading mode always uses 'tests'
   useEffect(() => {
-    console.log('[AudioLibrary] useEffect: initialTab changed to', initialTab, '- setting activeTab');
-    setActiveTab(initialTab);
-  }, [initialTab]);
+    const tab = isReading ? 'tests' : initialTab;
+    console.log('[AudioLibrary] useEffect: initialTab changed to', initialTab, '- setting activeTab to', tab);
+    setActiveTab(tab);
+  }, [initialTab, isReading]);
 
   // Clear selection when tab changes
   useEffect(() => {
@@ -192,9 +196,14 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
     <div className="max-w-4xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">My Library</h1>
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">
+            {isReading ? 'Reading Passages' : 'My Library'}
+          </h1>
           <p className="text-sm text-slate-500 mt-1">
-            {audioEntries.length} audio, {transcriptEntries.length} transcripts, {tests.length} tests
+            {isReading
+              ? `${tests.length} ${tests.length === 1 ? 'passage' : 'passages'}`
+              : `${audioEntries.length} audio, ${transcriptEntries.length} transcripts, ${tests.length} tests`
+            }
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -238,68 +247,82 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-2 mb-6">
-        <button
-          onClick={() => setActiveTab('audio')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all duration-200 ${
-            activeTab === 'audio'
-              ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-500/30'
-              : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
-          }`}
-        >
-          <FileAudioIcon className="w-4 h-4" />
-          <span>Audio</span>
-          <span className={`ml-1 px-2 py-0.5 rounded-full text-xs font-bold ${
-            activeTab === 'audio' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'
-          }`}>
-            {audioEntries.length}
-          </span>
-        </button>
-        <button
-          onClick={() => setActiveTab('transcripts')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all duration-200 ${
-            activeTab === 'transcripts'
-              ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-500/30'
-              : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
-          }`}
-        >
-          <FileTextIcon className="w-4 h-4" />
-          <span>Transcripts</span>
-          <span className={`ml-1 px-2 py-0.5 rounded-full text-xs font-bold ${
-            activeTab === 'transcripts' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'
-          }`}>
-            {transcriptEntries.length}
-          </span>
-        </button>
-        <button
-          onClick={() => setActiveTab('tests')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all duration-200 ${
-            activeTab === 'tests'
-              ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-500/30'
-              : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
-          }`}
-        >
-          <ClipboardIcon className="w-4 h-4" />
-          <span>Tests</span>
-          <span className={`ml-1 px-2 py-0.5 rounded-full text-xs font-bold ${
-            activeTab === 'tests' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'
-          }`}>
-            {tests.length}
-          </span>
-        </button>
-      </div>
+      {/* Tabs — hidden in reading mode (single view, no tabs needed) */}
+      {!isReading && (
+        <div className="flex gap-2 mb-6">
+          <button
+            onClick={() => setActiveTab('audio')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all duration-200 ${
+              activeTab === 'audio'
+                ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-500/30'
+                : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
+            }`}
+          >
+            <FileAudioIcon className="w-4 h-4" />
+            <span>Audio</span>
+            <span className={`ml-1 px-2 py-0.5 rounded-full text-xs font-bold ${
+              activeTab === 'audio' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'
+            }`}>
+              {audioEntries.length}
+            </span>
+          </button>
+          <button
+            onClick={() => setActiveTab('transcripts')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all duration-200 ${
+              activeTab === 'transcripts'
+                ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-500/30'
+                : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
+            }`}
+          >
+            <FileTextIcon className="w-4 h-4" />
+            <span>Transcripts</span>
+            <span className={`ml-1 px-2 py-0.5 rounded-full text-xs font-bold ${
+              activeTab === 'transcripts' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'
+            }`}>
+              {transcriptEntries.length}
+            </span>
+          </button>
+          <button
+            onClick={() => setActiveTab('tests')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all duration-200 ${
+              activeTab === 'tests'
+                ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-500/30'
+                : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
+            }`}
+          >
+            <ClipboardIcon className="w-4 h-4" />
+            <span>Tests</span>
+            <span className={`ml-1 px-2 py-0.5 rounded-full text-xs font-bold ${
+              activeTab === 'tests' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'
+            }`}>
+              {tests.length}
+            </span>
+          </button>
+        </div>
+      )}
 
       {/* Tests Tab Content */}
       {activeTab === 'tests' && (
         tests.length === 0 ? (
-          <div className="bg-white/80 backdrop-blur-sm rounded-3xl border border-slate-200/60 p-12 text-center shadow-sm">
-            <div className="w-16 h-16 bg-gradient-to-br from-slate-100 to-slate-200 rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <ClipboardIcon className="w-8 h-8 text-slate-400" />
+          <div className={`bg-white/80 backdrop-blur-sm rounded-3xl border p-12 text-center shadow-sm ${
+            isReading ? 'border-emerald-200/60' : 'border-slate-200/60'
+          }`}>
+            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 ${
+              isReading ? 'bg-gradient-to-br from-emerald-100 to-emerald-200' : 'bg-gradient-to-br from-slate-100 to-slate-200'
+            }`}>
+              {isReading ? (
+                <FileTextIcon className="w-8 h-8 text-emerald-500" />
+              ) : (
+                <ClipboardIcon className="w-8 h-8 text-slate-400" />
+              )}
             </div>
-            <h3 className="text-lg font-bold text-slate-700 mb-2">No tests yet</h3>
+            <h3 className="text-lg font-bold text-slate-700 mb-2">
+              {isReading ? 'No reading passages yet' : 'No tests yet'}
+            </h3>
             <p className="text-slate-500 mb-6">
-              Import a test document or create tests from your audio/transcripts.
+              {isReading
+                ? 'Create a reading passage using Paste Passage, One Shot, or JAM.'
+                : 'Import a test document or create tests from your audio/transcripts.'}
             </p>
           </div>
         ) : (
@@ -327,8 +350,14 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <h3 className="font-bold text-slate-900 truncate">{test.title}</h3>
-                      <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 rounded-full text-xs font-medium">
-                        {test.type === 'listening-comprehension' ? 'Listening' : test.type}
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                        test.type.startsWith('reading')
+                          ? 'bg-emerald-50 text-emerald-700'
+                          : 'bg-indigo-50 text-indigo-600'
+                      }`}>
+                        {test.type === 'listening-comprehension' ? 'Listening' :
+                         test.type === 'reading-comprehension' ? 'Reading' :
+                         test.type}
                       </span>
                     </div>
                     <div className="flex items-center gap-2 mt-1.5 text-xs text-slate-500">
@@ -343,7 +372,11 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
                       <span className="text-slate-400">{formatDate(test.updatedAt)}</span>
                     </div>
                     <p className="mt-3 text-sm text-slate-600 line-clamp-2 leading-relaxed">
-                      {test.questions[0]?.questionText ? truncateText(test.questions[0].questionText, 150) : 'No questions'}
+                      {test.sourceText
+                        ? truncateText(test.sourceText, 150)
+                        : test.questions[0]?.questionText
+                          ? truncateText(test.questions[0].questionText, 150)
+                          : 'No questions'}
                     </p>
                   </div>
                   {!isSelecting && (

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { PredictionItem, PreviewPredictionResult } from '../types';
 import { ClassroomTheme } from './Settings';
+import { useContentLabel } from '../contexts/ContentLabelContext';
 
 interface PredictionActivityProps {
   items: PredictionItem[];
@@ -16,6 +17,7 @@ export const PredictionActivity: React.FC<PredictionActivityProps> = ({
   onSkip,
 }) => {
   const isDark = theme === 'dark';
+  const label = useContentLabel();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<{ [id: string]: string }>({});
   const [showArabic, setShowArabic] = useState(false);
@@ -67,7 +69,7 @@ export const PredictionActivity: React.FC<PredictionActivityProps> = ({
         <div className="px-4 py-3 flex items-center justify-between">
           <div>
             <h1 className={`font-bold text-lg ${isDark ? 'text-white' : 'text-purple-900'}`}>
-              Before You Listen
+              Before You {label.imperative}
             </h1>
             <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-purple-600'}`}>
               Question {currentIndex + 1} of {items.length}

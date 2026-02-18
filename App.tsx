@@ -5,7 +5,7 @@ import { useElevenLabsTTS } from './hooks/useElevenLabsTTS';
 import { useMongoStorage } from './hooks/useMongoStorage';
 import { parseDialogue, parseLLMTranscript, guessGender } from './utils/parser';
 import { BrowserVoiceConfig, EngineType, GEMINI_VOICES, SpeakerVoiceMapping, AppView, SavedAudio, ListeningTest, TestAttempt } from './types';
-import { PlayIcon, StopIcon, FolderIcon, PlusIcon, SaveIcon, ArrowLeftIcon, PresentationIcon, FileTextIcon, SparklesIcon, SettingsIcon, ImportIcon } from './components/Icons';
+import { PlayIcon, StopIcon, FolderIcon, PlusIcon, SaveIcon, ArrowLeftIcon, PresentationIcon, FileTextIcon, SparklesIcon, SettingsIcon, ImportIcon, BookOpenIcon } from './components/Icons';
 import { SaveDialog } from './components/SaveDialog';
 import { PromptBuilder } from './components/PromptBuilder';
 import { Settings, AppSettings, DEFAULT_SETTINGS } from './components/Settings';
@@ -13,6 +13,8 @@ import { useSettings } from './hooks/useSettings';
 import { HomePage, CreationMethod } from './components/HomePage';
 import { ImportWizard, ImportData } from './components/ImportWizard';
 import { fullTestCache } from './utils/testCache';
+import { AppModeProvider } from './contexts/AppModeContext';
+import { isTestTypeForMode } from './utils/modeLabels';
 
 // Lazy load components for better initial load
 const Visualizer = lazy(() => import('./components/Visualizer'));
@@ -111,6 +113,7 @@ const App: React.FC = () => {
   const [studentTestError, setStudentTestError] = useState<string | null>(null);
   const [isSavingTranscript, setIsSavingTranscript] = useState(false);
   const [lastPromptDifficulty, setLastPromptDifficulty] = useState<string | null>(null);
+  const [readingPassage, setReadingPassage] = useState<{ title: string; text: string } | null>(null);
 
   // Editor state
   const [title, setTitle] = useState("Untitled Audio");
@@ -130,6 +133,13 @@ const App: React.FC = () => {
   const [jamTopic, setJamTopic] = useState<string | undefined>();
   const [autoSelectTestId, setAutoSelectTestId] = useState<string | null>(null);
   const settingsHook = useSettings();
+
+  // Filter tests by current app mode (reading tests only in reading mode, listening only in listening)
+  const modeFilteredTests = useMemo(() => {
+    const filtered = allTests.filter(t => isTestTypeForMode(t.type, settingsHook.settings.appMode));
+    console.log('[modeFilter] appMode:', settingsHook.settings.appMode, '| total:', allTests.length, '| filtered:', filtered.length);
+    return filtered;
+  }, [allTests, settingsHook.settings.appMode]);
 
   // Analysis State
   const analysis = useMemo(() => parseDialogue(text), [text]);
@@ -688,7 +698,7 @@ const App: React.FC = () => {
   };
 
   // Handle one-shot completion - add test to state and navigate to classroom
-  const handleOneShotComplete = useCallback((result: { audioEntry: SavedAudio; test: any }) => {
+  const handleOneShotComplete = useCallback((result: { audioEntry: SavedAudio | null; test: any }) => {
     setShowOneShotCreator(false);
 
     console.log('[handleOneShotComplete] raw result.test._id:', result.test?._id, '| .id:', result.test?.id, '| title:', result.test?.title);
@@ -699,6 +709,8 @@ const App: React.FC = () => {
       id: result.test._id || result.test.id,
       createdAt: result.test.created_at,
       updatedAt: result.test.updated_at,
+      speakerCount: result.test.speaker_count ?? result.test.speakerCount ?? undefined,
+      sourceText: result.test.source_text || result.test.sourceText || undefined,
       questions: result.test.questions?.map((q: any) => ({ ...q, id: q._id || Math.random().toString(36).substring(2, 11) })) || [],
       lexis: result.test.lexis?.map((l: any) => ({ ...l, id: l._id || Math.random().toString(36).substring(2, 11) })),
       lexisAudio: result.test.lexisAudio,
@@ -713,8 +725,10 @@ const App: React.FC = () => {
     setAllTestsLastFetched(0);
     fullTestCache.set(newTest.id, newTest);
 
-    // Refresh audio storage so classroom can find the audio entry
-    audioStorage.loadAll();
+    // Refresh audio storage so classroom can find the audio entry (listening mode only)
+    if (result.audioEntry) {
+      audioStorage.loadAll();
+    }
 
     // Navigate to classroom and auto-select the new test
     setAutoSelectTestId(newTest.id);
@@ -722,7 +736,7 @@ const App: React.FC = () => {
   }, [audioStorage]);
 
   // Handle Jam Button completion - same flow as one-shot
-  const handleJamComplete = useCallback((result: { audioEntry: SavedAudio; test: any }) => {
+  const handleJamComplete = useCallback((result: { audioEntry: SavedAudio | null; test: any }) => {
     setShowJamButton(false);
 
     console.log('[handleJamComplete] raw result.test._id:', result.test?._id, '| .id:', result.test?.id, '| title:', result.test?.title);
@@ -733,6 +747,8 @@ const App: React.FC = () => {
       id: result.test._id || result.test.id,
       createdAt: result.test.created_at,
       updatedAt: result.test.updated_at,
+      speakerCount: result.test.speaker_count ?? result.test.speakerCount ?? undefined,
+      sourceText: result.test.source_text || result.test.sourceText || undefined,
       questions: result.test.questions?.map((q: any) => ({ ...q, id: q._id || Math.random().toString(36).substring(2, 11) })) || [],
       lexis: result.test.lexis?.map((l: any) => ({ ...l, id: l._id || Math.random().toString(36).substring(2, 11) })),
       lexisAudio: result.test.lexisAudio,
@@ -747,8 +763,10 @@ const App: React.FC = () => {
     setAllTestsLastFetched(0);
     fullTestCache.set(newTest.id, newTest);
 
-    // Refresh audio storage so classroom can find the audio entry
-    audioStorage.loadAll();
+    // Refresh audio storage so classroom can find the audio entry (listening mode only)
+    if (result.audioEntry) {
+      audioStorage.loadAll();
+    }
 
     // Navigate to classroom and auto-select the new test
     setAutoSelectTestId(newTest.id);
@@ -796,6 +814,7 @@ const App: React.FC = () => {
           id: t._id,
           questions: t.questions.map((q: { _id?: string; questionText: string; options?: string[]; correctAnswer: string }) => ({ ...q, id: q._id || Math.random().toString(36).substring(2, 11) })),
           lexis: t.lexis?.map((l: { _id?: string; term: string; definition: string; definitionArabic?: string; example?: string; partOfSpeech?: string }) => ({ ...l, id: l._id || Math.random().toString(36).substring(2, 11) })),
+          speakerCount: (t as any).speaker_count ?? undefined,
           lexisAudio: t.lexisAudio
         })));
       }
@@ -849,6 +868,13 @@ const App: React.FC = () => {
     console.log('[App] handleSaveTest - testData.lexis:', testData.lexis);
     console.log('[App] handleSaveTest - testData.preview:', testData.preview);
     console.log('[App] handleSaveTest - testData.difficulty:', testData.difficulty);
+
+    // Inject speakerCount from selectedAudio if not already set
+    const dataWithSpeakers = {
+      ...testData,
+      speakerCount: testData.speakerCount ?? (selectedAudio?.speakers?.length || null),
+    };
+
     try {
       let response;
       if (editingTest) {
@@ -857,7 +883,7 @@ const App: React.FC = () => {
         response = await fetch(`${API_BASE}/tests/${editingTest.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(testData),
+          body: JSON.stringify(dataWithSpeakers),
         });
       } else {
         // Create new test
@@ -865,7 +891,7 @@ const App: React.FC = () => {
         response = await fetch(`${API_BASE}/tests`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(testData),
+          body: JSON.stringify(dataWithSpeakers),
         });
       }
 
@@ -886,6 +912,7 @@ const App: React.FC = () => {
         id: responseData._id,
         createdAt: responseData.created_at,
         updatedAt: responseData.updated_at,
+        speakerCount: responseData.speaker_count ?? undefined,
         questions: responseData.questions?.map((q: { _id?: string; questionText: string; options?: string[]; correctAnswer: string; explanation?: string }) => ({ ...q, id: q._id || Math.random().toString(36).substring(2, 11) })) || [],
         lexis: responseData.lexis?.map((l: { _id?: string; term: string; definition: string; definitionArabic?: string; example?: string; partOfSpeech?: string }) => ({ ...l, id: l._id || Math.random().toString(36).substring(2, 11) })),
         lexisAudio: responseData.lexisAudio,
@@ -904,7 +931,11 @@ const App: React.FC = () => {
       alert(editingTest ? 'Test updated successfully!' : 'Test created successfully!');
       setEditingTest(null);
 
-      if (selectedAudio) {
+      if (readingPassage) {
+        // Reading mode: go back to home after saving
+        setReadingPassage(null);
+        setCurrentView('home');
+      } else if (selectedAudio) {
         // Go back to detail view and refresh tests
         handleViewDetail(selectedAudio);
       }
@@ -993,6 +1024,17 @@ const App: React.FC = () => {
 
   // Transcript-only mode handlers
   const handleSaveTranscript = async (title: string, transcript: string, speakers: string[]) => {
+    // Reading mode: go directly to TestBuilder with the passage (no AudioEntry)
+    if (settingsHook.settings.appMode === 'reading') {
+      setReadingPassage({ title, text: transcript });
+      setSelectedAudio(null);
+      setEditingTest(null);
+      setTestBuilderKey(prev => prev + 1);
+      setCurrentView('test-builder');
+      return;
+    }
+
+    // Listening mode: save transcript-only AudioEntry to library
     setIsSavingTranscript(true);
     console.log('[handleSaveTranscript] Called with:', { title, transcript: transcript.substring(0, 50), speakers });
     console.log('[handleSaveTranscript] Passing isTranscriptOnly: true');
@@ -1051,6 +1093,8 @@ const App: React.FC = () => {
           id: t._id,
           createdAt: t.created_at,
           updatedAt: t.updated_at,
+          speakerCount: (t as any).speaker_count ?? undefined,
+          sourceText: (t as any).source_text || undefined,
           questions: t.questions.map((q: { _id?: string; questionText: string; options?: string[]; correctAnswer: string; explanation?: string }) => ({ ...q, id: q._id || Math.random().toString(36).substring(2, 11) })),
           lexis: t.lexis?.map((l: { _id?: string; term: string; definition: string; definitionArabic?: string; example?: string; partOfSpeech?: string }) => ({ ...l, id: l._id || Math.random().toString(36).substring(2, 11) })),
           lexisAudio: t.lexisAudio
@@ -1166,17 +1210,33 @@ const App: React.FC = () => {
 
   // Navigation header
   const renderNav = () => (
-    <nav className="sticky top-0 z-30 bg-white/70 backdrop-blur-xl border-b border-slate-200/50 shadow-sm shadow-slate-200/50 px-6 py-3">
+    <nav className={`sticky top-0 z-30 backdrop-blur-xl border-b shadow-sm px-6 py-3 ${
+      settingsHook.settings.appMode === 'reading'
+        ? 'bg-emerald-50/70 border-emerald-200/50 shadow-emerald-200/50'
+        : 'bg-white/70 border-slate-200/50 shadow-slate-200/50'
+    }`}>
       <div className="max-w-7xl mx-auto flex items-center justify-between">
         <div className="flex items-center gap-3 group cursor-pointer" onClick={() => setCurrentView('home')}>
-          <div className="h-10 w-10 rounded-xl overflow-hidden shadow-lg shadow-indigo-500/30 group-hover:shadow-indigo-500/50 group-hover:scale-105 transition-all duration-200">
-            <img
-              src="/logo-512.png"
-              alt="DialogueForge"
-              className="h-full w-full scale-150"
-            />
-          </div>
-          <span className="font-bold text-xl tracking-tight bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">DialogueForge</span>
+          {settingsHook.settings.appMode === 'reading' ? (
+            <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/30 group-hover:shadow-emerald-500/50 group-hover:scale-105 transition-all duration-200">
+              <BookOpenIcon className="w-6 h-6 text-white" />
+            </div>
+          ) : (
+            <div className="h-10 w-10 rounded-xl overflow-hidden shadow-lg shadow-indigo-500/30 group-hover:shadow-indigo-500/50 group-hover:scale-105 transition-all duration-200">
+              <img
+                src="/logo-512.png"
+                alt="DialogueForge"
+                className="h-full w-full scale-150"
+              />
+            </div>
+          )}
+          <span className={`font-bold text-xl tracking-tight bg-gradient-to-r bg-clip-text text-transparent ${
+            settingsHook.settings.appMode === 'reading'
+              ? 'from-emerald-800 to-teal-700'
+              : 'from-slate-900 to-slate-700'
+          }`}>
+            {settingsHook.settings.appMode === 'reading' ? 'ReadForge' : 'DialogueForge'}
+          </span>
         </div>
         <div className="flex items-center gap-2">
           {currentView === 'editor' && analysis.isDialogue && (
@@ -1223,8 +1283,11 @@ const App: React.FC = () => {
           {currentView === 'home' || currentView === 'editor' || currentView === 'library' || currentView === 'detail' ? (
             <button
               onClick={() => {
-                // When in detail view, go back to the correct tab based on entry type
-                if (currentView === 'detail' && selectedAudio) {
+                // Reading mode: always show tests tab (no audio entries)
+                if (settingsHook.settings.appMode === 'reading') {
+                  setLibraryTab('tests');
+                } else if (currentView === 'detail' && selectedAudio) {
+                  // When in detail view, go back to the correct tab based on entry type
                   console.log('[Nav My Library] From detail view, selectedAudio.isTranscriptOnly:', selectedAudio.isTranscriptOnly);
                   setLibraryTab(selectedAudio.isTranscriptOnly ? 'transcripts' : 'audio');
                 } else {
@@ -1485,10 +1548,10 @@ const App: React.FC = () => {
       <Suspense fallback={<InlineSpinner />}>
         <AudioLibrary
           key={libraryTab}
-          savedAudios={audioStorage.savedAudios}
-          tests={allTests}
+          savedAudios={settingsHook.settings.appMode === 'reading' ? [] : audioStorage.savedAudios}
+          tests={modeFilteredTests}
           isLoading={audioStorage.isLoading}
-          initialTab={libraryTab}
+          initialTab={settingsHook.settings.appMode === 'reading' ? 'tests' : libraryTab}
           onPlay={handlePlayFromLibrary}
           onDelete={handleDelete}
           onDeleteTest={handleDeleteTestFromLibrary}
@@ -1542,6 +1605,29 @@ const App: React.FC = () => {
 
   // Test builder view
   const renderTestBuilder = () => {
+    // Reading mode with a passage — go directly to TestBuilder
+    if (readingPassage) {
+      return (
+        <Suspense fallback={<LoadingSpinner />}>
+          <main className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+            <TestBuilder
+              key={`reading-${testBuilderKey}`}
+              readingPassage={readingPassage}
+              existingTest={editingTest || undefined}
+              defaultDifficulty={settingsHook.settings.difficultyLevel}
+              onSave={handleSaveTest}
+              onCancel={() => {
+                setEditingTest(null);
+                setReadingPassage(null);
+                setCurrentView('home');
+              }}
+            />
+          </main>
+        </Suspense>
+      );
+    }
+
+    // Listening mode — needs audio
     // For standalone tests without audio, create a placeholder audio object
     const audioForBuilder = selectedAudio || (editingTest ? {
       id: editingTest.id,
@@ -1649,25 +1735,28 @@ const App: React.FC = () => {
   // Student test view (accessed via URL or preview)
   if (currentView === 'student-test' && studentTest) {
     return (
-      <Suspense fallback={<LoadingSpinner />}>
-        <StudentTest
-          key={isPreviewMode ? `preview-${previewKey}` : studentTest.id}
-          test={studentTest}
-          theme={settingsHook.settings.classroomTheme}
-          isPreview={isPreviewMode}
-          onExitPreview={handleExitPreview}
-          contentModel={settingsHook.settings.contentModel}
-        />
-      </Suspense>
+      <AppModeProvider mode={settingsHook.settings.appMode}>
+        <Suspense fallback={<LoadingSpinner />}>
+          <StudentTest
+            key={isPreviewMode ? `preview-${previewKey}` : studentTest.id}
+            test={studentTest}
+            theme={settingsHook.settings.classroomTheme}
+            isPreview={isPreviewMode}
+            onExitPreview={handleExitPreview}
+            contentModel={settingsHook.settings.contentModel}
+          />
+        </Suspense>
+      </AppModeProvider>
     );
   }
 
   // Classroom mode (full screen, no nav)
   if (currentView === 'classroom') {
     return (
-      <Suspense fallback={<LoadingSpinner />}>
-        <ClassroomMode
-          tests={allTests}
+      <AppModeProvider mode={settingsHook.settings.appMode}>
+        <Suspense fallback={<LoadingSpinner />}>
+          <ClassroomMode
+          tests={modeFilteredTests}
           isLoadingTests={isLoadingTests}
           audioEntries={audioStorage.savedAudios}
           theme={settingsHook.settings.classroomTheme}
@@ -1735,12 +1824,18 @@ const App: React.FC = () => {
             }
           }}
         />
-      </Suspense>
+        </Suspense>
+      </AppModeProvider>
     );
   }
 
   return (
-    <div className="min-h-screen text-slate-900 selection:bg-indigo-500/20">
+    <AppModeProvider mode={settingsHook.settings.appMode}>
+    <div className={`min-h-screen text-slate-900 ${
+      settingsHook.settings.appMode === 'reading'
+        ? 'bg-emerald-50/30 selection:bg-emerald-500/20'
+        : 'selection:bg-indigo-500/20'
+    }`}>
       {renderNav()}
       {currentView === 'home' && renderHome()}
       {currentView === 'editor' && renderEditor()}
@@ -1752,7 +1847,7 @@ const App: React.FC = () => {
         <Suspense fallback={<InlineSpinner />}>
           <TranscriptMode
             onSave={handleSaveTranscript}
-            onBack={() => setCurrentView('editor')}
+            onBack={() => setCurrentView(settingsHook.settings.appMode === 'reading' ? 'home' : 'editor')}
             isSaving={isSavingTranscript}
           />
         </Suspense>
@@ -1845,6 +1940,7 @@ const App: React.FC = () => {
         </div>
       )}
     </div>
+    </AppModeProvider>
   );
 };
 

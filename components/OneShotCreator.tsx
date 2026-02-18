@@ -4,6 +4,8 @@ import { EngineType, SavedAudio, SpeakerVoiceMapping } from '../types';
 import { parseDialogue, assignOpenAIVoices } from '../utils/parser';
 import { concatenateAudioBlobs } from '../hooks/useElevenLabsTTS';
 import { EFL_TOPICS, SpeakerCount, AudioFormat, getRandomTopic, getRandomFormat, getFormatsForSpeakerCount, getCompatibleTopic, isTopicCompatible, shuffleFormat, randomSpeakerCount, resolveSpeakerDefault } from '../utils/eflTopics';
+import { getRandomReadingTopic, getRandomReadingGenre, getCompatibleReadingTopic, shuffleReadingGenre } from '../utils/readingTopics';
+import { useAppMode } from '../contexts/AppModeContext';
 import type { SpeakerCountDefault } from './Settings';
 
 const API_BASE = '/api';
@@ -14,7 +16,7 @@ interface OneShotCreatorProps {
   contentMode: ContentMode;
   defaultSpeakerCount?: SpeakerCountDefault;
   onClose: () => void;
-  onComplete: (result: { audioEntry: SavedAudio; test: any }) => void;
+  onComplete: (result: { audioEntry: SavedAudio | null; test: any }) => void;
 }
 
 // --- Processing stages ---
@@ -235,7 +237,9 @@ export function validatePayload(jsonText: string): OneShotPayload {
   const parsed = JSON.parse(cleaned);
 
   if (!parsed.title || typeof parsed.title !== 'string') throw new Error('Missing "title"');
-  if (!parsed.transcript || typeof parsed.transcript !== 'string') throw new Error('Missing "transcript"');
+  // Accept "passage" as alias for "transcript" (reading mode)
+  if (parsed.passage && !parsed.transcript) parsed.transcript = parsed.passage;
+  if (!parsed.transcript || typeof parsed.transcript !== 'string') throw new Error('Missing "transcript" (or "passage")');
   if (!parsed.questions || !Array.isArray(parsed.questions) || parsed.questions.length === 0) {
     throw new Error('Missing or empty "questions" array');
   }
@@ -787,6 +791,235 @@ Now generate the test content as a single JSON object:`;
   return { instructions, input };
 }
 
+// --- Reading Mode prompt builders ---
+// These generate text passages (not audio dialogues) with no voice/speaker logic
+
+import type { ReadingGenre } from '../utils/readingTopics';
+
+/**
+ * Build a complete one-shot template for reading mode.
+ * Parallel to buildTemplate() but generates a reading passage + test content in one JSON.
+ * No voices, no speakers, no voiceAssignments.
+ */
+export function buildReadingTemplate(
+  difficulty: CEFRLevel,
+  contentMode: ContentMode,
+  targetDuration: number = 10,
+  topic?: string,
+  genre?: ReadingGenre
+): string {
+  const contentGuidelines = getContentRestrictions(contentMode);
+  const previewActivities = getPreviewActivities(difficulty);
+  const durationInfo = getDurationGuidelines(targetDuration, difficulty);
+
+  return `# One-Shot EFL Reading Test Generator
+
+## Your Task
+Create a COMPLETE reading test package designed for approximately ${targetDuration} minutes of student activity time.
+
+## Target Level: ${difficulty} - ${CEFR_DESCRIPTIONS[difficulty]}
+
+## Duration Planning
+- Target total duration: ${targetDuration} minutes
+- CEFR level: ${difficulty} (${durationInfo.explanation})
+- Calibrate content amounts for ${difficulty} students who ${difficulty === 'A1' || difficulty === 'A2' ? 'need more processing time per item' : difficulty === 'C1' ? 'process quickly and can handle more content' : 'have moderate processing speed'}
+
+### Language Guidelines for ${difficulty}:
+${CEFR_PROMPT_GUIDELINES[difficulty]}
+${contentGuidelines}${genre ? `## Text Genre: ${genre.label}
+${genre.promptDescription}
+Register: ${genre.register}
+
+` : ''}${topic ? `## Topic
+Create the reading passage about: "${topic}"
+Make the specific scenario unique and engaging while staying on this topic.
+
+` : ''}## Output Format
+
+Return a SINGLE JSON object. No markdown fences, no explanation — ONLY valid JSON.
+
+{
+  "title": "Descriptive title for the reading exercise",
+  "difficulty": "${difficulty}",
+  "passage": "The full reading passage text here. Multiple paragraphs separated by \\n\\n. Write natural, authentic-sounding text appropriate for the genre.",
+  "questions": [
+    {
+      "questionText": "What does the passage say about...?",
+      "options": ["Option A", "Option B", "Option C", "Option D"],
+      "correctAnswer": "Option B",
+      "explanation": "English explanation of why this is correct",
+      "explanationArabic": "شرح بالعربية"
+    }
+  ],
+  "lexis": [
+    {
+      "term": "vocabulary word",
+      "definition": "Clear English definition for ${difficulty} learners",
+      "definitionArabic": "كلمة عربية",
+      "hintArabic": "شرح التعريف بالعربية",
+      "explanation": "Why this word matters or how it's used",
+      "explanationArabic": "شرح مختصر بالعربية",
+      "example": "Example sentence using the word",
+      "partOfSpeech": "noun/verb/adjective/adverb/phrase"
+    }
+  ],
+  "preview": [
+    {
+      "type": "prediction",
+      "items": [
+        {
+          "question": "Personal question connecting topic to student's life",
+          "questionArabic": "سؤال شخصي بالعربية",
+          "options": ["Short answer 1", "Short answer 2", "Short answer 3"]
+        }
+      ]
+    },
+    {
+      "type": "wordAssociation",
+      "items": [
+        { "word": "word from passage", "inDialogue": true },
+        { "word": "distractor word", "inDialogue": false }
+      ]
+    }
+  ],
+  "classroomActivity": {
+    "situationSetup": { "en": "English situation description", "ar": "وصف الموقف بالعربية" },
+    "discussionPrompt": { "en": "English discussion prompt", "ar": "سؤال النقاش بالعربية" }
+  },
+  "transferQuestion": {
+    "en": "English transfer question",
+    "ar": "سؤال النقل بالعربية"
+  }
+}
+
+## Passage Guidelines
+- Target approximately ${durationInfo.wordCount} words
+- Write authentic, natural text appropriate for the genre${genre ? ` (${genre.label})` : ''}
+- Structure with clear paragraphs
+- Include a mix of factual information, opinions, or narrative as appropriate
+- Use vocabulary and grammar appropriate for ${difficulty} level
+
+## Question Guidelines
+- Generate ${durationInfo.questionCount} multiple-choice comprehension questions
+- Each question must have exactly 4 options
+- correctAnswer must match one option exactly (character-for-character)
+- Test comprehension: main ideas, specific details, writer's purpose, and inferences
+- Include explanations in English and Arabic
+- Quantity calibrated for ${targetDuration}-minute test at ${difficulty} level
+
+## Vocabulary Guidelines
+- Select ${durationInfo.lexisCount} key vocabulary items from the passage
+- Focus on words ${difficulty} learners would need to learn
+- definitionArabic: Just the Arabic word/phrase (e.g., "travel" → "يسافر")
+- hintArabic: Arabic translation of the English definition
+- Include part of speech for each item
+
+## Preview Activities Guidelines (Pre-Reading Warm-up)
+Generate exactly 2 preview activities: ${previewActivities}
+
+### Prediction Questions (if included)
+- 2-3 personal/opinion questions connecting the topic to the student's life
+- Include Arabic translation for each question
+- 2-3 short answer options per question
+- No correct answer — these are purely for engagement and schema activation
+
+### Word Association (if included)
+- 8-10 words total
+- 4-5 words that actually appear in the passage (inDialogue: true)
+- 4-5 plausible distractor words NOT in the passage (inDialogue: false)
+
+### True/False Predictions (if included)
+- 3-4 statements about the passage content
+- Mix of true and false statements
+- Include correctAnswer boolean for each
+- Include Arabic translation for each statement
+
+IMPORTANT: Preview content must NOT duplicate or rephrase the comprehension questions.
+
+## Classroom Activity (for teacher presentation mode)
+
+Generate a collaborative pre-reading discussion task with two bilingual components:
+
+1. "situationSetup" — One sentence (English + Arabic) describing WHAT the reading is about and the GENRE/format. Must be specific enough to activate the right schema but NOT reveal answers to any MCQ question.
+
+2. "discussionPrompt" — One question/instruction (English + Arabic) that places students inside the scenario. Level-appropriate framing:
+   - A1-A2: Ask students to share their own experience in the same domain
+   - B1: Place the student inside a related scenario
+   - B2-C1: Require perspective-taking or critical evaluation
+
+## Transfer Question (plenary — whole-class discussion after all tasks)
+
+Generate ONE question that takes the reading content and plants it into a new, adjacent scenario. This forces creative application (Bloom's Apply/Create).
+
+Rules:
+- Must require knowledge FROM the passage to answer well
+- Must NOT be answerable by just recalling what the passage said
+- Must place content into a context the passage never mentioned
+- Keep to 1-2 sentences maximum
+- Include Arabic translation
+
+Now generate the complete reading test as a single JSON object:`;
+}
+
+/**
+ * Call 1 for reading JAM: Generate just the passage.
+ * Parallel to buildDialoguePrompt() but generates a reading passage.
+ * No speakers, no voiceAssignments.
+ */
+export function buildPassagePrompt(
+  difficulty: CEFRLevel,
+  contentMode: ContentMode,
+  targetDuration: number,
+  topic?: string,
+  genre?: ReadingGenre
+): { instructions: string; input: string } {
+  const durationInfo = getDurationGuidelines(targetDuration, difficulty);
+  const contentRestrictions = getContentRestrictions(contentMode);
+
+  const instructions = `You are an expert content writer for EFL (English as a Foreign Language) reading exercises. You create authentic, engaging reading passages that are perfectly calibrated to the target language proficiency level. Your texts are natural, topically varied, and appropriate for the specified genre.`;
+
+  const input = `# Generate a Reading Passage for an EFL Reading Exercise
+
+## Target Level: ${difficulty} - ${CEFR_DESCRIPTIONS[difficulty]}
+
+### Language Guidelines for ${difficulty}:
+${CEFR_PROMPT_GUIDELINES[difficulty]}
+${contentRestrictions}${genre ? `
+## Text Genre: ${genre.label}
+${genre.promptDescription}
+Register: ${genre.register}
+` : ''}
+## Length
+- Target: approximately ${durationInfo.wordCount} words
+
+## Passage Quality Standards
+${topic ? `- Topic: "${topic}" — interpret this creatively, make the specific content unique and engaging
+` : `- Choose an engaging, SPECIFIC topic for the passage
+  - Good examples: "An article about a new community garden project", "An email from a friend describing their gap year trip", "Instructions for using a new library app"
+  - Bad examples: "A text about things", "Something about daily life"
+`}- Write authentic, natural text appropriate for the genre
+- Structure with clear paragraphs
+- Include a mix of information appropriate for the genre (facts, opinions, narrative, instructions, etc.)
+- AVOID:
+  - Overly educational or "textbook" sounding text
+  - Generic, bland content without specific details
+  - Text that reads like it was written for language learners (should read like authentic material)
+
+## Output Format
+
+Return a SINGLE JSON object with ONLY these fields. No markdown fences, no explanation — ONLY valid JSON.
+
+{
+  "title": "Descriptive title for the reading exercise",
+  "difficulty": "${difficulty}",
+  "passage": "The full reading passage text. Multiple paragraphs separated by \\n\\n."
+}
+
+Now generate the passage as a single JSON object:`;
+
+  return { instructions, input };
+}
+
 // --- Component ---
 export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
   isOpen,
@@ -796,14 +1029,19 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
   onClose,
   onComplete,
 }) => {
+  const appMode = useAppMode();
+  const isReading = appMode === 'reading';
   const initialSpeakers = useMemo(() => resolveSpeakerDefault(defaultSpeakerCount), []);
   const [difficulty, setDifficulty] = useState<CEFRLevel>(defaultDifficulty);
   const [targetDuration, setTargetDuration] = useState(10); // Default 10 minutes
   const [speakerCount, setSpeakerCount] = useState<SpeakerCount>(initialSpeakers);
   const [audioFormat, setAudioFormat] = useState<AudioFormat | null>(() => getRandomFormat(initialSpeakers));
   const [currentTopic, setCurrentTopic] = useState(() =>
-    audioFormat ? getCompatibleTopic(audioFormat) : getRandomTopic(initialSpeakers)
+    isReading
+      ? getRandomReadingTopic()
+      : (audioFormat ? getCompatibleTopic(audioFormat) : getRandomTopic(initialSpeakers))
   );
+  const [readingGenre, setReadingGenre] = useState(() => getRandomReadingGenre());
   const [isCustomTopic, setIsCustomTopic] = useState(false);
   const [customTopic, setCustomTopic] = useState('');
   const [showFormatPicker, setShowFormatPicker] = useState(false);
@@ -819,7 +1057,18 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
   const [audioFailReason, setAudioFailReason] = useState<string>('');
 
   const shuffleTopic = () => {
-    setCurrentTopic(audioFormat ? getCompatibleTopic(audioFormat, currentTopic) : getRandomTopic(speakerCount, currentTopic));
+    if (isReading) {
+      setCurrentTopic(getCompatibleReadingTopic(readingGenre, currentTopic));
+    } else {
+      setCurrentTopic(audioFormat ? getCompatibleTopic(audioFormat, currentTopic) : getRandomTopic(speakerCount, currentTopic));
+    }
+    setIsCustomTopic(false);
+  };
+
+  const shuffleGenre = () => {
+    const newGenre = shuffleReadingGenre(readingGenre.id);
+    setReadingGenre(newGenre);
+    setCurrentTopic(getCompatibleReadingTopic(newGenre, currentTopic));
     setIsCustomTopic(false);
   };
 
@@ -835,7 +1084,9 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
   const effectiveTopic = isCustomTopic ? customTopic : currentTopic;
 
   const handleCopyTemplate = useCallback(async () => {
-    const template = buildTemplate(difficulty, contentMode, targetDuration, effectiveTopic, speakerCount, audioFormat || undefined);
+    const template = isReading
+      ? buildReadingTemplate(difficulty, contentMode, targetDuration, effectiveTopic, readingGenre)
+      : buildTemplate(difficulty, contentMode, targetDuration, effectiveTopic, speakerCount, audioFormat || undefined);
     try {
       await navigator.clipboard.writeText(template);
       setCopyFeedback(true);
@@ -851,7 +1102,7 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
       setCopyFeedback(true);
       setTimeout(() => setCopyFeedback(false), 2000);
     }
-  }, [difficulty, contentMode, targetDuration, effectiveTopic, speakerCount, audioFormat]);
+  }, [difficulty, contentMode, targetDuration, effectiveTopic, speakerCount, audioFormat, isReading, readingGenre]);
 
   const processOneShot = useCallback(async () => {
     setErrorMsg('');
@@ -864,6 +1115,57 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
     } catch (err) {
       setErrorMsg(`Parse error: ${err instanceof Error ? err.message : 'Invalid JSON'}`);
       setStage('error');
+      return;
+    }
+
+    // Reading mode: skip all audio stages, save test directly
+    if (isReading) {
+      setStage('creating-test');
+      try {
+        const testData = {
+          title: payload.title,
+          type: 'reading-comprehension',
+          difficulty: payload.difficulty,
+          sourceText: payload.transcript, // passage text stored as source_text
+          questions: payload.questions.map(q => ({
+            ...q,
+            id: generateId(),
+          })),
+          lexis: payload.lexis.length > 0
+            ? payload.lexis.map(l => ({
+                ...l,
+                id: generateId(),
+              }))
+            : undefined,
+          preview: payload.preview && payload.preview.length > 0
+            ? payload.preview.map(activity => ({
+                type: activity.type,
+                items: activity.items.map((item: any) => ({
+                  ...item,
+                  id: generateId(),
+                })),
+              }))
+            : undefined,
+          classroomActivity: payload.classroomActivity || undefined,
+          transferQuestion: payload.transferQuestion || undefined,
+        };
+
+        const response = await fetch(`${API_BASE}/tests`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(testData),
+        });
+
+        if (!response.ok) throw new Error('Failed to create test');
+        const savedTest = await response.json();
+
+        setStage('done');
+        // Reading mode: no audioEntry, pass null
+        onComplete({ audioEntry: null, test: savedTest });
+      } catch (err) {
+        setErrorMsg(`Failed to create test: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        setStage('error');
+      }
       return;
     }
 
@@ -1023,6 +1325,7 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
         title: payload.title,
         type: 'listening-comprehension',
         difficulty: payload.difficulty,
+        speakerCount: analysis.speakers.length,
         questions: payload.questions.map(q => ({
           ...q,
           id: generateId(),
@@ -1181,6 +1484,7 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
         title: pendingPayload.title,
         type: 'listening-comprehension',
         difficulty: pendingPayload.difficulty,
+        speakerCount: pendingAnalysis.speakers.length,
         questions: pendingPayload.questions.map(q => ({
           ...q,
           id: generateId(),
@@ -1323,91 +1627,111 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
                     AI determines question/vocab counts based on duration + {difficulty} level
                   </p>
                 </div>
-                <div className="mb-3">
-                  <label className="text-sm text-slate-600 mb-2 block">Speakers:</label>
-                  <div className="flex items-center gap-2 mb-3">
-                    {([1, 2, 3] as SpeakerCount[]).map((count) => (
+                {isReading ? (
+                  /* Genre control — reading mode */
+                  <div className="mb-3">
+                    <label className="text-sm text-slate-600 mb-2 block">Genre:</label>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 px-3 py-1.5 bg-emerald-50 rounded-lg border border-emerald-200 text-sm text-emerald-700 font-medium truncate">
+                        {readingGenre.label}
+                      </div>
                       <button
-                        key={count}
-                        onClick={() => handleSpeakerCountChange(count)}
-                        className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                          speakerCount === count
-                            ? 'bg-rose-100 text-rose-700 ring-2 ring-rose-500'
-                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                        }`}
+                        onClick={shuffleGenre}
+                        className="px-2.5 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-500 hover:bg-emerald-50 hover:text-emerald-600 transition-all"
+                        title="Shuffle genre"
                       >
-                        {count === 3 ? '3+' : count}
+                        🎲
                       </button>
-                    ))}
-                    <button
-                      onClick={() => {
-                        const count = randomSpeakerCount(speakerCount);
-                        setSpeakerCount(count);
-                        const newFormat = getRandomFormat(count);
-                        setAudioFormat(newFormat);
-                        setCurrentTopic(getCompatibleTopic(newFormat));
-                        setIsCustomTopic(false);
-                        setShowFormatPicker(false);
-                      }}
-                      className="px-2.5 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-500 hover:bg-amber-50 hover:text-amber-600 transition-all"
-                      title="Random speaker count"
-                    >
-                      🎲
-                    </button>
-                    {audioFormat && (
-                      <>
-                        <button
-                          onClick={() => {
-                            const newFmt = shuffleFormat(speakerCount, audioFormat.id);
-                            setAudioFormat(newFmt);
-                            setCurrentTopic(getCompatibleTopic(newFmt, currentTopic));
-                            setIsCustomTopic(false);
-                          }}
-                          className="px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded text-xs text-slate-500 transition-colors flex-shrink-0 ml-2"
-                        >
-                          🔀
-                        </button>
-                        <div className="relative">
-                          <button
-                            onClick={() => setShowFormatPicker(!showFormatPicker)}
-                            className={`px-2 py-1 rounded text-xs transition-colors flex-shrink-0 ${
-                              showFormatPicker ? 'bg-rose-100 text-rose-600' : 'bg-slate-100 hover:bg-slate-200 text-slate-500'
-                            }`}
-                            title="Choose format"
-                          >
-                            ✏️
-                          </button>
-                          {showFormatPicker && (
-                            <>
-                              <div className="fixed inset-0 z-40" onClick={() => setShowFormatPicker(false)} />
-                              <div className="absolute top-full right-0 mt-1 z-50 bg-white rounded-xl shadow-xl border border-slate-200 py-1 min-w-[220px] max-h-[320px] overflow-y-auto">
-                                {getFormatsForSpeakerCount(speakerCount).map((fmt) => (
-                                  <button
-                                    key={fmt.id}
-                                    onClick={() => {
-                                      setAudioFormat(fmt);
-                                      setCurrentTopic(getCompatibleTopic(fmt, currentTopic));
-                                      setIsCustomTopic(false);
-                                      setShowFormatPicker(false);
-                                    }}
-                                    className={`w-full text-left px-3 py-2 text-sm transition-colors ${
-                                      audioFormat?.id === fmt.id
-                                        ? 'bg-rose-50 text-rose-700 font-medium'
-                                        : 'text-slate-700 hover:bg-slate-50'
-                                    }`}
-                                  >
-                                    {fmt.label}
-                                  </button>
-                                ))}
-                              </div>
-                            </>
-                          )}
-                        </div>
-                        <span className="text-xs text-slate-400 truncate">Format: {audioFormat.label}</span>
-                      </>
-                    )}
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  /* Speaker + format controls — listening mode */
+                  <div className="mb-3">
+                    <label className="text-sm text-slate-600 mb-2 block">Speakers:</label>
+                    <div className="flex items-center gap-2 mb-3">
+                      {([1, 2, 3] as SpeakerCount[]).map((count) => (
+                        <button
+                          key={count}
+                          onClick={() => handleSpeakerCountChange(count)}
+                          className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                            speakerCount === count
+                              ? 'bg-rose-100 text-rose-700 ring-2 ring-rose-500'
+                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                          }`}
+                        >
+                          {count === 3 ? '3+' : count}
+                        </button>
+                      ))}
+                      <button
+                        onClick={() => {
+                          const count = randomSpeakerCount(speakerCount);
+                          setSpeakerCount(count);
+                          const newFormat = getRandomFormat(count);
+                          setAudioFormat(newFormat);
+                          setCurrentTopic(getCompatibleTopic(newFormat));
+                          setIsCustomTopic(false);
+                          setShowFormatPicker(false);
+                        }}
+                        className="px-2.5 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-500 hover:bg-amber-50 hover:text-amber-600 transition-all"
+                        title="Random speaker count"
+                      >
+                        🎲
+                      </button>
+                      {audioFormat && (
+                        <>
+                          <button
+                            onClick={() => {
+                              const newFmt = shuffleFormat(speakerCount, audioFormat.id);
+                              setAudioFormat(newFmt);
+                              setCurrentTopic(getCompatibleTopic(newFmt, currentTopic));
+                              setIsCustomTopic(false);
+                            }}
+                            className="px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded text-xs text-slate-500 transition-colors flex-shrink-0 ml-2"
+                          >
+                            🔀
+                          </button>
+                          <div className="relative">
+                            <button
+                              onClick={() => setShowFormatPicker(!showFormatPicker)}
+                              className={`px-2 py-1 rounded text-xs transition-colors flex-shrink-0 ${
+                                showFormatPicker ? 'bg-rose-100 text-rose-600' : 'bg-slate-100 hover:bg-slate-200 text-slate-500'
+                              }`}
+                              title="Choose format"
+                            >
+                              ✏️
+                            </button>
+                            {showFormatPicker && (
+                              <>
+                                <div className="fixed inset-0 z-40" onClick={() => setShowFormatPicker(false)} />
+                                <div className="absolute top-full right-0 mt-1 z-50 bg-white rounded-xl shadow-xl border border-slate-200 py-1 min-w-[220px] max-h-[320px] overflow-y-auto">
+                                  {getFormatsForSpeakerCount(speakerCount).map((fmt) => (
+                                    <button
+                                      key={fmt.id}
+                                      onClick={() => {
+                                        setAudioFormat(fmt);
+                                        setCurrentTopic(getCompatibleTopic(fmt, currentTopic));
+                                        setIsCustomTopic(false);
+                                        setShowFormatPicker(false);
+                                      }}
+                                      className={`w-full text-left px-3 py-2 text-sm transition-colors ${
+                                        audioFormat?.id === fmt.id
+                                          ? 'bg-rose-50 text-rose-700 font-medium'
+                                          : 'text-slate-700 hover:bg-slate-50'
+                                      }`}
+                                    >
+                                      {fmt.label}
+                                    </button>
+                                  ))}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                          <span className="text-xs text-slate-400 truncate">Format: {audioFormat.label}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
                 <div className="mb-3">
                   <label className="text-sm text-slate-600 mb-2 block">Topic:</label>
                   <div className="flex items-center gap-2">

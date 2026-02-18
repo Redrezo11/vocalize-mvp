@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { ListeningTest, TestSessionLog, FollowUpQuestion, FollowUpFeedbackItem } from '../types';
 import { ClassroomTheme, ContentModel } from './Settings';
+import { useContentLabel } from '../contexts/ContentLabelContext';
+import type { ContentLabel } from '../utils/contentLabels';
 
 interface FollowUpQuestionsProps {
   sessionLog: TestSessionLog;
@@ -138,17 +140,23 @@ async function callOpenAI(model: string, instructions: string, input: string, re
   return messageOutput?.content?.[0]?.text || '';
 }
 
-const GENERATE_INSTRUCTIONS = `You are an EFL post-listening discussion specialist. Your job is to generate exactly 3 open-ended discussion questions about a listening dialogue the student just completed.
+const getGenerateInstructions = (label: ContentLabel) => {
+  const contentType = label.type;
+  const activityType = label.verb === 'read' ? 'post-reading' : 'post-listening';
+  const refType = label.theType;
+  const changeFrame = label.verb === 'read' ? 'How would the meaning change if…' : 'How would the conversation change if…';
+
+  return `You are an EFL ${activityType} discussion specialist. Your job is to generate exactly 3 open-ended discussion questions about a ${contentType} the student just completed.
 
 QUESTION DESIGN — Bloom's Taxonomy Progression:
-- Question 1 (type: "connect"): Apply level. Ask the student to connect something from the dialogue to their own life or experience. Use concrete, personal framing: "Have you ever…", "When was a time you…", "How is this similar to something in your life?"
-- Question 2 (type: "compare"): Analyze level. Ask the student to compare, contrast, or explain WHY something happened in the dialogue. Use framing like "Why do you think [character] said…", "What is the difference between…", "How would the conversation change if…"
-- Question 3 (type: "judge"): Evaluate level. Ask the student to form an opinion or make a judgment about something in the dialogue. Use framing like "Do you agree with…", "What would you do differently?", "Was [character] right to…"
+- Question 1 (type: "connect"): Apply level. Ask the student to connect something from ${refType} to their own life or experience. Use concrete, personal framing: "Have you ever…", "When was a time you…", "How is this similar to something in your life?"
+- Question 2 (type: "compare"): Analyze level. Ask the student to compare, contrast, or explain WHY something happened in ${refType}. Use framing like "Why do you think [the author/character] said…", "What is the difference between…", "${changeFrame}"
+- Question 3 (type: "judge"): Evaluate level. Ask the student to form an opinion or make a judgment about something in ${refType}. Use framing like "Do you agree with…", "What would you do differently?", "Was [the author/character] right to…"
 
 SCORE-BASED ADAPTATION:
 - If mcqScore is 80-100%: Push all 3 questions toward higher Bloom's levels. Q1 can be Analyze, Q2 and Q3 can be Evaluate.
 - If mcqScore is 50-79%: Keep the progression as described. Q2 should target the topic area where wrong answers clustered.
-- If mcqScore is below 50%: Keep all 3 at Apply/Connect level. Focus on personal connection to basic themes from the dialogue. Use simple vocabulary.
+- If mcqScore is below 50%: Keep all 3 at Apply/Connect level. Focus on personal connection to basic themes from ${refType}. Use simple vocabulary.
 
 LANGUAGE CONSTRAINTS (based on difficulty/CEFR level):
 - A1-A2: Use simple present tense, basic vocabulary (under 1000 word frequency), short sentences. Avoid conditionals or abstract language.
@@ -156,31 +164,37 @@ LANGUAGE CONSTRAINTS (based on difficulty/CEFR level):
 - B1+/B2: Use conditionals, opinion language, more nuanced vocabulary.
 
 RULES:
-- Every question MUST reference specific content from the dialogue transcript (a character name, event, or detail).
+- Every question MUST reference specific content from the transcript (a character name, event, or detail).
 - Avoid abstract or vague phrasing. Keep questions concrete and answerable.
 - Provide Arabic translation for each question.
 - These are DISCUSSION questions — there is no single correct answer.
 
 SENTENCE STARTERS:
 - For each question, provide exactly 3 short sentence starters (3-6 words each, ending with "...") that help the student begin their answer.
-- Starters must be specific to the question content and dialogue context — not generic phrases like "I think..." or "In my opinion...".
+- Starters must be specific to the question content and text context — not generic phrases like "I think..." or "In my opinion...".
 - For A1-A2 levels, use simple vocabulary in starters. For B1+, starters can use moderate vocabulary.
 - Starters should offer different angles or approaches to answering the question.
 
 Return valid JSON only:
 {"questions":[{"id":"q1","type":"connect","question":"...","questionArabic":"...","starters":["...","...","..."]},{"id":"q2","type":"compare","question":"...","questionArabic":"...","starters":["...","...","..."]},{"id":"q3","type":"judge","question":"...","questionArabic":"...","starters":["...","...","..."]}]}`;
+};
 
-const EVALUATE_INSTRUCTIONS = `You are a warm, encouraging EFL teacher giving feedback on student discussion answers about a listening dialogue. These are open-ended discussion questions — there is no single "correct" answer. Your job is to acknowledge the student's thinking, connect it to test content, and help them grow.
+const getEvaluateInstructions = (label: ContentLabel) => {
+  const contentType = label.type;
+  const contentRef = label.verb === 'read' ? 'reading content' : 'listening content';
+  const detailRef = label.theType;
+
+  return `You are a warm, encouraging EFL teacher giving feedback on student discussion answers about a ${contentType}. These are open-ended discussion questions — there is no single "correct" answer. Your job is to acknowledge the student's thinking, connect it to test content, and help them grow.
 
 For EACH question, provide 4 feedback components IN BOTH ENGLISH AND ARABIC:
 
 1. "acknowledge" / "acknowledgeArabic" — Summarize and recast the student's idea in correct, natural English. If their English has errors, gently model the correct form without pointing out the mistake. If they wrote in Arabic or mixed languages, acknowledge the effort and provide the English version of what they expressed. (2-3 sentences) The Arabic version should be a natural, idiomatic Arabic translation of the English feedback.
 
-2. "connectToTest" / "connectToTestArabic" — Link the student's answer to the listening content. If the student got a related comprehension question wrong, gently clarify that misunderstanding using their discussion answer as an entry point — but NEVER say "you got question X wrong" or reference question numbers. If they got it right, reinforce their understanding. (1-2 sentences) Provide Arabic translation.
+2. "connectToTest" / "connectToTestArabic" — Link the student's answer to the ${contentRef}. If the student got a related comprehension question wrong, gently clarify that misunderstanding using their discussion answer as an entry point — but NEVER say "you got question X wrong" or reference question numbers. If they got it right, reinforce their understanding. (1-2 sentences) Provide Arabic translation.
 
-3. "extendThinking" / "extendThinkingArabic" — Offer one new idea, perspective, or detail from the listening that the student didn't mention. Frame it as "You might also think about…" or "Another interesting point is…". This should genuinely add something, not repeat what they said. (1-2 sentences) Provide Arabic translation.
+3. "extendThinking" / "extendThinkingArabic" — Offer one new idea, perspective, or detail from ${detailRef} that the student didn't mention. Frame it as "You might also think about…" or "Another interesting point is…". This should genuinely add something, not repeat what they said. (1-2 sentences) Provide Arabic translation.
 
-4. "vocabularyWord" / "vocabularyDefinition" / "vocabularyDefinitionArabic" / "vocabularySentence" / "vocabularySentenceArabic" — Pick ONE word from the test's vocabulary list that is relevant to the student's answer or the question topic. Provide: the word (always in English), its definition in English and Arabic, and a model sentence in English and Arabic using the word in context related to the dialogue.
+4. "vocabularyWord" / "vocabularyDefinition" / "vocabularyDefinitionArabic" / "vocabularySentence" / "vocabularySentenceArabic" — Pick ONE word from the test's vocabulary list that is relevant to the student's answer or the question topic. Provide: the word (always in English), its definition in English and Arabic, and a model sentence in English and Arabic using the word in context related to ${detailRef}.
 
 TONE RULES:
 - NEVER use "wrong", "incorrect", "error", "mistake"
@@ -192,6 +206,7 @@ TONE RULES:
 
 Return valid JSON only:
 {"feedback":[{"questionId":"q1","acknowledge":"...","acknowledgeArabic":"...","connectToTest":"...","connectToTestArabic":"...","extendThinking":"...","extendThinkingArabic":"...","vocabularyWord":"...","vocabularyDefinition":"...","vocabularyDefinitionArabic":"...","vocabularySentence":"...","vocabularySentenceArabic":"..."},{"questionId":"q2",...},{"questionId":"q3",...}]}`;
+};
 
 // Step dots component
 const StepDots: React.FC<{ total: number; current: number; isDark: boolean }> = ({ total, current, isDark }) => (
@@ -385,6 +400,7 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
   onBack,
 }) => {
   const isDark = theme === 'dark';
+  const contentLabel = useContentLabel();
 
   // Try to restore discussion state from sessionStorage (survives tab suspension)
   const savedDisc = useMemo<SavedDiscussionState | null>(() => {
@@ -432,7 +448,7 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
       });
 
       // No reasoning for generation — speed over depth
-      const text = await callOpenAI(model, GENERATE_INSTRUCTIONS, input);
+      const text = await callOpenAI(model, getGenerateInstructions(contentLabel), input);
       console.log('[FollowUp] Generate response:', text);
 
       const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -494,7 +510,7 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
       });
 
       // Low reasoning for evaluation — needs some thought for quality feedback
-      const text = await callOpenAI(model, EVALUATE_INSTRUCTIONS, input, { effort: 'low' });
+      const text = await callOpenAI(model, getEvaluateInstructions(contentLabel), input, { effort: 'low' });
       console.log('[FollowUp] Evaluate response:', text);
 
       const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -901,8 +917,8 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
           </h2>
           <p className={`text-sm mb-6 ${isDark ? 'text-slate-400' : 'text-slate-600'}`} dir={isAr ? 'rtl' : 'ltr'} style={isAr ? arabicFontStyle : undefined}>
             {isAr
-              ? `لقد تأملت في ${questions.length} أسئلة حول حوار الاستماع. استمر في التفكير في هذه الأفكار — المناقشات الجيدة تبني الفهم!`
-              : `You reflected on ${questions.length} questions about the listening dialogue. Keep thinking about these ideas — great discussions build understanding!`
+              ? `لقد تأملت في ${questions.length} أسئلة حول ${contentLabel.verb === 'read' ? 'نص القراءة' : 'حوار الاستماع'}. استمر في التفكير في هذه الأفكار — المناقشات الجيدة تبني الفهم!`
+              : `You reflected on ${questions.length} questions about the ${contentLabel.type}. Keep thinking about these ideas — great discussions build understanding!`
             }
           </p>
           <button

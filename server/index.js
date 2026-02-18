@@ -104,15 +104,17 @@ const previewActivitySchema = new mongoose.Schema({
 
 // Listening Test Schema
 const listeningTestSchema = new mongoose.Schema({
-  audioId: { type: mongoose.Schema.Types.ObjectId, ref: 'AudioEntry', required: false, default: null },  // null for transcript-only tests
+  audioId: { type: mongoose.Schema.Types.ObjectId, ref: 'AudioEntry', required: false, default: null },  // null for transcript-only or reading tests
   title: { type: String, required: true },
-  type: { type: String, enum: ['listening-comprehension', 'fill-in-blank', 'dictation'], required: true },
+  type: { type: String, enum: ['listening-comprehension', 'fill-in-blank', 'dictation', 'reading-comprehension', 'reading-fill-in-blank'], required: true },
   questions: [testQuestionSchema],
   lexis: [lexisItemSchema],  // Vocabulary items for the test
   lexisAudio: { type: mongoose.Schema.Types.Mixed, default: null },  // Generated vocabulary audio
-  preview: [previewActivitySchema],  // Pre-listening preview activities
-  classroomActivity: { type: mongoose.Schema.Types.Mixed, default: null },  // Pre-listening classroom discussion
+  preview: [previewActivitySchema],  // Pre-listening/pre-reading preview activities
+  classroomActivity: { type: mongoose.Schema.Types.Mixed, default: null },  // Pre-activity classroom discussion
   transferQuestion: { type: mongoose.Schema.Types.Mixed, default: null },  // Plenary transfer question
+  speaker_count: { type: Number, default: null },  // Number of speakers (null for reading tests)
+  source_text: { type: String, default: null },  // Reading passage (null for listening tests)
   difficulty: { type: String, enum: ['A1', 'A2', 'B1', 'B2', 'C1'] },  // CEFR level
   created_at: { type: Date, default: Date.now },
   updated_at: { type: Date, default: Date.now }
@@ -127,6 +129,7 @@ const ListeningTest = mongoose.model('ListeningTest', listeningTestSchema);
 // App Settings Schema (singleton - one document per app instance)
 const appSettingsSchema = new mongoose.Schema({
   _id: { type: String, default: 'default' }, // Single settings document
+  app_mode: { type: String, enum: ['listening', 'reading'], default: 'listening' },
   difficulty_level: { type: String, enum: ['A1', 'A2', 'B1', 'B2', 'C1'], default: 'B1' },
   content_mode: { type: String, enum: ['standard', 'halal', 'elsd'], default: 'standard' },
   classroom_theme: { type: String, enum: ['light', 'dark'], default: 'light' },
@@ -456,15 +459,17 @@ app.get('/api/tests/:id', async (req, res) => {
 // Create test
 app.post('/api/tests', async (req, res) => {
   try {
-    const { audioId, title, type, questions, lexis, preview, classroomActivity, transferQuestion, difficulty } = req.body;
+    const { audioId, title, type, questions, lexis, preview, classroomActivity, transferQuestion, sourceText, speakerCount, difficulty } = req.body;
 
-    console.log('[POST /api/tests] Creating test with preview:', preview ? preview.length + ' activities' : 'none');
+    console.log('[POST /api/tests] Creating test with preview:', preview ? preview.length + ' activities' : 'none', '| type:', type);
 
+    // Reading tests don't need audioId validation
+    const isReadingTest = type && (type.startsWith('reading'));
     // Skip audio verification for transcript-only tests (audioId starts with "transcript-")
     const isTranscriptOnly = audioId && audioId.startsWith('transcript-');
 
-    if (!isTranscriptOnly) {
-      // Verify audio entry exists for normal tests
+    if (!isReadingTest && !isTranscriptOnly) {
+      // Verify audio entry exists for listening tests
       const audioEntry = await AudioEntry.findById(audioId);
       if (!audioEntry) {
         return res.status(404).json({ error: 'Audio entry not found' });
@@ -472,7 +477,7 @@ app.post('/api/tests', async (req, res) => {
     }
 
     const test = new ListeningTest({
-      audioId: isTranscriptOnly ? null : audioId,  // Don't store fake IDs
+      audioId: (isTranscriptOnly || isReadingTest) ? null : audioId,
       title,
       type,
       questions,
@@ -480,6 +485,8 @@ app.post('/api/tests', async (req, res) => {
       preview: preview || [],
       classroomActivity: classroomActivity || null,
       transferQuestion: transferQuestion || null,
+      speaker_count: speakerCount != null ? speakerCount : null,
+      source_text: sourceText || null,
       difficulty: difficulty || null
     });
 
@@ -495,7 +502,7 @@ app.post('/api/tests', async (req, res) => {
 // Update test
 app.put('/api/tests/:id', async (req, res) => {
   try {
-    const { title, type, questions, lexis, lexisAudio, preview, classroomActivity, transferQuestion, difficulty } = req.body;
+    const { title, type, questions, lexis, lexisAudio, preview, classroomActivity, transferQuestion, speakerCount, difficulty } = req.body;
 
     console.log('[SERVER PUT /api/tests/:id] Received preview:', preview ? preview.length + ' activities' : 'undefined');
     console.log('[SERVER PUT /api/tests/:id] Received lexisAudio:', lexisAudio ? { engine: lexisAudio.engine, urlLength: lexisAudio.url?.length } : 'undefined');
@@ -532,6 +539,11 @@ app.put('/api/tests/:id', async (req, res) => {
     // Only update transferQuestion if provided
     if (transferQuestion !== undefined) {
       updateData.transferQuestion = transferQuestion;
+    }
+
+    // Only update speakerCount if provided
+    if (speakerCount !== undefined) {
+      updateData.speaker_count = speakerCount;
     }
 
     // Only update difficulty if provided
@@ -616,6 +628,7 @@ app.get('/api/settings', async (req, res) => {
     }
 
     res.json({
+      appMode: settings.app_mode || 'listening',
       difficultyLevel: settings.difficulty_level,
       contentMode: settings.content_mode,
       classroomTheme: settings.classroom_theme || 'light'
@@ -629,12 +642,13 @@ app.get('/api/settings', async (req, res) => {
 // Update app settings
 app.put('/api/settings', async (req, res) => {
   try {
-    const { difficultyLevel, contentMode, classroomTheme } = req.body;
+    const { appMode, difficultyLevel, contentMode, classroomTheme } = req.body;
 
     const settings = await AppSettings.findByIdAndUpdate(
       'default',
       {
         $set: {
+          app_mode: appMode,
           difficulty_level: difficultyLevel,
           content_mode: contentMode,
           classroom_theme: classroomTheme,
@@ -645,6 +659,7 @@ app.put('/api/settings', async (req, res) => {
     );
 
     res.json({
+      appMode: settings.app_mode || 'listening',
       difficultyLevel: settings.difficulty_level,
       contentMode: settings.content_mode,
       classroomTheme: settings.classroom_theme

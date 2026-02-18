@@ -47,11 +47,13 @@ export const useSettings = () => {
 
       const data = await response.json();
       setSettings({
+        appMode: data.appMode || DEFAULT_SETTINGS.appMode,
         difficultyLevel: data.difficultyLevel || DEFAULT_SETTINGS.difficultyLevel,
         contentMode: data.contentMode || DEFAULT_SETTINGS.contentMode,
         classroomTheme: data.classroomTheme || DEFAULT_SETTINGS.classroomTheme,
         targetDuration: migrateToTargetDuration(data),
         contentModel: data.contentModel || DEFAULT_SETTINGS.contentModel,
+        defaultSpeakerCount: data.defaultSpeakerCount ?? DEFAULT_SETTINGS.defaultSpeakerCount,
       });
     } catch (err) {
       console.error('Failed to load settings:', err);
@@ -80,11 +82,13 @@ export const useSettings = () => {
 
       const data = await response.json();
       setSettings({
+        appMode: data.appMode || DEFAULT_SETTINGS.appMode,
         difficultyLevel: data.difficultyLevel,
         contentMode: data.contentMode,
         classroomTheme: data.classroomTheme || 'light',
         targetDuration: data.targetDuration ?? DEFAULT_SETTINGS.targetDuration,
         contentModel: data.contentModel || DEFAULT_SETTINGS.contentModel,
+        defaultSpeakerCount: data.defaultSpeakerCount ?? DEFAULT_SETTINGS.defaultSpeakerCount,
       });
       return true;
     } catch (err) {

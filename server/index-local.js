@@ -80,13 +80,17 @@ const previewActivitySchema = new mongoose.Schema({
 
 // Listening Test Schema
 const listeningTestSchema = new mongoose.Schema({
-  audioId: { type: mongoose.Schema.Types.ObjectId, ref: 'AudioEntry', required: false, default: null },  // null for transcript-only tests
+  audioId: { type: mongoose.Schema.Types.ObjectId, ref: 'AudioEntry', required: false, default: null },  // null for reading/transcript-only tests
   title: { type: String, required: true },
-  type: { type: String, enum: ['listening-comprehension', 'fill-in-blank', 'dictation'], required: true },
+  type: { type: String, enum: ['listening-comprehension', 'reading-comprehension', 'fill-in-blank', 'dictation'], required: true },
+  source_text: { type: String, default: null },  // Reading passage text
   questions: [testQuestionSchema],
   lexis: [lexisItemSchema],  // Vocabulary items for the test
   lexisAudio: { type: mongoose.Schema.Types.Mixed, default: null },  // Simple Mixed type - no validation issues
-  preview: [previewActivitySchema],  // Pre-listening preview activities
+  preview: [previewActivitySchema],  // Pre-listening/reading preview activities
+  classroomActivity: { type: mongoose.Schema.Types.Mixed, default: null },
+  transferQuestion: { type: mongoose.Schema.Types.Mixed, default: null },
+  speaker_count: { type: Number, default: null },  // Number of speakers (null for reading tests)
   difficulty: { type: String, enum: ['A1', 'A2', 'B1', 'B2', 'C1'] },  // CEFR level
   created_at: { type: Date, default: Date.now },
   updated_at: { type: Date, default: Date.now }
@@ -97,9 +101,13 @@ const ListeningTest = mongoose.model('ListeningTest', listeningTestSchema);
 // App Settings Schema (singleton - one document per app instance)
 const appSettingsSchema = new mongoose.Schema({
   _id: { type: String, default: 'default' }, // Single settings document
+  app_mode: { type: String, enum: ['listening', 'reading'], default: 'listening' },
   difficulty_level: { type: String, enum: ['A1', 'A2', 'B1', 'B2', 'C1'], default: 'B1' },
   content_mode: { type: String, enum: ['standard', 'halal', 'elsd'], default: 'standard' },
   classroom_theme: { type: String, enum: ['light', 'dark'], default: 'light' },
+  target_duration: { type: Number, default: 10 },
+  content_model: { type: String, default: 'gpt-5-mini' },
+  default_speaker_count: { type: mongoose.Schema.Types.Mixed, default: 'random' },
   updated_at: { type: Date, default: Date.now }
 });
 
@@ -262,15 +270,16 @@ app.get('/api/tests/:id', async (req, res) => {
 // Create test
 app.post('/api/tests', async (req, res) => {
   try {
-    const { audioId, title, type, questions, lexis, preview, difficulty } = req.body;
+    const { audioId, title, type, sourceText, questions, lexis, preview, difficulty, speakerCount, classroomActivity, transferQuestion } = req.body;
 
-    console.log('[POST /api/tests] Creating test with preview:', preview ? preview.length + ' activities' : 'none');
+    console.log('[POST /api/tests] Creating test:', { type, title, preview: preview ? preview.length + ' activities' : 'none' });
 
-    // Skip audio verification for transcript-only tests (audioId starts with "transcript-")
+    const isReadingTest = type && type.startsWith('reading');
+    // Skip audio verification for transcript-only or reading tests
     const isTranscriptOnly = audioId && audioId.startsWith('transcript-');
 
-    if (!isTranscriptOnly) {
-      // Verify audio entry exists for normal tests
+    if (!isReadingTest && !isTranscriptOnly && audioId) {
+      // Verify audio entry exists for normal listening tests
       const audioEntry = await AudioEntry.findById(audioId);
       if (!audioEntry) {
         return res.status(404).json({ error: 'Audio entry not found' });
@@ -278,17 +287,21 @@ app.post('/api/tests', async (req, res) => {
     }
 
     const test = new ListeningTest({
-      audioId: isTranscriptOnly ? null : audioId,  // Don't store fake IDs
+      audioId: (isTranscriptOnly || isReadingTest) ? null : (audioId || null),
       title,
       type,
+      source_text: sourceText || null,
+      speaker_count: speakerCount != null ? speakerCount : null,
       questions,
       lexis: lexis || [],
       preview: preview || [],
+      classroomActivity: classroomActivity || null,
+      transferQuestion: transferQuestion || null,
       difficulty: difficulty || null
     });
 
     await test.save();
-    console.log('[POST /api/tests] Saved test has preview:', test.preview ? test.preview.length + ' activities' : 'none');
+    console.log('[POST /api/tests] Saved test:', test._id, '| type:', test.type, '| preview:', test.preview ? test.preview.length + ' activities' : 'none');
     res.status(201).json(test);
   } catch (error) {
     console.error('Create test error:', error);
@@ -299,7 +312,7 @@ app.post('/api/tests', async (req, res) => {
 // Update test
 app.put('/api/tests/:id', async (req, res) => {
   try {
-    const { title, type, questions, lexis, lexisAudio, preview, difficulty } = req.body;
+    const { title, type, questions, lexis, lexisAudio, preview, speakerCount, difficulty } = req.body;
 
     console.log('[PUT /api/tests/:id] Received preview:', preview ? preview.length + ' activities' : 'undefined');
     console.log('[PUT /api/tests/:id] Received lexisAudio:', lexisAudio ? { engine: lexisAudio.engine, urlLength: lexisAudio.url?.length } : 'undefined');
@@ -326,6 +339,11 @@ app.put('/api/tests/:id', async (req, res) => {
     if (preview !== undefined) {
       updateData.preview = preview;
       console.log('[PUT /api/tests/:id] Adding preview to updateData');
+    }
+
+    // Only update speakerCount if provided
+    if (speakerCount !== undefined) {
+      updateData.speaker_count = speakerCount;
     }
 
     // Only update difficulty if provided
@@ -376,17 +394,25 @@ app.get('/api/settings', async (req, res) => {
     if (!settings) {
       settings = new AppSettings({
         _id: 'default',
+        app_mode: 'listening',
         difficulty_level: 'B1',
         content_mode: 'standard',
-        classroom_theme: 'light'
+        classroom_theme: 'light',
+        target_duration: 10,
+        content_model: 'gpt-5-mini',
+        default_speaker_count: 'random',
       });
       await settings.save();
     }
 
     res.json({
+      appMode: settings.app_mode || 'listening',
       difficultyLevel: settings.difficulty_level,
       contentMode: settings.content_mode,
-      classroomTheme: settings.classroom_theme || 'light'
+      classroomTheme: settings.classroom_theme || 'light',
+      targetDuration: settings.target_duration ?? 10,
+      contentModel: settings.content_model || 'gpt-5-mini',
+      defaultSpeakerCount: settings.default_speaker_count ?? 'random',
     });
   } catch (error) {
     console.error('Get settings error:', error);
@@ -397,15 +423,19 @@ app.get('/api/settings', async (req, res) => {
 // Update app settings
 app.put('/api/settings', async (req, res) => {
   try {
-    const { difficultyLevel, contentMode, classroomTheme } = req.body;
+    const { appMode, difficultyLevel, contentMode, classroomTheme, targetDuration, contentModel, defaultSpeakerCount } = req.body;
 
     const settings = await AppSettings.findByIdAndUpdate(
       'default',
       {
         $set: {
+          app_mode: appMode,
           difficulty_level: difficultyLevel,
           content_mode: contentMode,
           classroom_theme: classroomTheme,
+          target_duration: targetDuration,
+          content_model: contentModel,
+          default_speaker_count: defaultSpeakerCount,
           updated_at: new Date()
         }
       },
@@ -413,9 +443,13 @@ app.put('/api/settings', async (req, res) => {
     );
 
     res.json({
+      appMode: settings.app_mode || 'listening',
       difficultyLevel: settings.difficulty_level,
       contentMode: settings.content_mode,
-      classroomTheme: settings.classroom_theme
+      classroomTheme: settings.classroom_theme,
+      targetDuration: settings.target_duration,
+      contentModel: settings.content_model,
+      defaultSpeakerCount: settings.default_speaker_count,
     });
   } catch (error) {
     console.error('Update settings error:', error);

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { TrueFalseItem, PreviewTrueFalseResult } from '../types';
 import { ClassroomTheme } from './Settings';
+import { useContentLabel } from '../contexts/ContentLabelContext';
 
 interface TrueFalseActivityProps {
   items: TrueFalseItem[];
@@ -16,6 +17,7 @@ export const TrueFalseActivity: React.FC<TrueFalseActivityProps> = ({
   onSkip,
 }) => {
   const isDark = theme === 'dark';
+  const label = useContentLabel();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<{ [id: string]: boolean | null }>({});
   const [showResult, setShowResult] = useState(false);
@@ -96,10 +98,10 @@ export const TrueFalseActivity: React.FC<TrueFalseActivityProps> = ({
       {/* Instructions */}
       <div className={`px-4 py-3 ${isDark ? 'bg-slate-800/50' : 'bg-white/60'}`}>
         <p className={`text-center text-sm ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-          Do you think this will be true or false in the dialogue?
+          Do you think this will be true or false in {label.theType}?
         </p>
         <p className={`text-center text-sm mt-1 ${isDark ? 'text-slate-500' : 'text-slate-500'}`} dir="rtl">
-          هل تعتقد أن هذه العبارة صحيحة أم خاطئة في الحوار؟
+          هل تعتقد أن هذه العبارة صحيحة أم خاطئة في {label.verb === 'read' ? 'النص' : 'الحوار'}؟
         </p>
       </div>
 

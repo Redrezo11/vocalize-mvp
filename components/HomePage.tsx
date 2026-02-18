@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { CEFRLevel, ContentMode, ContentModel } from './Settings';
 import { EFL_TOPICS, SpeakerCount, getRandomTopic, randomSpeakerCount, resolveSpeakerDefault } from '../utils/eflTopics';
 import type { SpeakerCountDefault } from './Settings';
+import { useAppMode } from '../contexts/AppModeContext';
+import { modeLabel } from '../utils/modeLabels';
 
 export type CreationMethod = 'audio' | 'transcript' | 'import' | 'oneshot' | 'jam';
 export type { ContentModel } from './Settings';
@@ -97,6 +99,8 @@ export const HomePage: React.FC<HomePageProps> = ({
   defaultContentModel = 'gpt-5-mini',
   defaultSpeakerCount = 'random' as const,
 }) => {
+  const appMode = useAppMode();
+  const labels = modeLabel(appMode);
   const [jamExpanded, setJamExpanded] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [selectedDifficulty, setSelectedDifficulty] = useState<CEFRLevel>(defaultDifficulty);
@@ -137,7 +141,8 @@ export const HomePage: React.FC<HomePageProps> = ({
   }, [defaultDifficulty, defaultTargetDuration, defaultContentMode, defaultContentModel]);
 
   const methods = [
-    {
+    // Generate Audio — listening mode only
+    ...(appMode === 'listening' ? [{
       id: 'audio' as CreationMethod,
       title: 'Generate Audio',
       description: 'Create from text with AI voices',
@@ -145,17 +150,18 @@ export const HomePage: React.FC<HomePageProps> = ({
       gradient: 'from-indigo-500 to-violet-500',
       hoverGradient: 'hover:from-indigo-400 hover:to-violet-400',
       shadow: 'shadow-indigo-500/30',
-    },
+    }] : []),
     {
       id: 'transcript' as CreationMethod,
-      title: 'Text Only',
-      description: 'Add transcript without audio',
+      title: appMode === 'reading' ? 'Paste Passage' : 'Text Only',
+      description: appMode === 'reading' ? 'Add a reading passage' : 'Add transcript without audio',
       icon: FileTextIcon,
       gradient: 'from-emerald-500 to-teal-500',
       hoverGradient: 'hover:from-emerald-400 hover:to-teal-400',
       shadow: 'shadow-emerald-500/30',
     },
-    {
+    // Import — listening mode only
+    ...(appMode === 'listening' ? [{
       id: 'import' as CreationMethod,
       title: 'Import Content',
       description: 'Import existing questions & vocab',
@@ -163,7 +169,7 @@ export const HomePage: React.FC<HomePageProps> = ({
       gradient: 'from-amber-500 to-orange-500',
       hoverGradient: 'hover:from-amber-400 hover:to-orange-400',
       shadow: 'shadow-amber-500/30',
-    },
+    }] : []),
     {
       id: 'oneshot' as CreationMethod,
       title: 'One Shot',
@@ -203,15 +209,15 @@ export const HomePage: React.FC<HomePageProps> = ({
         {/* Header */}
         <div className="text-center mb-10">
           <h1 className="text-4xl sm:text-5xl font-bold bg-gradient-to-r from-slate-900 via-indigo-900 to-violet-900 bg-clip-text text-transparent mb-4">
-            Create Listening Content
+            Create {appMode === 'reading' ? 'Reading' : 'Listening'} Content
           </h1>
           <p className="text-lg text-slate-600 max-w-2xl mx-auto">
-            Choose how you'd like to create your EFL listening materials
+            Choose how you'd like to create your EFL {appMode === 'reading' ? 'reading' : 'listening'} materials
           </p>
         </div>
 
         {/* Method Cards - 4 column grid */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
+        <div className={`grid grid-cols-2 ${methods.length > 3 ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-4 mb-10`}>
           {methods.map((method) => (
             <button
               key={method.id}
@@ -262,7 +268,7 @@ export const HomePage: React.FC<HomePageProps> = ({
               <div className="flex items-center justify-between p-4 border-b border-slate-100">
                 <div>
                   <h3 className="text-lg font-bold text-slate-800">Quick Generate</h3>
-                  <p className="text-xs text-slate-500">Create a complete listening test</p>
+                  <p className="text-xs text-slate-500">Create a complete {appMode === 'reading' ? 'reading' : 'listening'} test</p>
                 </div>
                 <button
                   onClick={() => setJamExpanded(false)}
@@ -300,7 +306,8 @@ export const HomePage: React.FC<HomePageProps> = ({
                   </div>
                 </div>
 
-                {/* Speaker Count */}
+                {/* Speaker Count — listening mode only */}
+                {appMode === 'listening' && (
                 <div className="w-full">
                   <label className="block text-sm font-medium text-slate-600 mb-2 text-center">Speakers</label>
                   <div className="flex justify-center gap-2">
@@ -331,6 +338,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                     </button>
                   </div>
                 </div>
+                )}
 
                 {/* Topic */}
                 <div className="w-full">
@@ -467,7 +475,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                   <div className="text-center text-sm text-slate-500 bg-slate-50 rounded-xl p-4 w-full">
                     <p className="font-medium text-slate-700 mb-2">This will generate a {jamSettings.targetDuration}-minute test:</p>
                     <ul className="space-y-1">
-                      <li>• Audio dialogue with AI voices</li>
+                      <li>• {appMode === 'reading' ? 'Reading passage' : 'Audio dialogue with AI voices'}</li>
                       <li>• Comprehension questions</li>
                       <li>• Vocabulary items with games</li>
                       <li>• Preview activities</li>

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useAppMode } from '../contexts/AppModeContext';
 
 export type CreationMethod = 'audio' | 'transcript' | 'import' | 'oneshot' | 'jam';
 
@@ -55,9 +56,12 @@ export const CreationMethodSelector: React.FC<CreationMethodSelectorProps> = ({
   onClose,
   onSelect,
 }) => {
+  const appMode = useAppMode();
+  const isReading = appMode === 'reading';
+
   if (!isOpen) return null;
 
-  const methods = [
+  const allMethods = [
     {
       id: 'audio' as CreationMethod,
       title: 'Generate Audio',
@@ -66,11 +70,12 @@ export const CreationMethodSelector: React.FC<CreationMethodSelectorProps> = ({
       gradient: 'from-indigo-500 to-violet-500',
       hoverGradient: 'hover:from-indigo-400 hover:to-violet-400',
       shadow: 'shadow-indigo-500/30',
+      listeningOnly: true,
     },
     {
       id: 'transcript' as CreationMethod,
-      title: 'Text Only',
-      description: 'Transcript without audio',
+      title: isReading ? 'Paste Passage' : 'Text Only',
+      description: isReading ? 'Add a reading passage' : 'Transcript without audio',
       icon: FileTextIcon,
       gradient: 'from-emerald-500 to-teal-500',
       hoverGradient: 'hover:from-emerald-400 hover:to-teal-400',
@@ -84,6 +89,7 @@ export const CreationMethodSelector: React.FC<CreationMethodSelectorProps> = ({
       gradient: 'from-amber-500 to-orange-500',
       hoverGradient: 'hover:from-amber-400 hover:to-orange-400',
       shadow: 'shadow-amber-500/30',
+      listeningOnly: true,
     },
     {
       id: 'oneshot' as CreationMethod,
@@ -105,13 +111,17 @@ export const CreationMethodSelector: React.FC<CreationMethodSelectorProps> = ({
     },
   ];
 
+  const methods = isReading
+    ? allMethods.filter(m => !m.listeningOnly)
+    : allMethods;
+
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-3xl max-w-2xl w-full p-8 shadow-2xl">
         {/* Header */}
         <div className="text-center mb-8">
           <h2 className="text-2xl font-bold text-slate-900">Create New Content</h2>
-          <p className="text-slate-500 mt-2">Choose how you'd like to create your listening material</p>
+          <p className="text-slate-500 mt-2">Choose how you'd like to create your {isReading ? 'reading passage' : 'listening material'}</p>
         </div>
 
         {/* Method Cards */}
