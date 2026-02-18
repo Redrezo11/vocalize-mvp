@@ -200,6 +200,8 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
   const [isDeleting, setIsDeleting] = useState(false);
   const [lexisViewMode, setLexisViewMode] = useState<'overview' | 'focus'>('overview');
   const [focusedLexisIndex, setFocusedLexisIndex] = useState(0);
+  const [contentTab, setContentTab] = useState<'passage' | 'vocabulary'>('passage');
+  const [passageFontSize, setPassageFontSize] = useState(1.25); // rem
   const audioRef = useRef<HTMLAudioElement>(null);
 
   // Lexis audio state
@@ -264,6 +266,13 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
 
   const currentSlideIndex = fullscreenSlide ? fullscreenSlides.indexOf(fullscreenSlide) : -1;
   const isFullscreen = fullscreenSlide !== null;
+
+  // Reset content tab when test changes
+  const selectedTestId = selectedTest?.id;
+  useEffect(() => {
+    setContentTab('passage');
+    setPassageFontSize(1.25);
+  }, [selectedTestId]);
 
   // Teacher controls - hide answers by default
   const [showAnswers, setShowAnswers] = useState(false);
@@ -1548,25 +1557,69 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
           />
         )}
 
-        {/* Reading Passage — reading mode only */}
-        {appMode === 'reading' && selectedTest.sourceText && (
-          <div className="max-w-4xl mx-auto px-6 py-6">
-            <div className={`rounded-2xl border p-6 ${isDark ? 'border-emerald-700 bg-emerald-900/20' : 'border-emerald-200 bg-emerald-50/80'}`}>
-              <h2 className={`text-lg font-bold mb-4 flex items-center gap-2 ${isDark ? 'text-emerald-300' : 'text-emerald-800'}`}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" />
-                </svg>
+        {/* Tab bar — reading mode with both passage and vocab */}
+        {appMode === 'reading' && selectedTest.sourceText && selectedTest.lexis && selectedTest.lexis.length > 0 && (
+          <div className="max-w-4xl mx-auto px-6 pt-4">
+            <div className={`inline-flex rounded-xl p-1 ${isDark ? 'bg-slate-800' : 'bg-slate-200'}`}>
+              <button
+                onClick={() => setContentTab('passage')}
+                className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  contentTab === 'passage'
+                    ? isDark ? 'bg-slate-600 text-white' : 'bg-white text-slate-900 shadow-sm'
+                    : isDark ? 'text-slate-400 hover:text-white' : 'text-slate-500 hover:text-slate-900'
+                }`}
+              >
                 Reading Passage
-              </h2>
-              <div className={`text-base leading-relaxed whitespace-pre-wrap ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+              </button>
+              <button
+                onClick={() => setContentTab('vocabulary')}
+                className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  contentTab === 'vocabulary'
+                    ? isDark ? 'bg-slate-600 text-white' : 'bg-white text-slate-900 shadow-sm'
+                    : isDark ? 'text-slate-400 hover:text-white' : 'text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                Vocabulary
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Reading Passage — shown when passage tab active OR no vocab exists */}
+        {appMode === 'reading' && selectedTest.sourceText && (contentTab === 'passage' || !selectedTest.lexis?.length) && (
+          <div className="max-w-4xl mx-auto px-6 py-6">
+            <div className="flex justify-end gap-2 mb-2">
+              <button
+                onClick={() => setPassageFontSize(s => Math.max(0.875, +(s - 0.125).toFixed(3)))}
+                className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm transition-colors ${
+                  isDark ? 'bg-slate-700 text-slate-300 hover:bg-slate-600' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                }`}
+              >
+                A-
+              </button>
+              <button
+                onClick={() => setPassageFontSize(s => Math.min(2.5, +(s + 0.125).toFixed(3)))}
+                className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm transition-colors ${
+                  isDark ? 'bg-slate-700 text-slate-300 hover:bg-slate-600' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                }`}
+              >
+                A+
+              </button>
+            </div>
+            <div className={`rounded-2xl border p-6 ${isDark ? 'border-emerald-700 bg-emerald-900/20' : 'border-emerald-200 bg-emerald-50/80'}`}>
+              <div
+                className={`leading-relaxed whitespace-pre-wrap ${isDark ? 'text-slate-300' : 'text-slate-700'}`}
+                style={{ fontSize: `${passageFontSize}rem` }}
+              >
                 {selectedTest.sourceText}
               </div>
             </div>
           </div>
         )}
 
-        {/* Vocabulary / Lexis Section */}
-        {(!selectedTest.lexis || selectedTest.lexis.length === 0) ? (
+        {/* Vocabulary / Lexis Section — hidden when passage tab is active in reading mode */}
+        {!(appMode === 'reading' && selectedTest.sourceText && selectedTest.lexis?.length && contentTab === 'passage') && (
+        (!selectedTest.lexis || selectedTest.lexis.length === 0) ? (
           /* No lexis - show questions if available */
           selectedTest.questions && selectedTest.questions.length > 0 ? (
             <div className="max-w-4xl mx-auto px-6 py-8">
@@ -1806,6 +1859,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
               </svg>
             </button>
           </div>
+        )
         )}
 
         {/* Keyboard Hints - Fixed Bottom (hidden in fullscreen) */}
