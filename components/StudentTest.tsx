@@ -67,6 +67,8 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
   const isReading = appMode === 'reading';
   const contentLabel = useMemo(() => getContentLabels(test.speakerCount, appMode), [test.speakerCount, appMode]);
   const [passageExpanded, setPassageExpanded] = useState(true);
+  const [passageFullscreen, setPassageFullscreen] = useState(false);
+  const [passageFontSize, setPassageFontSize] = useState(1.125); // rem (~text-lg)
 
   // Try to restore session state from sessionStorage (survives tab suspension)
   const savedState = useMemo<SavedSessionState | null>(() => {
@@ -276,6 +278,66 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
 
   return (
     <div className={`min-h-screen flex flex-col ${isDark ? 'bg-slate-900' : 'bg-slate-50'}`}>
+      {/* Fullscreen Reading Passage Overlay */}
+      {passageFullscreen && test.sourceText && (
+        <div
+          className="fixed inset-0 z-50 flex flex-col"
+          style={{
+            background: isDark ? '#0f172a' : '#fffbeb',
+            paddingTop: 'env(safe-area-inset-top)',
+            paddingBottom: 'env(safe-area-inset-bottom)',
+          }}
+        >
+          {/* Header */}
+          <div className={`flex items-center justify-between px-4 py-3 flex-shrink-0 border-b ${isDark ? 'border-slate-700' : 'border-amber-200'}`}>
+            <span className={`font-semibold text-sm ${isDark ? 'text-emerald-300' : 'text-emerald-800'}`}>
+              Reading Passage
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setPassageFontSize(s => Math.max(0.75, +(s - 0.125).toFixed(3)))}
+                className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm transition-colors ${
+                  isDark ? 'bg-slate-700 text-slate-300 hover:bg-slate-600' : 'bg-amber-100 text-amber-800 hover:bg-amber-200'
+                }`}
+              >
+                A-
+              </button>
+              <button
+                onClick={() => setPassageFontSize(s => Math.min(2.0, +(s + 0.125).toFixed(3)))}
+                className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm transition-colors ${
+                  isDark ? 'bg-slate-700 text-slate-300 hover:bg-slate-600' : 'bg-amber-100 text-amber-800 hover:bg-amber-200'
+                }`}
+              >
+                A+
+              </button>
+              <button
+                onClick={() => setPassageFullscreen(false)}
+                className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
+                  isDark ? 'bg-slate-700 text-slate-300 hover:bg-slate-600' : 'bg-amber-100 text-amber-800 hover:bg-amber-200'
+                }`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          {/* Scrollable passage body */}
+          <div
+            className="flex-1 overflow-y-auto px-5 py-6"
+            style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}
+          >
+            <div
+              className={`max-w-2xl mx-auto leading-relaxed whitespace-pre-wrap ${isDark ? 'text-slate-200' : 'text-slate-800'}`}
+              style={{ fontSize: `${passageFontSize}rem` }}
+            >
+              {test.sourceText}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Preview Banner */}
       {isPreview && (
         <div className="bg-amber-500 text-white px-3 py-2 text-center flex-shrink-0">
@@ -348,20 +410,32 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
           {/* Reading Passage Panel — shown for reading tests */}
           {isReading && test.sourceText && (
             <div className={`rounded-xl border mb-3 ${isDark ? 'border-emerald-700 bg-emerald-900/20' : 'border-emerald-200 bg-emerald-50'}`}>
-              <button
-                onClick={() => setPassageExpanded(!passageExpanded)}
-                className={`w-full px-4 py-3 flex items-center justify-between ${isDark ? 'text-emerald-300' : 'text-emerald-800'}`}
-              >
-                <span className="font-semibold text-sm flex items-center gap-2">
+              <div className={`w-full px-4 py-3 flex items-center justify-between ${isDark ? 'text-emerald-300' : 'text-emerald-800'}`}>
+                <button
+                  onClick={() => setPassageExpanded(!passageExpanded)}
+                  className="font-semibold text-sm flex items-center gap-2"
+                >
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" />
                   </svg>
                   Reading Passage
-                </span>
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${passageExpanded ? 'rotate-180' : ''}`}>
-                  <polyline points="6 9 12 15 18 9" />
-                </svg>
-              </button>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${passageExpanded ? 'rotate-180' : ''}`}>
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => setPassageFullscreen(true)}
+                  className={`p-1.5 rounded-lg transition-colors ${isDark ? 'hover:bg-white/10' : 'hover:bg-black/10'}`}
+                  title="Fullscreen reader"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="15 3 21 3 21 9" />
+                    <polyline points="9 21 3 21 3 15" />
+                    <line x1="21" y1="3" x2="14" y2="10" />
+                    <line x1="3" y1="21" x2="10" y2="14" />
+                  </svg>
+                </button>
+              </div>
               {passageExpanded && (
                 <div className={`px-4 pb-4 text-sm leading-relaxed whitespace-pre-wrap ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
                   {test.sourceText}
