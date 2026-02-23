@@ -15,6 +15,7 @@ const mapTestFromServer = (t: any): ListeningTest => ({
   createdAt: t.created_at || t.createdAt,
   updatedAt: t.updated_at || t.updatedAt,
   sourceText: t.source_text || t.sourceText || undefined,
+  speakerCount: t.speaker_count ?? t.speakerCount ?? undefined,
   questions: (t.questions || []).map((q: any) => ({ ...q, id: q._id || q.id || Math.random().toString(36).substring(2, 11) })),
   lexis: t.lexis?.map((l: any) => ({ ...l, id: l._id || l.id || Math.random().toString(36).substring(2, 11) })),
   lexisAudio: t.lexisAudio,
@@ -325,6 +326,8 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
           setSelectedAudio(audio || null);
           setPlayCount(0);
           setIsPlaying(false);
+          setContentTab('passage');
+          setPassageFontSize(1.25);
           setCurrentTime(0);
           setDuration(0);
           setView('present');
@@ -639,6 +642,8 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
     setIsPlayingPreListeningAudio(false);
     setFullscreenSlide(null);
     setPlayingWordId(null);
+    setContentTab('passage');
+    setPassageFontSize(1.25);
     setCurrentTime(0);
     setDuration(0);
     setView('present');
