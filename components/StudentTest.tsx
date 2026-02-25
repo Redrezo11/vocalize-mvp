@@ -432,7 +432,7 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
   }
 
   return (
-    <div className={`min-h-screen flex flex-col ${isDark ? 'bg-slate-900' : 'bg-slate-50'}`}>
+    <div className={`flex flex-col ${isDark ? 'bg-slate-900' : 'bg-slate-50'}`} style={{ minHeight: '100svh' }}>
       {/* Preview Banner */}
       {isPreview && (
         <div className="bg-amber-500 text-white px-3 py-2 text-center flex-shrink-0">
