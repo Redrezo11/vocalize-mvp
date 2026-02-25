@@ -495,7 +495,7 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
       )}
 
       {/* Install tip banner */}
-      {showInstallTip && (
+      {showInstallTip && !isFullscreen && (
         <div className={`px-3 py-2 flex items-center justify-between flex-shrink-0 text-xs ${isDark ? 'bg-indigo-900/50 text-indigo-300' : 'bg-indigo-50 text-indigo-700'}`}>
           <span>For fullscreen mode: tap <strong>&#x22EE;</strong> then <strong>Open in Chrome</strong></span>
           <button
