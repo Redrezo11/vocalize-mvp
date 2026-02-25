@@ -370,7 +370,7 @@ const FeedbackSection: React.FC<{
         </span>
       </button>
       <div
-        className={`transition-all duration-300 ease-in-out overflow-hidden ${isOpen ? 'max-h-40 opacity-100' : 'max-h-0 opacity-0'}`}
+        className={`transition-all duration-300 ease-in-out overflow-hidden ${isOpen ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}
       >
         <div
           className={`px-3 pb-3 text-sm ${isDark ? 'text-slate-300' : 'text-slate-600'}`}
@@ -522,6 +522,13 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
       setFeedback(fb);
       setCurrentIndex(0);
       setPhase('feedback');
+
+      // Auto-detect Arabic answers and switch feedback language
+      const hasArabicAnswer = Object.values(answers).some((answer: string) => {
+        const arabicChars = (answer.match(/[\u0600-\u06FF]/g) || []).length;
+        return arabicChars > answer.length * 0.3;
+      });
+      if (hasArabicAnswer) setFeedbackLang('ar');
     } catch (err) {
       console.error('[FollowUp] Evaluate error:', err);
       setError(err instanceof Error ? err.message : 'Failed to evaluate answers');
@@ -827,7 +834,7 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
                 content={fb.connectToTest}
                 contentArabic={fb.connectToTestArabic}
                 language={feedbackLang}
-                defaultOpen={false}
+                defaultOpen={true}
                 borderColor="border-purple-400"
                 isDark={isDark}
               />
@@ -838,7 +845,7 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
                 content={fb.extendThinking}
                 contentArabic={fb.extendThinkingArabic}
                 language={feedbackLang}
-                defaultOpen={false}
+                defaultOpen={true}
                 borderColor="border-indigo-400"
                 isDark={isDark}
               />

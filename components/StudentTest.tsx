@@ -557,15 +557,15 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
                 </button>
                 <button
                   onClick={() => setPassageFullscreen(true)}
-                  className={`p-1.5 rounded-lg transition-colors ${isDark ? 'hover:bg-white/10' : 'hover:bg-black/10'}`}
-                  title="Fullscreen reader"
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                    isDark ? 'bg-emerald-800/50 text-emerald-300 hover:bg-emerald-700/50' : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                  }`}
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="15 3 21 3 21 9" />
-                    <polyline points="9 21 3 21 3 15" />
-                    <line x1="21" y1="3" x2="14" y2="10" />
-                    <line x1="3" y1="21" x2="10" y2="14" />
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="11" cy="11" r="8" />
+                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
                   </svg>
+                  Zoom
                 </button>
               </div>
               {passageExpanded && (
