@@ -15,13 +15,10 @@ export function usePinchZoom(
   const initialDistance = useRef(-1);
   const initialSize = useRef(currentSize);
 
-  // Keep initialSize in sync when size changes from buttons
-  // (but not during an active pinch)
-  useEffect(() => {
-    if (initialDistance.current === -1) {
-      initialSize.current = currentSize;
-    }
-  }, [currentSize]);
+  // Track currentSize via ref so event listeners always read the latest
+  // value without needing currentSize in the effect dependency array.
+  const sizeRef = useRef(currentSize);
+  sizeRef.current = currentSize;
 
   useEffect(() => {
     const el = targetRef.current;
@@ -36,7 +33,7 @@ export function usePinchZoom(
     const onTouchStart = (e: TouchEvent) => {
       if (e.touches.length === 2) {
         initialDistance.current = getDistance(e.touches);
-        initialSize.current = currentSize;
+        initialSize.current = sizeRef.current;
       }
     };
 
@@ -57,14 +54,23 @@ export function usePinchZoom(
       }
     };
 
+    // iOS Safari fires proprietary gesture events alongside touch events.
+    // Preventing these ensures native zoom cannot activate.
+    const onGestureStart = (e: Event) => e.preventDefault();
+    const onGestureChange = (e: Event) => e.preventDefault();
+
     el.addEventListener('touchstart', onTouchStart, { passive: true });
     el.addEventListener('touchmove', onTouchMove, { passive: false });
     el.addEventListener('touchend', onTouchEnd, { passive: true });
+    el.addEventListener('gesturestart', onGestureStart, { passive: false } as any);
+    el.addEventListener('gesturechange', onGestureChange, { passive: false } as any);
 
     return () => {
       el.removeEventListener('touchstart', onTouchStart);
       el.removeEventListener('touchmove', onTouchMove);
       el.removeEventListener('touchend', onTouchEnd);
+      el.removeEventListener('gesturestart', onGestureStart);
+      el.removeEventListener('gesturechange', onGestureChange);
     };
-  }, [targetRef, currentSize, setSize, min, max]);
+  }, [targetRef, setSize, min, max]);
 }
