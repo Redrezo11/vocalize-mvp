@@ -118,6 +118,7 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
   const [passageExpanded, setPassageExpanded] = useState(true);
   const [passageFullscreen, setPassageFullscreen] = useState(false);
   const [passageFontSize, setPassageFontSize] = useState(1.125); // rem (~text-lg)
+  const [zoomExpanded, setZoomExpanded] = useState(false);
 
   // Try to restore session state from sessionStorage (survives tab suspension)
   const savedState = useMemo<SavedSessionState | null>(() => {
@@ -420,35 +421,17 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
             <span className={`font-semibold text-sm ${isDark ? 'text-emerald-300' : 'text-emerald-800'}`}>
               Reading Passage
             </span>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setPassageFontSize(s => Math.max(0.75, +(s - 0.125).toFixed(3)))}
-                className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm transition-colors ${
-                  isDark ? 'bg-slate-700 text-slate-300 hover:bg-slate-600' : 'bg-amber-100 text-amber-800 hover:bg-amber-200'
-                }`}
-              >
-                A-
-              </button>
-              <button
-                onClick={() => setPassageFontSize(s => Math.min(2.0, +(s + 0.125).toFixed(3)))}
-                className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm transition-colors ${
-                  isDark ? 'bg-slate-700 text-slate-300 hover:bg-slate-600' : 'bg-amber-100 text-amber-800 hover:bg-amber-200'
-                }`}
-              >
-                A+
-              </button>
-              <button
-                onClick={() => setPassageFullscreen(false)}
-                className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
-                  isDark ? 'bg-slate-700 text-slate-300 hover:bg-slate-600' : 'bg-amber-100 text-amber-800 hover:bg-amber-200'
-                }`}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
-            </div>
+            <button
+              onClick={() => { setPassageFullscreen(false); setZoomExpanded(false); }}
+              className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
+                isDark ? 'bg-slate-700 text-slate-300 hover:bg-slate-600' : 'bg-amber-100 text-amber-800 hover:bg-amber-200'
+              }`}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
           </div>
           {/* Scrollable passage body */}
           <div
@@ -461,6 +444,54 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
             >
               {test.sourceText}
             </div>
+          </div>
+          {/* Floating zoom widget — bottom-right */}
+          <div className="fixed bottom-6 right-6 z-50" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+            {zoomExpanded ? (
+              <div className={`flex items-center gap-1 rounded-full shadow-lg px-2 py-1.5 transition-all ${
+                isDark ? 'bg-slate-700 text-slate-200' : 'bg-white text-slate-700 ring-1 ring-black/10'
+              }`}>
+                <button
+                  onClick={() => setPassageFontSize(s => Math.max(0.75, +(s - 0.125).toFixed(3)))}
+                  className={`w-10 h-10 rounded-full flex items-center justify-center text-xl font-bold transition-colors ${
+                    isDark ? 'hover:bg-slate-600 active:bg-slate-500' : 'hover:bg-slate-100 active:bg-slate-200'
+                  }`}
+                >
+                  −
+                </button>
+                <button
+                  onClick={() => setZoomExpanded(false)}
+                  className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
+                    isDark ? 'hover:bg-slate-600 active:bg-slate-500' : 'hover:bg-slate-100 active:bg-slate-200'
+                  }`}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="11" cy="11" r="8" />
+                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => setPassageFontSize(s => Math.min(2.0, +(s + 0.125).toFixed(3)))}
+                  className={`w-10 h-10 rounded-full flex items-center justify-center text-xl font-bold transition-colors ${
+                    isDark ? 'hover:bg-slate-600 active:bg-slate-500' : 'hover:bg-slate-100 active:bg-slate-200'
+                  }`}
+                >
+                  +
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setZoomExpanded(true)}
+                className={`w-12 h-12 rounded-full shadow-lg flex items-center justify-center transition-colors ${
+                  isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600 active:bg-slate-500' : 'bg-white text-slate-700 ring-1 ring-black/10 hover:bg-slate-50 active:bg-slate-100'
+                }`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="8" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+              </button>
+            )}
           </div>
         </div>
       )}
