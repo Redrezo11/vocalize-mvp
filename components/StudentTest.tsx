@@ -119,6 +119,22 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
   const [passageFullscreen, setPassageFullscreen] = useState(false);
   const [passageFontSize, setPassageFontSize] = useState(1.125); // rem (~text-lg)
   const [zoomExpanded, setZoomExpanded] = useState(false);
+  const [zoomVisible, setZoomVisible] = useState(true);
+  const [zoomIdle, setZoomIdle] = useState(false);
+  const lastScrollTop = useRef(0);
+  const idleTimer = useRef<number>();
+
+  const handlePassageScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const st = e.currentTarget.scrollTop;
+    const delta = st - lastScrollTop.current;
+    if (delta > 8) { setZoomVisible(false); setZoomExpanded(false); }
+    else if (delta < -8) setZoomVisible(true);
+    lastScrollTop.current = st;
+
+    setZoomIdle(false);
+    clearTimeout(idleTimer.current);
+    idleTimer.current = window.setTimeout(() => setZoomIdle(true), 3000) as unknown as number;
+  }, []);
 
   // Try to restore session state from sessionStorage (survives tab suspension)
   const savedState = useMemo<SavedSessionState | null>(() => {
@@ -422,7 +438,7 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
               Reading Passage
             </span>
             <button
-              onClick={() => { setPassageFullscreen(false); setZoomExpanded(false); }}
+              onClick={() => { setPassageFullscreen(false); setZoomExpanded(false); setZoomVisible(true); setZoomIdle(false); lastScrollTop.current = 0; clearTimeout(idleTimer.current); }}
               className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
                 isDark ? 'bg-slate-700 text-slate-300 hover:bg-slate-600' : 'bg-amber-100 text-amber-800 hover:bg-amber-200'
               }`}
@@ -436,6 +452,7 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
           {/* Scrollable passage body */}
           <div
             className="flex-1 overflow-y-auto px-5 py-6"
+            onScroll={handlePassageScroll}
             style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}
           >
             <div
@@ -446,7 +463,14 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
             </div>
           </div>
           {/* Floating zoom widget — bottom-right */}
-          <div className="fixed bottom-6 right-6 z-50" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+          <div
+            className={`fixed bottom-6 right-6 z-50 transition-all duration-200 ${
+              !zoomVisible ? 'translate-y-20 opacity-0 pointer-events-none' : zoomIdle ? 'opacity-25' : ''
+            }`}
+            style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+            onTouchStart={() => { setZoomIdle(false); clearTimeout(idleTimer.current); idleTimer.current = window.setTimeout(() => setZoomIdle(true), 3000) as unknown as number; }}
+            onMouseEnter={() => { setZoomIdle(false); clearTimeout(idleTimer.current); }}
+          >
             {zoomExpanded ? (
               <div className={`flex items-center gap-1 rounded-full shadow-lg px-2 py-1.5 transition-all ${
                 isDark ? 'bg-slate-700 text-slate-200' : 'bg-white text-slate-700 ring-1 ring-black/10'
