@@ -7,6 +7,7 @@ import { buildDialoguePrompt, buildPassagePrompt, buildTestContentPrompt, valida
 import { EFL_TOPICS, SpeakerCount, AudioFormat, getRandomTopic, getRandomFormat, getCompatibleTopic, shuffleFormat, randomSpeakerCount } from '../utils/eflTopics';
 import { getRandomReadingTopic, getRandomReadingGenre, getCompatibleReadingTopic, shuffleReadingGenre } from '../utils/readingTopics';
 import { useAppMode } from '../contexts/AppModeContext';
+import { generateBonusForTest } from '../helpers/bonusGeneration';
 
 const API_BASE = '/api';
 
@@ -567,6 +568,9 @@ export const JamButton: React.FC<JamButtonProps> = ({
       updatedAt: testData.updated_at,
     };
 
+    // Fire-and-forget: pre-generate bonus questions
+    generateBonusForTest(savedTest.id, payload.transcript, payload.difficulty, false, payload.questions.map(q => q.questionText), 'gpt-5-mini').catch(console.error);
+
     setStage('done');
     setProgress(100);
 
@@ -802,6 +806,9 @@ export const JamButton: React.FC<JamButtonProps> = ({
           createdAt: testDataResult.created_at,
           updatedAt: testDataResult.updated_at,
         };
+
+        // Fire-and-forget: pre-generate bonus questions
+        generateBonusForTest(savedTest.id, mergedPayload.transcript, mergedPayload.difficulty, true, mergedPayload.questions.map(q => q.questionText), 'gpt-5-mini').catch(console.error);
 
         setStage('done');
         setProgress(100);

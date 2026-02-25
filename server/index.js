@@ -116,6 +116,7 @@ const listeningTestSchema = new mongoose.Schema({
   speaker_count: { type: Number, default: null },  // Number of speakers (null for reading tests)
   source_text: { type: String, default: null },  // Reading passage (null for listening tests)
   difficulty: { type: String, enum: ['A1', 'A2', 'B1', 'B2', 'C1'] },  // CEFR level
+  bonus_questions: [testQuestionSchema],  // Pre-generated bonus questions pool
   created_at: { type: Date, default: Date.now },
   updated_at: { type: Date, default: Date.now }
 });
@@ -459,7 +460,7 @@ app.get('/api/tests/:id', async (req, res) => {
 // Create test
 app.post('/api/tests', async (req, res) => {
   try {
-    const { audioId, title, type, questions, lexis, preview, classroomActivity, transferQuestion, sourceText, speakerCount, difficulty } = req.body;
+    const { audioId, title, type, questions, lexis, preview, classroomActivity, transferQuestion, sourceText, speakerCount, difficulty, bonusQuestions } = req.body;
 
     console.log('[POST /api/tests] Creating test with preview:', preview ? preview.length + ' activities' : 'none', '| type:', type);
 
@@ -487,7 +488,8 @@ app.post('/api/tests', async (req, res) => {
       transferQuestion: transferQuestion || null,
       speaker_count: speakerCount != null ? speakerCount : null,
       source_text: sourceText || null,
-      difficulty: difficulty || null
+      difficulty: difficulty || null,
+      bonus_questions: bonusQuestions || []
     });
 
     await test.save();
@@ -502,7 +504,7 @@ app.post('/api/tests', async (req, res) => {
 // Update test
 app.put('/api/tests/:id', async (req, res) => {
   try {
-    const { title, type, questions, lexis, lexisAudio, preview, classroomActivity, transferQuestion, speakerCount, difficulty } = req.body;
+    const { title, type, questions, lexis, lexisAudio, preview, classroomActivity, transferQuestion, speakerCount, difficulty, bonusQuestions } = req.body;
 
     console.log('[SERVER PUT /api/tests/:id] Received preview:', preview ? preview.length + ' activities' : 'undefined');
     console.log('[SERVER PUT /api/tests/:id] Received lexisAudio:', lexisAudio ? { engine: lexisAudio.engine, urlLength: lexisAudio.url?.length } : 'undefined');
@@ -549,6 +551,11 @@ app.put('/api/tests/:id', async (req, res) => {
     // Only update difficulty if provided
     if (difficulty !== undefined) {
       updateData.difficulty = difficulty;
+    }
+
+    // Only update bonusQuestions if provided
+    if (bonusQuestions !== undefined) {
+      updateData.bonus_questions = bonusQuestions;
     }
 
     // Upload any base64 audio to Cloudinary before saving

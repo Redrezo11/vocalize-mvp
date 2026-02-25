@@ -224,6 +224,7 @@ export interface ListeningTest {
   speakerCount?: number | null;    // Number of speakers (null for reading tests)
   sourceText?: string;             // Reading passage (null for listening tests)
   difficulty?: string;             // CEFR level (A1, A2, B1, B2, C1)
+  bonusQuestions?: TestQuestion[];  // Pre-generated bonus questions pool
   createdAt: string;
   updatedAt: string;
 }

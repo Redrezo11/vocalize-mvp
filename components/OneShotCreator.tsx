@@ -7,6 +7,7 @@ import { EFL_TOPICS, SpeakerCount, AudioFormat, getRandomTopic, getRandomFormat,
 import { getRandomReadingTopic, getRandomReadingGenre, getCompatibleReadingTopic, shuffleReadingGenre } from '../utils/readingTopics';
 import { useAppMode } from '../contexts/AppModeContext';
 import type { SpeakerCountDefault } from './Settings';
+import { generateBonusForTest } from '../helpers/bonusGeneration';
 
 const API_BASE = '/api';
 
@@ -1159,6 +1160,9 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
         if (!response.ok) throw new Error('Failed to create test');
         const savedTest = await response.json();
 
+        // Fire-and-forget: pre-generate bonus questions
+        generateBonusForTest(savedTest._id || savedTest.id, payload.transcript, payload.difficulty, true, payload.questions.map(q => q.questionText), 'gpt-5-mini').catch(console.error);
+
         setStage('done');
         // Reading mode: no audioEntry, pass null
         onComplete({ audioEntry: null, test: savedTest });
@@ -1358,6 +1362,9 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
       if (!response.ok) throw new Error('Failed to create test');
       const savedTest = await response.json();
 
+      // Fire-and-forget: pre-generate bonus questions
+      generateBonusForTest(savedTest._id || savedTest.id, payload.transcript, payload.difficulty, false, payload.questions.map(q => q.questionText), 'gpt-5-mini').catch(console.error);
+
       setStage('done');
       onComplete({ audioEntry, test: savedTest });
     } catch (err) {
@@ -1517,6 +1524,11 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
       if (!response.ok) throw new Error('Failed to create test');
       const savedTest = await response.json();
       console.log('[OneShot continueWithAudio] savedTest._id:', savedTest?._id, '| savedTest.id:', savedTest?.id);
+
+      // Fire-and-forget: pre-generate bonus questions
+      if (pendingPayload) {
+        generateBonusForTest(savedTest._id || savedTest.id, pendingPayload.transcript, pendingPayload.difficulty, false, pendingPayload.questions.map(q => q.questionText), 'gpt-5-mini').catch(console.error);
+      }
 
       setStage('done');
       onComplete({ audioEntry, test: savedTest });

@@ -11,6 +11,7 @@ import { ContentLabelProvider } from '../contexts/ContentLabelContext';
 import { getContentLabels } from '../utils/contentLabels';
 import { FloatingZoomWidget } from './FloatingZoomWidget';
 import { usePinchZoom } from '../hooks/usePinchZoom';
+import { callOpenAI, buildBonusPrompt } from '../helpers/bonusGeneration';
 
 interface StudentTestProps {
   test: ListeningTest;
@@ -63,61 +64,13 @@ const getInitialTestPhase = (test: ListeningTest, isPreview: boolean): TestPhase
   return 'questions';
 };
 
-// OpenAI Responses API helper (same pattern as FollowUpQuestions)
-async function callOpenAI(model: string, instructions: string, input: string): Promise<string> {
-  const apiKey = (import.meta as any).env?.VITE_OPENAI_API_KEY;
-  if (!apiKey || apiKey === 'PLACEHOLDER_API_KEY') {
-    throw new Error('OpenAI API key not configured');
-  }
-  const response = await fetch('https://api.openai.com/v1/responses', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-    body: JSON.stringify({ model, instructions, input }),
-  });
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(error.error?.message || `API error: ${response.status}`);
-  }
-  const data = await response.json();
-  const messageOutput = data.output?.find((o: { type: string }) => o.type === 'message');
-  return messageOutput?.content?.[0]?.text || '';
-}
-
-function buildBonusPrompt(count: number, difficulty: string, isReading: boolean): string {
-  const contentType = isReading ? 'reading passage' : 'listening transcript';
-  return `You are an ESL test question generator. Generate exactly ${count} NEW multiple-choice comprehension questions based on the provided ${contentType}.
-
-## Rules
-- Each question must have exactly 4 options (A, B, C, D)
-- "correctAnswer" must match one option exactly (character-for-character)
-- Test a variety of skills: main ideas, specific details, inferences, vocabulary in context, speaker/author intent
-- Include an "explanation" in English explaining why the correct answer is right
-- Include an "explanationArabic" with an Arabic explanation
-- Do NOT repeat any of the existing questions provided
-- Difficulty level: ${difficulty}
-- Questions should be progressively challenging within the set
-
-## Output format
-Return ONLY valid JSON:
-{
-  "questions": [
-    {
-      "questionText": "What is the main idea of...?",
-      "options": ["Option A", "Option B", "Option C", "Option D"],
-      "correctAnswer": "Option B",
-      "explanation": "English explanation of why this is correct",
-      "explanationArabic": "شرح بالعربية"
-    }
-  ]
-}`;
-}
-
 export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light', isPreview = false, onExitPreview, contentModel = 'gpt-5-mini' }) => {
   const isDark = theme === 'dark';
   const appMode = useAppMode();
   const isReading = appMode === 'reading';
   const contentLabel = useMemo(() => getContentLabels(test.speakerCount, appMode), [test.speakerCount, appMode]);
-  const [studentFontSize, setStudentFontSize] = useState(1.125); // rem (~text-lg)
+  const [passageFontSize, setPassageFontSize] = useState(1.125); // passage-only zoom
+  const [questionsFontSize, setQuestionsFontSize] = useState(1.125); // shared across all question-like views
   const [isFullscreen, setIsFullscreen] = useState(false);
   const fullscreenSupported = typeof document !== 'undefined' && (document.fullscreenEnabled || (document as any).webkitFullscreenEnabled);
 
@@ -166,10 +119,10 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
   const questionsScrollRef = useRef<HTMLDivElement>(null);
   const listeningScrollRef = useRef<HTMLDivElement>(null);
 
-  // Pinch-to-zoom on all scrollable containers
-  usePinchZoom(passageScrollRef, studentFontSize, setStudentFontSize);
-  usePinchZoom(questionsScrollRef, studentFontSize, setStudentFontSize);
-  usePinchZoom(listeningScrollRef, studentFontSize, setStudentFontSize);
+  // Pinch-to-zoom: passage has independent zoom, questions/listening share zoom
+  usePinchZoom(passageScrollRef, passageFontSize, setPassageFontSize);
+  usePinchZoom(questionsScrollRef, questionsFontSize, setQuestionsFontSize);
+  usePinchZoom(listeningScrollRef, questionsFontSize, setQuestionsFontSize);
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
@@ -207,6 +160,7 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
   const [bonusScores, setBonusScores] = useState<{ score: number; correct: number; total: number }[]>([]);
   const [isGeneratingBonus, setIsGeneratingBonus] = useState(false);
   const [bonusError, setBonusError] = useState<string | null>(null);
+  const bonusPoolIndex = useRef(0); // track consumed pre-generated bonus questions
 
   // Single state machine for test phase: match → gapfill → preview → questions
   const [testPhase, setTestPhase] = useState<TestPhase>(
@@ -339,14 +293,20 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
     setShowDiscussion(false);
   };
 
-  // Bonus practice: generate additional questions
+  // Bonus practice: serve from pre-generated pool first, fall back to live API
   const handleGenerateBonus = useCallback(async (count: 5 | 10) => {
-    setIsGeneratingBonus(true);
     setBonusError(null);
-    try {
+
+    const pool = test.bonusQuestions || [];
+    const available = pool.slice(bonusPoolIndex.current, bonusPoolIndex.current + count);
+    const remaining = count - available.length;
+
+    // Helper to generate questions live via API
+    const generateLive = async (liveCount: number): Promise<TestQuestion[]> => {
       const allExistingQuestions = [
         ...test.questions.map(q => q.questionText),
         ...bonusRounds.flat().map(q => q.questionText),
+        ...available.map(q => q.questionText),
       ];
 
       const input = JSON.stringify({
@@ -356,7 +316,7 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
 
       const text = await callOpenAI(
         contentModel,
-        buildBonusPrompt(count, test.difficulty || 'B1', isReading),
+        buildBonusPrompt(liveCount, test.difficulty || 'B1', isReading),
         input,
       );
 
@@ -364,14 +324,53 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
       if (!jsonMatch) throw new Error('No JSON in response');
 
       const parsed = JSON.parse(jsonMatch[0]);
-      const qs: TestQuestion[] = (parsed.questions || []).map((q: any, i: number) => ({
+      return (parsed.questions || []).map((q: any, i: number) => ({
+        ...q,
+        id: `bonus-${bonusRounds.length}-${available.length + i}`,
+      }));
+    };
+
+    // Case 1: Enough in pool — serve instantly
+    if (available.length > 0 && remaining <= 0) {
+      const pregenQs = available.map((q, i) => ({
         ...q,
         id: `bonus-${bonusRounds.length}-${i}`,
       }));
+      bonusPoolIndex.current += available.length;
+      setBonusRounds(prev => [...prev, pregenQs]);
+      return;
+    }
 
-      if (qs.length === 0) throw new Error('No questions generated');
+    // Case 2: Partial pool + live API for remainder
+    if (available.length > 0 && remaining > 0) {
+      const pregenQs = available.map((q, i) => ({
+        ...q,
+        id: `bonus-${bonusRounds.length}-${i}`,
+      }));
+      bonusPoolIndex.current += available.length;
 
-      setBonusRounds(prev => [...prev, qs]);
+      setIsGeneratingBonus(true);
+      try {
+        const liveQs = await generateLive(remaining);
+        if (liveQs.length === 0 && pregenQs.length === 0) throw new Error('No questions generated');
+        setBonusRounds(prev => [...prev, [...pregenQs, ...liveQs]]);
+      } catch (err) {
+        // Still serve pool questions even if API fails
+        setBonusRounds(prev => [...prev, pregenQs]);
+        setBonusError('Some questions could not be generated');
+        console.error('[Bonus] Partial generate error:', err);
+      } finally {
+        setIsGeneratingBonus(false);
+      }
+      return;
+    }
+
+    // Case 3: Pool empty — full API call (original behavior)
+    setIsGeneratingBonus(true);
+    try {
+      const liveQs = await generateLive(count);
+      if (liveQs.length === 0) throw new Error('No questions generated');
+      setBonusRounds(prev => [...prev, liveQs]);
     } catch (err) {
       console.error('[Bonus] Generate error:', err);
       setBonusError(err instanceof Error ? err.message : 'Failed to generate questions');
@@ -464,8 +463,8 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
           contentModel={contentModel}
           theme={theme}
           onBack={handleBackFromDiscussion}
-          studentFontSize={studentFontSize}
-          setStudentFontSize={setStudentFontSize}
+          studentFontSize={questionsFontSize}
+          setStudentFontSize={setQuestionsFontSize}
         />
       </ContentLabelProvider>
     );
@@ -576,7 +575,7 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
           >
             <div
               className={`max-w-2xl mx-auto leading-relaxed whitespace-pre-wrap ${isDark ? 'text-slate-200' : 'text-slate-800'}`}
-              style={{ fontSize: `${studentFontSize}rem` }}
+              style={{ fontSize: `${passageFontSize}rem` }}
             >
               {test.sourceText}
             </div>
@@ -588,7 +587,7 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
             className="absolute inset-0 overflow-y-auto"
             style={{ display: readingView === 'questions' ? 'block' : 'none', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', paddingBottom: '60px' }}
           >
-            <div className="px-3 py-3 space-y-2 max-w-2xl mx-auto" style={{ zoom: studentFontSize / 1.125 }}>
+            <div className="px-3 py-3 space-y-2 max-w-2xl mx-auto" style={{ zoom: questionsFontSize / 1.125 }}>
               {/* Bonus Practice Section — only after submission */}
           {isSubmitted && (
             <>
@@ -904,12 +903,18 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
           </div>
 
           {/* Floating zoom widget */}
-          <FloatingZoomWidget studentFontSize={studentFontSize} setStudentFontSize={setStudentFontSize} isDark={isDark} bottomOffset="60px" scrollRef={readingView === 'passage' ? passageScrollRef : questionsScrollRef} />
+          <FloatingZoomWidget
+            studentFontSize={readingView === 'passage' ? passageFontSize : questionsFontSize}
+            setStudentFontSize={readingView === 'passage' ? setPassageFontSize : setQuestionsFontSize}
+            isDark={isDark}
+            bottomOffset="60px"
+            scrollRef={readingView === 'passage' ? passageScrollRef : questionsScrollRef}
+          />
         </div>
       ) : (
         /* Single-scroll layout for listening tests */
         <div ref={listeningScrollRef} className="flex-1 overflow-y-auto">
-          <div className="px-3 py-3 space-y-2 max-w-2xl mx-auto" style={{ zoom: studentFontSize / 1.125 }}>
+          <div className="px-3 py-3 space-y-2 max-w-2xl mx-auto" style={{ zoom: questionsFontSize / 1.125 }}>
             {test.questions.map((question, index) => {
               const status = getAnswerStatus(question.id);
               return (
@@ -983,7 +988,7 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
             })}
           </div>
           <div className="h-4" />
-          <FloatingZoomWidget studentFontSize={studentFontSize} setStudentFontSize={setStudentFontSize} isDark={isDark} scrollRef={listeningScrollRef} />
+          <FloatingZoomWidget studentFontSize={questionsFontSize} setStudentFontSize={setQuestionsFontSize} isDark={isDark} scrollRef={listeningScrollRef} />
         </div>
       )}
 
