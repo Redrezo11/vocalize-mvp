@@ -2,12 +2,15 @@ import React, { useState } from 'react';
 import { PredictionItem, PreviewPredictionResult } from '../types';
 import { ClassroomTheme } from './Settings';
 import { useContentLabel } from '../contexts/ContentLabelContext';
+import { FloatingZoomWidget } from './FloatingZoomWidget';
 
 interface PredictionActivityProps {
   items: PredictionItem[];
   theme?: ClassroomTheme;
   onComplete: (results: PreviewPredictionResult[]) => void;
   onSkip: () => void;
+  studentFontSize?: number;
+  setStudentFontSize?: React.Dispatch<React.SetStateAction<number>>;
 }
 
 export const PredictionActivity: React.FC<PredictionActivityProps> = ({
@@ -15,6 +18,8 @@ export const PredictionActivity: React.FC<PredictionActivityProps> = ({
   theme = 'light',
   onComplete,
   onSkip,
+  studentFontSize = 1,
+  setStudentFontSize,
 }) => {
   const isDark = theme === 'dark';
   const label = useContentLabel();
@@ -174,6 +179,7 @@ export const PredictionActivity: React.FC<PredictionActivityProps> = ({
           {isLastItem ? 'Continue' : 'Next'}
         </button>
       </div>
+      {setStudentFontSize && <FloatingZoomWidget studentFontSize={studentFontSize} setStudentFontSize={setStudentFontSize} isDark={isDark} />}
     </div>
   );
 };

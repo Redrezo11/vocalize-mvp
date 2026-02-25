@@ -2,12 +2,15 @@ import React, { useState, useMemo } from 'react';
 import { WordAssociationItem, PreviewWordAssocResult } from '../types';
 import { ClassroomTheme } from './Settings';
 import { useContentLabel } from '../contexts/ContentLabelContext';
+import { FloatingZoomWidget } from './FloatingZoomWidget';
 
 interface WordAssociationActivityProps {
   items: WordAssociationItem[];
   theme?: ClassroomTheme;
   onComplete: (results: PreviewWordAssocResult[]) => void;
   onSkip: () => void;
+  studentFontSize?: number;
+  setStudentFontSize?: React.Dispatch<React.SetStateAction<number>>;
 }
 
 export const WordAssociationActivity: React.FC<WordAssociationActivityProps> = ({
@@ -15,6 +18,8 @@ export const WordAssociationActivity: React.FC<WordAssociationActivityProps> = (
   theme = 'light',
   onComplete,
   onSkip,
+  studentFontSize = 1,
+  setStudentFontSize,
 }) => {
   const isDark = theme === 'dark';
   const label = useContentLabel();
@@ -213,6 +218,7 @@ export const WordAssociationActivity: React.FC<WordAssociationActivityProps> = (
           </button>
         )}
       </div>
+      {setStudentFontSize && <FloatingZoomWidget studentFontSize={studentFontSize} setStudentFontSize={setStudentFontSize} isDark={isDark} />}
     </div>
   );
 };

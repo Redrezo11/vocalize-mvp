@@ -13,6 +13,8 @@ interface PreviewPhaseProps {
   theme?: ClassroomTheme;
   onComplete: (results: PreviewPhaseResult) => void;
   onSkip: (results: PreviewPhaseResult) => void;
+  studentFontSize?: number;
+  setStudentFontSize?: React.Dispatch<React.SetStateAction<number>>;
 }
 
 export const PreviewPhase: React.FC<PreviewPhaseProps> = ({
@@ -20,6 +22,8 @@ export const PreviewPhase: React.FC<PreviewPhaseProps> = ({
   theme = 'light',
   onComplete,
   onSkip,
+  studentFontSize,
+  setStudentFontSize,
 }) => {
   const [currentActivityIndex, setCurrentActivityIndex] = useState(0);
   const previewResults = useRef<PreviewPhaseResult>({ completed: false });
@@ -86,6 +90,8 @@ export const PreviewPhase: React.FC<PreviewPhaseProps> = ({
           theme={theme}
           onComplete={handlePredictionComplete}
           onSkip={isLastActivity ? handleSkipAll : handleActivitySkip}
+          studentFontSize={studentFontSize}
+          setStudentFontSize={setStudentFontSize}
         />
       );
 
@@ -96,6 +102,8 @@ export const PreviewPhase: React.FC<PreviewPhaseProps> = ({
           theme={theme}
           onComplete={handleWordAssocComplete}
           onSkip={isLastActivity ? handleSkipAll : handleActivitySkip}
+          studentFontSize={studentFontSize}
+          setStudentFontSize={setStudentFontSize}
         />
       );
 
@@ -106,6 +114,8 @@ export const PreviewPhase: React.FC<PreviewPhaseProps> = ({
           theme={theme}
           onComplete={handleTrueFalseComplete}
           onSkip={isLastActivity ? handleSkipAll : handleActivitySkip}
+          studentFontSize={studentFontSize}
+          setStudentFontSize={setStudentFontSize}
         />
       );
 

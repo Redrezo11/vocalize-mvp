@@ -3,6 +3,7 @@ import { ListeningTest, TestSessionLog, FollowUpQuestion, FollowUpFeedbackItem }
 import { ClassroomTheme, ContentModel } from './Settings';
 import { useContentLabel } from '../contexts/ContentLabelContext';
 import type { ContentLabel } from '../utils/contentLabels';
+import { FloatingZoomWidget } from './FloatingZoomWidget';
 
 interface FollowUpQuestionsProps {
   sessionLog: TestSessionLog;
@@ -11,6 +12,8 @@ interface FollowUpQuestionsProps {
   contentModel: ContentModel;
   theme?: ClassroomTheme;
   onBack: () => void;
+  studentFontSize?: number;
+  setStudentFontSize?: React.Dispatch<React.SetStateAction<number>>;
 }
 
 type FollowUpPhase = 'generating' | 'answering' | 'evaluating' | 'feedback' | 'done';
@@ -398,6 +401,8 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
   contentModel,
   theme = 'light',
   onBack,
+  studentFontSize = 1,
+  setStudentFontSize,
 }) => {
   const isDark = theme === 'dark';
   const contentLabel = useContentLabel();
@@ -727,6 +732,7 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
             50% { box-shadow: 0 0 0 6px rgba(99,102,241,0); }
           }
         `}</style>
+        {setStudentFontSize && <FloatingZoomWidget studentFontSize={studentFontSize} setStudentFontSize={setStudentFontSize} isDark={isDark} />}
       </FullScreen>
     );
   }
@@ -904,6 +910,7 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
             </button>
           </div>
         </div>
+        {setStudentFontSize && <FloatingZoomWidget studentFontSize={studentFontSize} setStudentFontSize={setStudentFontSize} isDark={isDark} />}
       </FullScreen>
     );
   }

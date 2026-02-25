@@ -9,6 +9,7 @@ import { FollowUpQuestions } from './FollowUpQuestions';
 import { useAppMode } from '../contexts/AppModeContext';
 import { ContentLabelProvider } from '../contexts/ContentLabelContext';
 import { getContentLabels } from '../utils/contentLabels';
+import { FloatingZoomWidget } from './FloatingZoomWidget';
 
 interface StudentTestProps {
   test: ListeningTest;
@@ -115,25 +116,24 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
   const appMode = useAppMode();
   const isReading = appMode === 'reading';
   const contentLabel = useMemo(() => getContentLabels(test.speakerCount, appMode), [test.speakerCount, appMode]);
-  const [passageExpanded, setPassageExpanded] = useState(true);
-  const [passageFullscreen, setPassageFullscreen] = useState(false);
-  const [passageFontSize, setPassageFontSize] = useState(1.125); // rem (~text-lg)
-  const [zoomExpanded, setZoomExpanded] = useState(false);
-  const [zoomVisible, setZoomVisible] = useState(true);
-  const [zoomIdle, setZoomIdle] = useState(false);
-  const lastScrollTop = useRef(0);
-  const idleTimer = useRef<number>();
+  const [studentFontSize, setStudentFontSize] = useState(1.125); // rem (~text-lg)
+  // Swipe view state for reading tests
+  const [readingView, setReadingView] = useState<'passage' | 'questions'>('passage');
+  const touchStartX = useRef(0);
+  const touchStartY = useRef(0);
 
-  const handlePassageScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
-    const st = e.currentTarget.scrollTop;
-    const delta = st - lastScrollTop.current;
-    if (delta > 8) { setZoomVisible(false); setZoomExpanded(false); }
-    else if (delta < -8) setZoomVisible(true);
-    lastScrollTop.current = st;
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+  }, []);
 
-    setZoomIdle(false);
-    clearTimeout(idleTimer.current);
-    idleTimer.current = window.setTimeout(() => setZoomIdle(true), 3000) as unknown as number;
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    const deltaX = e.changedTouches[0].clientX - touchStartX.current;
+    const deltaY = e.changedTouches[0].clientY - touchStartY.current;
+    if (Math.abs(deltaX) > 50 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
+      if (deltaX < 0) setReadingView('questions');
+      else setReadingView('passage');
+    }
   }, []);
 
   // Try to restore session state from sessionStorage (survives tab suspension)
@@ -372,6 +372,8 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
         theme={theme}
         onComplete={advanceFromMatch}
         onSkip={advanceFromMatch}
+        studentFontSize={studentFontSize}
+        setStudentFontSize={setStudentFontSize}
       />
     );
   }
@@ -384,6 +386,8 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
         theme={theme}
         onComplete={advanceFromGapFill}
         onSkip={advanceFromGapFill}
+        studentFontSize={studentFontSize}
+        setStudentFontSize={setStudentFontSize}
       />
     );
   }
@@ -397,6 +401,8 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
           theme={theme}
           onComplete={advanceFromPreview}
           onSkip={advanceFromPreview}
+          studentFontSize={studentFontSize}
+          setStudentFontSize={setStudentFontSize}
         />
       </ContentLabelProvider>
     );
@@ -415,6 +421,8 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
           contentModel={contentModel}
           theme={theme}
           onBack={handleBackFromDiscussion}
+          studentFontSize={studentFontSize}
+          setStudentFontSize={setStudentFontSize}
         />
       </ContentLabelProvider>
     );
@@ -422,104 +430,6 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
 
   return (
     <div className={`min-h-screen flex flex-col ${isDark ? 'bg-slate-900' : 'bg-slate-50'}`}>
-      {/* Fullscreen Reading Passage Overlay */}
-      {passageFullscreen && test.sourceText && (
-        <div
-          className="fixed inset-0 z-50 flex flex-col"
-          style={{
-            background: isDark ? '#0f172a' : '#fffbeb',
-            paddingTop: 'env(safe-area-inset-top)',
-            paddingBottom: 'env(safe-area-inset-bottom)',
-          }}
-        >
-          {/* Header */}
-          <div className={`flex items-center justify-between px-4 py-3 flex-shrink-0 border-b ${isDark ? 'border-slate-700' : 'border-amber-200'}`}>
-            <span className={`font-semibold text-sm ${isDark ? 'text-emerald-300' : 'text-emerald-800'}`}>
-              Reading Passage
-            </span>
-            <button
-              onClick={() => { setPassageFullscreen(false); setZoomExpanded(false); setZoomVisible(true); setZoomIdle(false); lastScrollTop.current = 0; clearTimeout(idleTimer.current); }}
-              className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
-                isDark ? 'bg-slate-700 text-slate-300 hover:bg-slate-600' : 'bg-amber-100 text-amber-800 hover:bg-amber-200'
-              }`}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            </button>
-          </div>
-          {/* Scrollable passage body */}
-          <div
-            className="flex-1 overflow-y-auto px-5 py-6"
-            onScroll={handlePassageScroll}
-            style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}
-          >
-            <div
-              className={`max-w-2xl mx-auto leading-relaxed whitespace-pre-wrap ${isDark ? 'text-slate-200' : 'text-slate-800'}`}
-              style={{ fontSize: `${passageFontSize}rem` }}
-            >
-              {test.sourceText}
-            </div>
-          </div>
-          {/* Floating zoom widget — bottom-right */}
-          <div
-            className={`fixed bottom-6 right-6 z-50 transition-all duration-200 ${
-              !zoomVisible ? 'translate-y-20 opacity-0 pointer-events-none' : zoomIdle ? 'opacity-25' : ''
-            }`}
-            style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
-            onTouchStart={() => { setZoomIdle(false); clearTimeout(idleTimer.current); idleTimer.current = window.setTimeout(() => setZoomIdle(true), 3000) as unknown as number; }}
-            onMouseEnter={() => { setZoomIdle(false); clearTimeout(idleTimer.current); }}
-          >
-            {zoomExpanded ? (
-              <div className={`flex items-center gap-1 rounded-full shadow-lg px-2 py-1.5 transition-all ${
-                isDark ? 'bg-slate-700 text-slate-200' : 'bg-white text-slate-700 ring-1 ring-black/10'
-              }`}>
-                <button
-                  onClick={() => setPassageFontSize(s => Math.max(0.75, +(s - 0.125).toFixed(3)))}
-                  className={`w-10 h-10 rounded-full flex items-center justify-center text-xl font-bold transition-colors ${
-                    isDark ? 'hover:bg-slate-600 active:bg-slate-500' : 'hover:bg-slate-100 active:bg-slate-200'
-                  }`}
-                >
-                  −
-                </button>
-                <button
-                  onClick={() => setZoomExpanded(false)}
-                  className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
-                    isDark ? 'hover:bg-slate-600 active:bg-slate-500' : 'hover:bg-slate-100 active:bg-slate-200'
-                  }`}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="11" cy="11" r="8" />
-                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                  </svg>
-                </button>
-                <button
-                  onClick={() => setPassageFontSize(s => Math.min(2.0, +(s + 0.125).toFixed(3)))}
-                  className={`w-10 h-10 rounded-full flex items-center justify-center text-xl font-bold transition-colors ${
-                    isDark ? 'hover:bg-slate-600 active:bg-slate-500' : 'hover:bg-slate-100 active:bg-slate-200'
-                  }`}
-                >
-                  +
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => setZoomExpanded(true)}
-                className={`w-12 h-12 rounded-full shadow-lg flex items-center justify-center transition-colors ${
-                  isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600 active:bg-slate-500' : 'bg-white text-slate-700 ring-1 ring-black/10 hover:bg-slate-50 active:bg-slate-100'
-                }`}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="11" cy="11" r="8" />
-                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                </svg>
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* Preview Banner */}
       {isPreview && (
         <div className="bg-amber-500 text-white px-3 py-2 text-center flex-shrink-0">
@@ -591,47 +501,30 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
         </div>
       )}
 
-      {/* Scrollable Questions List */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="px-3 py-3 space-y-2 max-w-2xl mx-auto">
-          {/* Reading Passage Panel — shown for reading tests */}
-          {isReading && test.sourceText && (
-            <div className={`rounded-xl border mb-3 ${isDark ? 'border-emerald-700 bg-emerald-900/20' : 'border-emerald-200 bg-emerald-50'}`}>
-              <div className={`w-full px-4 py-3 flex items-center justify-between ${isDark ? 'text-emerald-300' : 'text-emerald-800'}`}>
-                <button
-                  onClick={() => setPassageExpanded(!passageExpanded)}
-                  className="font-semibold text-sm flex items-center gap-2"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" />
-                  </svg>
-                  Reading Passage
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${passageExpanded ? 'rotate-180' : ''}`}>
-                    <polyline points="6 9 12 15 18 9" />
-                  </svg>
-                </button>
-                <button
-                  onClick={() => setPassageFullscreen(true)}
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                    isDark ? 'bg-emerald-800/50 text-emerald-300 hover:bg-emerald-700/50' : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
-                  }`}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="11" cy="11" r="8" />
-                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                  </svg>
-                  Zoom
-                </button>
-              </div>
-              {passageExpanded && (
-                <div className={`px-4 pb-4 text-sm leading-relaxed whitespace-pre-wrap ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                  {test.sourceText}
-                </div>
-              )}
+      {/* Main content area */}
+      {isReading && test.sourceText ? (
+        /* Two-page swipe view for reading tests */
+        <div className="flex-1 relative" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+          {/* Passage page */}
+          <div
+            className="absolute inset-0 overflow-y-auto px-5 py-6"
+            style={{ display: readingView === 'passage' ? 'block' : 'none', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', paddingBottom: '60px' }}
+          >
+            <div
+              className={`max-w-2xl mx-auto leading-relaxed whitespace-pre-wrap ${isDark ? 'text-slate-200' : 'text-slate-800'}`}
+              style={{ fontSize: `${studentFontSize}rem` }}
+            >
+              {test.sourceText}
             </div>
-          )}
+          </div>
 
-          {/* Bonus Practice Section — only after submission */}
+          {/* Questions page */}
+          <div
+            className="absolute inset-0 overflow-y-auto"
+            style={{ display: readingView === 'questions' ? 'block' : 'none', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', paddingBottom: '60px' }}
+          >
+            <div className="px-3 py-3 space-y-2 max-w-2xl mx-auto" style={{ fontSize: `${studentFontSize}rem` }}>
+              {/* Bonus Practice Section — only after submission */}
           {isSubmitted && (
             <>
               {/* CTA card */}
@@ -920,11 +813,114 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
               </div>
             );
           })}
-        </div>
+            </div>
+            <div className="h-4" />
+          </div>
 
-        {/* Bottom padding for safe area */}
-        <div className="h-4" />
-      </div>
+          {/* Bottom tab bar */}
+          <div className={`absolute bottom-0 left-0 right-0 z-40 flex border-t ${isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-white'}`}
+            style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+            <button onClick={() => setReadingView('passage')}
+              className={`flex-1 py-2.5 text-xs font-medium text-center transition-colors ${
+                readingView === 'passage'
+                  ? isDark ? 'text-indigo-400 border-t-2 border-indigo-400 bg-slate-700/50' : 'text-indigo-600 border-t-2 border-indigo-500 bg-indigo-50/50'
+                  : isDark ? 'text-slate-400' : 'text-slate-500'
+              }`}>
+              📖 Passage
+            </button>
+            <button onClick={() => setReadingView('questions')}
+              className={`flex-1 py-2.5 text-xs font-medium text-center transition-colors ${
+                readingView === 'questions'
+                  ? isDark ? 'text-indigo-400 border-t-2 border-indigo-400 bg-slate-700/50' : 'text-indigo-600 border-t-2 border-indigo-500 bg-indigo-50/50'
+                  : isDark ? 'text-slate-400' : 'text-slate-500'
+              }`}>
+              ❓ Questions {answeredCount}/{totalQuestions}
+            </button>
+          </div>
+
+          {/* Floating zoom widget */}
+          <FloatingZoomWidget studentFontSize={studentFontSize} setStudentFontSize={setStudentFontSize} isDark={isDark} bottomOffset="60px" />
+        </div>
+      ) : (
+        /* Single-scroll layout for listening tests */
+        <div className="flex-1 overflow-y-auto">
+          <div className="px-3 py-3 space-y-2 max-w-2xl mx-auto" style={{ fontSize: `${studentFontSize}rem` }}>
+            {test.questions.map((question, index) => {
+              const status = getAnswerStatus(question.id);
+              return (
+                <div
+                  key={question.id}
+                  className={`rounded-xl border transition-colors ${
+                    status === 'correct'
+                      ? isDark ? 'border-green-600 bg-green-900/30' : 'border-green-300 bg-green-50'
+                      : status === 'incorrect'
+                      ? isDark ? 'border-red-600 bg-red-900/30' : 'border-red-300 bg-red-50'
+                      : isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-white'
+                  }`}
+                >
+                  <div className="px-3 py-2 flex items-start gap-2">
+                    <span className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                      status === 'correct' ? 'bg-green-500 text-white'
+                      : status === 'incorrect' ? 'bg-red-500 text-white'
+                      : isDark ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-white'
+                    }`}>{index + 1}</span>
+                    <p className={`text-sm leading-snug pt-0.5 ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>{question.questionText}</p>
+                  </div>
+                  {(test.type === 'listening-comprehension' || test.type === 'reading-comprehension') && question.options && (
+                    <div className="px-3 pb-2 grid grid-cols-2 gap-1.5">
+                      {question.options.map((option, optIndex) => {
+                        const letter = String.fromCharCode(65 + optIndex);
+                        const isSelected = answers[question.id] === option;
+                        const isCorrectAnswer = option === question.correctAnswer;
+                        return (
+                          <button key={optIndex} onClick={() => updateAnswer(question.id, option)} disabled={isSubmitted}
+                            className={`flex items-start gap-2 px-2.5 py-2 rounded-lg border text-left text-sm transition-all ${
+                              isSubmitted
+                                ? isCorrectAnswer ? isDark ? 'border-green-600 bg-green-900/40' : 'border-green-400 bg-green-100'
+                                : isSelected ? isDark ? 'border-red-600 bg-red-900/40' : 'border-red-400 bg-red-100'
+                                : isDark ? 'border-slate-600 bg-slate-700 opacity-50' : 'border-slate-200 bg-slate-50 opacity-50'
+                              : isSelected ? isDark ? 'border-indigo-500 bg-indigo-900/40' : 'border-indigo-500 bg-indigo-50'
+                              : isDark ? 'border-slate-600 bg-slate-700 hover:border-slate-500' : 'border-slate-200 bg-slate-50 hover:border-slate-300 active:bg-slate-100'
+                            } ${isSubmitted ? 'cursor-default' : 'cursor-pointer'}`}>
+                            <span className={`flex-shrink-0 w-5 h-5 rounded text-xs font-bold flex items-center justify-center ${
+                              isSubmitted ? isCorrectAnswer ? 'bg-green-500 text-white' : isSelected ? 'bg-red-500 text-white' : isDark ? 'bg-slate-600 text-slate-400' : 'bg-slate-300 text-slate-600'
+                              : isSelected ? 'bg-indigo-500 text-white' : isDark ? 'bg-slate-600 text-slate-300' : 'bg-slate-200 text-slate-600'
+                            }`}>{letter}</span>
+                            <span className={`flex-1 text-sm leading-snug ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>{option}</span>
+                            {isSubmitted && isCorrectAnswer && <CheckCircleIcon className="w-4 h-4 text-green-500 flex-shrink-0" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {(test.type === 'fill-in-blank' || test.type === 'dictation') && (
+                    <div className="px-3 pb-2">
+                      <input type="text" value={answers[question.id] || ''} onChange={(e) => updateAnswer(question.id, e.target.value)} disabled={isSubmitted} placeholder="Type answer..."
+                        className={`w-full px-3 py-2 rounded-lg border text-sm ${
+                          isSubmitted ? status === 'correct' ? isDark ? 'bg-green-900/40 border-green-600 text-white' : 'bg-green-100 border-green-400'
+                          : isDark ? 'bg-red-900/40 border-red-600 text-white' : 'bg-red-100 border-red-400'
+                          : isDark ? 'bg-slate-700 border-slate-600 text-white focus:border-indigo-500 focus:outline-none' : 'bg-slate-50 border-slate-200 focus:border-indigo-500 focus:outline-none'
+                        }`} />
+                      {isSubmitted && status === 'incorrect' && <p className="mt-1 text-xs text-green-700">Answer: <strong>{question.correctAnswer}</strong></p>}
+                    </div>
+                  )}
+                  {isSubmitted && status === 'incorrect' && (question.explanation || question.explanationArabic) && (
+                    <div className="mx-3 mb-2 px-2 py-1.5 rounded text-xs bg-amber-100 text-amber-800">
+                      {question.explanation && question.explanationArabic ? (
+                        <div className="space-y-1"><p>{question.explanation}</p><p className="text-right" dir="rtl">{question.explanationArabic}</p></div>
+                      ) : (
+                        <p className={question.explanationArabic ? 'text-right' : ''} dir={question.explanationArabic ? 'rtl' : 'ltr'}>{question.explanation || question.explanationArabic}</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div className="h-4" />
+          <FloatingZoomWidget studentFontSize={studentFontSize} setStudentFontSize={setStudentFontSize} isDark={isDark} />
+        </div>
+      )}
 
       {/* Confirmation Dialog */}
       {showConfirmDialog && (
