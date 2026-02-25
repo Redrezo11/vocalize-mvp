@@ -118,6 +118,52 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
   const isReading = appMode === 'reading';
   const contentLabel = useMemo(() => getContentLabels(test.speakerCount, appMode), [test.speakerCount, appMode]);
   const [studentFontSize, setStudentFontSize] = useState(1.125); // rem (~text-lg)
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showInstallTip, setShowInstallTip] = useState(() => {
+    // Only show in browser mode (not standalone PWA), and if not dismissed before
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+    const dismissed = sessionStorage.getItem('install_tip_dismissed');
+    return !isStandalone && !dismissed;
+  });
+  const fullscreenSupported = typeof document !== 'undefined' && (document.fullscreenEnabled || (document as any).webkitFullscreenEnabled);
+
+  // Toggle fullscreen mode (hides Chrome Custom Tab toolbar on Android)
+  const toggleFullscreen = useCallback(async () => {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else {
+        await document.documentElement.requestFullscreen();
+      }
+    } catch {}
+  }, []);
+
+  // Track fullscreen state changes
+  useEffect(() => {
+    const onFS = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onFS);
+    return () => document.removeEventListener('fullscreenchange', onFS);
+  }, []);
+
+  // Screen wake lock — prevent dimming during test
+  useEffect(() => {
+    let wakeLock: any = null;
+    const request = async () => {
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLock = await (navigator as any).wakeLock.request('screen');
+        }
+      } catch {}
+    };
+    request();
+    const onVisible = () => { if (document.visibilityState === 'visible') request(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      wakeLock?.release().catch(() => {});
+    };
+  }, []);
+
   // Swipe view state for reading tests
   const [readingView, setReadingView] = useState<'passage' | 'questions'>('passage');
   const touchStartX = useRef(0);
@@ -448,6 +494,19 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
         </div>
       )}
 
+      {/* Install tip banner */}
+      {showInstallTip && (
+        <div className={`px-3 py-2 flex items-center justify-between flex-shrink-0 text-xs ${isDark ? 'bg-indigo-900/50 text-indigo-300' : 'bg-indigo-50 text-indigo-700'}`}>
+          <span>For fullscreen mode: tap <strong>&#x22EE;</strong> then <strong>Open in Chrome</strong></span>
+          <button
+            onClick={() => { setShowInstallTip(false); sessionStorage.setItem('install_tip_dismissed', '1'); }}
+            className={`ml-2 px-1.5 py-0.5 rounded text-xs font-medium ${isDark ? 'hover:bg-indigo-800' : 'hover:bg-indigo-100'}`}
+          >
+            &#x2715;
+          </button>
+        </div>
+      )}
+
       {/* Compact Header */}
       <div className={`sticky top-0 z-20 shadow-sm flex-shrink-0 ${isDark ? 'bg-slate-800 border-b border-slate-700' : 'bg-white border-b border-slate-200'}`}>
         {/* Progress Bar */}
@@ -463,6 +522,25 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
             <h1 className={`font-semibold text-sm truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>{test.title}</h1>
           </div>
           <div className="flex items-center gap-3 ml-3">
+            {fullscreenSupported && (
+              <button
+                onClick={toggleFullscreen}
+                className={`p-1.5 rounded-lg transition-colors ${isDark ? 'text-slate-400 hover:text-white hover:bg-slate-700' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'}`}
+                title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+              >
+                {isFullscreen ? (
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="4 14 10 14 10 20" /><polyline points="20 10 14 10 14 4" />
+                    <line x1="14" y1="10" x2="21" y2="3" /><line x1="3" y1="21" x2="10" y2="14" />
+                  </svg>
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" />
+                    <line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" />
+                  </svg>
+                )}
+              </button>
+            )}
             <span className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
               <span className="font-medium text-indigo-400">{answeredCount}</span>/{totalQuestions}
             </span>

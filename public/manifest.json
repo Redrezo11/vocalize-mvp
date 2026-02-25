@@ -1,0 +1,16 @@
+{
+  "name": "Vocalize - Listening & Reading Tests",
+  "short_name": "Vocalize",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#4f46e5",
+  "icons": [
+    {
+      "src": "/logo-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
