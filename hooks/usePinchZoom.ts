@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 /**
  * Detects two-finger pinch gestures on a target element and updates
@@ -20,8 +20,15 @@ export function usePinchZoom(
   const sizeRef = useRef(currentSize);
   sizeRef.current = currentSize;
 
+  // Track actual DOM element — re-runs the main effect when the ref's
+  // target mounts/unmounts (e.g. phase change from pre-reading to questions).
+  const [el, setEl] = useState<HTMLElement | null>(null);
   useEffect(() => {
-    const el = targetRef.current;
+    const node = targetRef.current ?? null;
+    if (node !== el) setEl(node);
+  }); // runs every render, but only updates state when element actually changes
+
+  useEffect(() => {
     if (!el) return;
 
     const getDistance = (touches: TouchList) =>
@@ -72,5 +79,5 @@ export function usePinchZoom(
       el.removeEventListener('gesturestart', onGestureStart);
       el.removeEventListener('gesturechange', onGestureChange);
     };
-  }, [targetRef, setSize, min, max]);
+  }, [el, setSize, min, max]);
 }
