@@ -10,6 +10,7 @@ import { useAppMode } from '../contexts/AppModeContext';
 import { ContentLabelProvider } from '../contexts/ContentLabelContext';
 import { getContentLabels } from '../utils/contentLabels';
 import { FloatingZoomWidget } from './FloatingZoomWidget';
+import { usePinchZoom } from '../hooks/usePinchZoom';
 
 interface StudentTestProps {
   test: ListeningTest;
@@ -124,6 +125,11 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
   const passageScrollRef = useRef<HTMLDivElement>(null);
   const questionsScrollRef = useRef<HTMLDivElement>(null);
   const listeningScrollRef = useRef<HTMLDivElement>(null);
+
+  // Pinch-to-zoom on all scrollable containers
+  usePinchZoom(passageScrollRef, studentFontSize, setStudentFontSize);
+  usePinchZoom(questionsScrollRef, studentFontSize, setStudentFontSize);
+  usePinchZoom(listeningScrollRef, studentFontSize, setStudentFontSize);
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
