@@ -1156,6 +1156,10 @@ const App: React.FC = () => {
           ...l,
           id: l._id || Math.random().toString(36).substring(2, 11)
         })),
+        bonusQuestions: t.bonus_questions?.map((q: { _id?: string; questionText: string; options?: string[]; correctAnswer: string; explanation?: string; explanationArabic?: string }) => ({
+          ...q,
+          id: q._id || Math.random().toString(36).substring(2, 11)
+        })),
       };
       setStudentTest(test);
       setCurrentView('student-test');

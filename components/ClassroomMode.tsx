@@ -18,6 +18,7 @@ const mapTestFromServer = (t: any): ListeningTest => ({
   speakerCount: t.speaker_count ?? t.speakerCount ?? undefined,
   questions: (t.questions || []).map((q: any) => ({ ...q, id: q._id || q.id || Math.random().toString(36).substring(2, 11) })),
   lexis: t.lexis?.map((l: any) => ({ ...l, id: l._id || l.id || Math.random().toString(36).substring(2, 11) })),
+  bonusQuestions: t.bonus_questions?.map((q: any) => ({ ...q, id: q._id || q.id || Math.random().toString(36).substring(2, 11) })),
   lexisAudio: t.lexisAudio,
   classroomActivity: t.classroomActivity,
 });
