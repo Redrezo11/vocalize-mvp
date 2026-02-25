@@ -1,15 +1,12 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { LexisItem, MatchPhaseResult } from '../types';
 import { ClassroomTheme } from './Settings';
-import { FloatingZoomWidget } from './FloatingZoomWidget';
 
 interface LexisMatchGameProps {
   lexis: LexisItem[];
   theme?: ClassroomTheme;
   onComplete: (results: MatchPhaseResult) => void;
   onSkip: (results: MatchPhaseResult) => void;
-  studentFontSize?: number;
-  setStudentFontSize?: React.Dispatch<React.SetStateAction<number>>;
 }
 
 interface Card {
@@ -24,8 +21,6 @@ export const LexisMatchGame: React.FC<LexisMatchGameProps> = ({
   theme = 'light',
   onComplete,
   onSkip,
-  studentFontSize = 1,
-  setStudentFontSize,
 }) => {
   const isDark = theme === 'dark';
 
@@ -296,7 +291,6 @@ export const LexisMatchGame: React.FC<LexisMatchGameProps> = ({
           font-family: 'Noto Sans Arabic', 'Segoe UI', Tahoma, sans-serif;
         }
       `}</style>
-      {setStudentFontSize && <FloatingZoomWidget studentFontSize={studentFontSize} setStudentFontSize={setStudentFontSize} isDark={isDark} />}
     </div>
   );
 };

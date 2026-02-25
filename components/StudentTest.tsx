@@ -375,8 +375,6 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
         theme={theme}
         onComplete={advanceFromMatch}
         onSkip={advanceFromMatch}
-        studentFontSize={studentFontSize}
-        setStudentFontSize={setStudentFontSize}
       />
     );
   }
@@ -389,8 +387,6 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
         theme={theme}
         onComplete={advanceFromGapFill}
         onSkip={advanceFromGapFill}
-        studentFontSize={studentFontSize}
-        setStudentFontSize={setStudentFontSize}
       />
     );
   }
@@ -404,8 +400,6 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
           theme={theme}
           onComplete={advanceFromPreview}
           onSkip={advanceFromPreview}
-          studentFontSize={studentFontSize}
-          setStudentFontSize={setStudentFontSize}
         />
       </ContentLabelProvider>
     );

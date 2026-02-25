@@ -2,15 +2,12 @@ import React, { useState } from 'react';
 import { TrueFalseItem, PreviewTrueFalseResult } from '../types';
 import { ClassroomTheme } from './Settings';
 import { useContentLabel } from '../contexts/ContentLabelContext';
-import { FloatingZoomWidget } from './FloatingZoomWidget';
 
 interface TrueFalseActivityProps {
   items: TrueFalseItem[];
   theme?: ClassroomTheme;
   onComplete: (results: PreviewTrueFalseResult[]) => void;
   onSkip: () => void;
-  studentFontSize?: number;
-  setStudentFontSize?: React.Dispatch<React.SetStateAction<number>>;
 }
 
 export const TrueFalseActivity: React.FC<TrueFalseActivityProps> = ({
@@ -18,8 +15,6 @@ export const TrueFalseActivity: React.FC<TrueFalseActivityProps> = ({
   theme = 'light',
   onComplete,
   onSkip,
-  studentFontSize = 1,
-  setStudentFontSize,
 }) => {
   const isDark = theme === 'dark';
   const label = useContentLabel();
@@ -214,7 +209,6 @@ export const TrueFalseActivity: React.FC<TrueFalseActivityProps> = ({
           </button>
         </div>
       )}
-      {setStudentFontSize && <FloatingZoomWidget studentFontSize={studentFontSize} setStudentFontSize={setStudentFontSize} isDark={isDark} />}
     </div>
   );
 };

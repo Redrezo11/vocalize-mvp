@@ -1,15 +1,12 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { LexisItem, GapFillPhaseResult, GapFillPhaseItemResult } from '../types';
 import { ClassroomTheme } from './Settings';
-import { FloatingZoomWidget } from './FloatingZoomWidget';
 
 interface LexisGapFillGameProps {
   lexis: LexisItem[];
   theme?: ClassroomTheme;
   onComplete: (results: GapFillPhaseResult) => void;
   onSkip: (results: GapFillPhaseResult) => void;
-  studentFontSize?: number;
-  setStudentFontSize?: React.Dispatch<React.SetStateAction<number>>;
 }
 
 interface GapFillQuestion {
@@ -35,8 +32,6 @@ export const LexisGapFillGame: React.FC<LexisGapFillGameProps> = ({
   theme = 'light',
   onComplete,
   onSkip,
-  studentFontSize = 1,
-  setStudentFontSize,
 }) => {
   const isDark = theme === 'dark';
 
@@ -446,7 +441,6 @@ export const LexisGapFillGame: React.FC<LexisGapFillGameProps> = ({
           Score: <span className={`font-bold ${isDark ? 'text-purple-400' : 'text-purple-600'}`}>{correctCount}</span>/{answeredQuestions.size} correct
         </span>
       </div>
-      {setStudentFontSize && <FloatingZoomWidget studentFontSize={studentFontSize} setStudentFontSize={setStudentFontSize} isDark={isDark} />}
     </div>
   );
 };
