@@ -597,7 +597,7 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
         </div>
 
         {/* Main content */}
-        <div className="flex-1 flex flex-col p-4 max-w-lg mx-auto w-full">
+        <div className="flex-1 flex flex-col p-4 max-w-lg mx-auto w-full" style={{ zoom: studentFontSize / 1.125 }}>
           {/* Question */}
           <div className="mb-4">
             <div className="flex items-center gap-2 mb-2">
@@ -787,7 +787,7 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
         </div>
 
         {/* Main content */}
-        <div className="flex-1 overflow-y-auto p-4 max-w-lg mx-auto w-full">
+        <div className="flex-1 overflow-y-auto p-4 max-w-lg mx-auto w-full" style={{ zoom: studentFontSize / 1.125 }}>
           {/* Question */}
           <div className="mb-3">
             <div className="flex items-center gap-2 mb-2">

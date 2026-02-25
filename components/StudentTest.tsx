@@ -522,7 +522,7 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
             className="absolute inset-0 overflow-y-auto"
             style={{ display: readingView === 'questions' ? 'block' : 'none', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', paddingBottom: '60px' }}
           >
-            <div className="px-3 py-3 space-y-2 max-w-2xl mx-auto" style={{ fontSize: `${studentFontSize}rem` }}>
+            <div className="px-3 py-3 space-y-2 max-w-2xl mx-auto" style={{ zoom: studentFontSize / 1.125 }}>
               {/* Bonus Practice Section — only after submission */}
           {isSubmitted && (
             <>
@@ -843,7 +843,7 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
       ) : (
         /* Single-scroll layout for listening tests */
         <div ref={listeningScrollRef} className="flex-1 overflow-y-auto">
-          <div className="px-3 py-3 space-y-2 max-w-2xl mx-auto" style={{ fontSize: `${studentFontSize}rem` }}>
+          <div className="px-3 py-3 space-y-2 max-w-2xl mx-auto" style={{ zoom: studentFontSize / 1.125 }}>
             {test.questions.map((question, index) => {
               const status = getAnswerStatus(question.id);
               return (
