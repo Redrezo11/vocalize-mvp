@@ -119,12 +119,6 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
   const contentLabel = useMemo(() => getContentLabels(test.speakerCount, appMode), [test.speakerCount, appMode]);
   const [studentFontSize, setStudentFontSize] = useState(1.125); // rem (~text-lg)
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [showInstallTip, setShowInstallTip] = useState(() => {
-    // Only show in browser mode (not standalone PWA), and if not dismissed before
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
-    const dismissed = sessionStorage.getItem('install_tip_dismissed');
-    return !isStandalone && !dismissed;
-  });
   const fullscreenSupported = typeof document !== 'undefined' && (document.fullscreenEnabled || (document as any).webkitFullscreenEnabled);
 
   // Toggle fullscreen mode (hides Chrome Custom Tab toolbar on Android)
@@ -494,18 +488,6 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
         </div>
       )}
 
-      {/* Install tip banner */}
-      {showInstallTip && !isFullscreen && (
-        <div className={`px-3 py-2 flex items-center justify-between flex-shrink-0 text-xs ${isDark ? 'bg-indigo-900/50 text-indigo-300' : 'bg-indigo-50 text-indigo-700'}`}>
-          <span>For fullscreen mode: tap <strong>&#x22EE;</strong> then <strong>Open in Chrome</strong></span>
-          <button
-            onClick={() => { setShowInstallTip(false); sessionStorage.setItem('install_tip_dismissed', '1'); }}
-            className={`ml-2 px-1.5 py-0.5 rounded text-xs font-medium ${isDark ? 'hover:bg-indigo-800' : 'hover:bg-indigo-100'}`}
-          >
-            &#x2715;
-          </button>
-        </div>
-      )}
 
       {/* Compact Header */}
       <div className={`sticky top-0 z-20 shadow-sm flex-shrink-0 ${isDark ? 'bg-slate-800 border-b border-slate-700' : 'bg-white border-b border-slate-200'}`}>
