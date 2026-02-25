@@ -121,6 +121,9 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
   const [readingView, setReadingView] = useState<'passage' | 'questions'>('passage');
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
+  const passageScrollRef = useRef<HTMLDivElement>(null);
+  const questionsScrollRef = useRef<HTMLDivElement>(null);
+  const listeningScrollRef = useRef<HTMLDivElement>(null);
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
@@ -507,6 +510,7 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
         <div className="flex-1 relative" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
           {/* Passage page */}
           <div
+            ref={passageScrollRef}
             className="absolute inset-0 overflow-y-auto px-5 py-6"
             style={{ display: readingView === 'passage' ? 'block' : 'none', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', paddingBottom: '60px' }}
           >
@@ -520,6 +524,7 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
 
           {/* Questions page */}
           <div
+            ref={questionsScrollRef}
             className="absolute inset-0 overflow-y-auto"
             style={{ display: readingView === 'questions' ? 'block' : 'none', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', paddingBottom: '60px' }}
           >
@@ -839,11 +844,11 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
           </div>
 
           {/* Floating zoom widget */}
-          <FloatingZoomWidget studentFontSize={studentFontSize} setStudentFontSize={setStudentFontSize} isDark={isDark} bottomOffset="60px" />
+          <FloatingZoomWidget studentFontSize={studentFontSize} setStudentFontSize={setStudentFontSize} isDark={isDark} bottomOffset="60px" scrollRef={readingView === 'passage' ? passageScrollRef : questionsScrollRef} />
         </div>
       ) : (
         /* Single-scroll layout for listening tests */
-        <div className="flex-1 overflow-y-auto">
+        <div ref={listeningScrollRef} className="flex-1 overflow-y-auto">
           <div className="px-3 py-3 space-y-2 max-w-2xl mx-auto" style={{ fontSize: `${studentFontSize}rem` }}>
             {test.questions.map((question, index) => {
               const status = getAnswerStatus(question.id);
@@ -918,7 +923,7 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
             })}
           </div>
           <div className="h-4" />
-          <FloatingZoomWidget studentFontSize={studentFontSize} setStudentFontSize={setStudentFontSize} isDark={isDark} />
+          <FloatingZoomWidget studentFontSize={studentFontSize} setStudentFontSize={setStudentFontSize} isDark={isDark} scrollRef={listeningScrollRef} />
         </div>
       )}
 
