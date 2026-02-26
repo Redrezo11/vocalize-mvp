@@ -395,6 +395,39 @@ export function buildSingleWordScript(item: LexisItem, index: number): string {
   return `Word number ${index + 1}. ${english}. In Arabic: ${arabic}.`;
 }
 
+// Fast per-word audio using tts-1 (no instructions overhead)
+async function generateWordWithTTS1(script: string): Promise<string | null> {
+  const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
+  if (!apiKey || apiKey === 'PLACEHOLDER_API_KEY') return null;
+
+  try {
+    const response = await fetch('https://api.openai.com/v1/audio/speech', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'tts-1',
+        input: script,
+        voice: 'onyx',
+        response_format: 'mp3'
+      })
+    });
+
+    if (!response.ok) return null;
+
+    const audioBlob = await response.blob();
+    const arrayBuffer = await audioBlob.arrayBuffer();
+    const base64 = btoa(
+      new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
+    );
+    return `data:audio/mpeg;base64,${base64}`;
+  } catch {
+    return null;
+  }
+}
+
 // Generate audio for a single vocabulary word
 export async function generateSingleWordAudio(
   item: LexisItem,
@@ -409,7 +442,7 @@ export async function generateSingleWordAudio(
   if (engine === 'gemini') {
     audioUrl = await generateWithGemini(script);
   } else if (engine === 'openai') {
-    audioUrl = await generateWithOpenAI(script);
+    audioUrl = await generateWordWithTTS1(script);
   }
 
   if (!audioUrl) {

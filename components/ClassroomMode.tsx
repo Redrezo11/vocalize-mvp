@@ -212,6 +212,8 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
   const [lexisAudioError, setLexisAudioError] = useState<string | null>(null);
   const [isPlayingLexisAudio, setIsPlayingLexisAudio] = useState(false);
   const [lexisTTSEngine, setLexisTTSEngine] = useState<LexisTTSEngine>('openai');
+  const [narrationModel, setNarrationModel] = useState<'tts-1' | 'gpt-4o-mini-tts'>('gpt-4o-mini-tts');
+  const [showTTSSettings, setShowTTSSettings] = useState(false);
   const lexisAudioRef = useRef<HTMLAudioElement>(null);
 
   // Slideshow state for Focus Mode
@@ -668,9 +670,17 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
         ? `${activity.situationSetup.en} ... ${activity.discussionPrompt.en}`
         : `${activity.situationSetup.ar} ... ${activity.discussionPrompt.ar}`;
 
-      const instructions = language === 'en'
-        ? 'Read clearly and slowly for an English language classroom. Pause at the "..." between sentences.'
-        : 'Read clearly and slowly in Arabic for a language classroom. Pause at the "..." between sentences.';
+      const requestBody: Record<string, string> = {
+        model: narrationModel,
+        input: text,
+        voice: language === 'en' ? 'nova' : 'onyx',
+        response_format: 'mp3'
+      };
+      if (narrationModel === 'gpt-4o-mini-tts') {
+        requestBody.instructions = language === 'en'
+          ? 'Read clearly and slowly for an English language classroom. Pause at the "..." between sentences.'
+          : 'Read clearly and slowly in Arabic for a language classroom. Pause at the "..." between sentences.';
+      }
 
       const response = await fetch('https://api.openai.com/v1/audio/speech', {
         method: 'POST',
@@ -678,13 +688,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
           'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini-tts',
-          input: text,
-          voice: language === 'en' ? 'nova' : 'onyx',
-          instructions,
-          response_format: 'mp3'
-        })
+        body: JSON.stringify(requestBody)
       });
 
       if (!response.ok) {
@@ -751,9 +755,17 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
       }
 
       const text = language === 'en' ? tq.en : tq.ar;
-      const instructions = language === 'en'
-        ? 'Read clearly and slowly for an English language classroom.'
-        : 'Read clearly and slowly in Arabic for a language classroom.';
+      const plenaryBody: Record<string, string> = {
+        model: narrationModel,
+        input: text,
+        voice: language === 'en' ? 'nova' : 'onyx',
+        response_format: 'mp3'
+      };
+      if (narrationModel === 'gpt-4o-mini-tts') {
+        plenaryBody.instructions = language === 'en'
+          ? 'Read clearly and slowly for an English language classroom.'
+          : 'Read clearly and slowly in Arabic for a language classroom.';
+      }
 
       const response = await fetch('https://api.openai.com/v1/audio/speech', {
         method: 'POST',
@@ -761,13 +773,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
           'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini-tts',
-          input: text,
-          voice: language === 'en' ? 'nova' : 'onyx',
-          instructions,
-          response_format: 'mp3'
-        })
+        body: JSON.stringify(plenaryBody)
       });
 
       if (!response.ok) {
@@ -1481,6 +1487,16 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                   )}
                 </button>
               )}
+
+              {/* TTS Settings Button */}
+              <button
+                onClick={() => setShowTTSSettings(true)}
+                className="flex items-center gap-2 px-3 py-2 bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 transition-colors"
+                title="Voice settings"
+              >
+                <span className="text-sm">&#9881;&#65039;</span>
+                <span className="text-sm">Voice</span>
+              </button>
 
               {/* Play Counter - only shown with audio in listening mode */}
               {appMode === 'listening' && selectedAudio && (
@@ -2712,6 +2728,49 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                   </div>
                 </>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* TTS Settings Modal */}
+        {showTTSSettings && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setShowTTSSettings(false)}>
+            <div className={`rounded-2xl max-w-sm w-full p-6 ${isDark ? 'bg-slate-800' : 'bg-white'}`} onClick={e => e.stopPropagation()}>
+              <h2 className={`text-lg font-bold mb-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>Voice Settings</h2>
+              <p className={`text-sm mb-5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Choose the TTS model for slide narration</p>
+
+              <div className="space-y-3">
+                <button
+                  onClick={() => setNarrationModel('tts-1')}
+                  className={`w-full text-left px-4 py-3 rounded-xl border-2 transition-colors ${
+                    narrationModel === 'tts-1'
+                      ? isDark ? 'border-indigo-500 bg-indigo-900/30' : 'border-indigo-500 bg-indigo-50'
+                      : isDark ? 'border-slate-600 bg-slate-700 hover:border-slate-500' : 'border-slate-200 bg-slate-50 hover:border-slate-300'
+                  }`}
+                >
+                  <div className={`font-medium ${isDark ? 'text-white' : 'text-slate-900'}`}>TTS-1</div>
+                  <div className={`text-xs mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Fast and cost-effective</div>
+                </button>
+
+                <button
+                  onClick={() => setNarrationModel('gpt-4o-mini-tts')}
+                  className={`w-full text-left px-4 py-3 rounded-xl border-2 transition-colors ${
+                    narrationModel === 'gpt-4o-mini-tts'
+                      ? isDark ? 'border-indigo-500 bg-indigo-900/30' : 'border-indigo-500 bg-indigo-50'
+                      : isDark ? 'border-slate-600 bg-slate-700 hover:border-slate-500' : 'border-slate-200 bg-slate-50 hover:border-slate-300'
+                  }`}
+                >
+                  <div className={`font-medium ${isDark ? 'text-white' : 'text-slate-900'}`}>GPT-4o mini TTS</div>
+                  <div className={`text-xs mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Natural voice with instruction-following</div>
+                </button>
+              </div>
+
+              <button
+                onClick={() => setShowTTSSettings(false)}
+                className={`w-full mt-5 px-4 py-2.5 rounded-xl font-medium transition-colors ${isDark ? 'bg-slate-700 text-slate-300 hover:bg-slate-600' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}
+              >
+                Done
+              </button>
             </div>
           </div>
         )}
