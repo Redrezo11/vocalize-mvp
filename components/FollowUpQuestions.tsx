@@ -3,9 +3,6 @@ import { ListeningTest, TestSessionLog, FollowUpQuestion, FollowUpFeedbackItem }
 import { ClassroomTheme, ContentModel } from './Settings';
 import { useContentLabel } from '../contexts/ContentLabelContext';
 import type { ContentLabel } from '../utils/contentLabels';
-import { FloatingZoomWidget } from './FloatingZoomWidget';
-import { usePinchZoom } from '../hooks/usePinchZoom';
-
 interface FollowUpQuestionsProps {
   sessionLog: TestSessionLog;
   transcript: string;
@@ -13,8 +10,6 @@ interface FollowUpQuestionsProps {
   contentModel: ContentModel;
   theme?: ClassroomTheme;
   onBack: () => void;
-  studentFontSize?: number;
-  setStudentFontSize?: React.Dispatch<React.SetStateAction<number>>;
 }
 
 type FollowUpPhase = 'generating' | 'answering' | 'evaluating' | 'feedback' | 'done';
@@ -342,7 +337,7 @@ const ProgressLoader: React.FC<{
 // Arabic font style for RTL content
 const arabicFontStyle = { fontFamily: "'Noto Sans Arabic', 'Segoe UI', Tahoma, sans-serif" };
 
-// Accordion section for feedback (bilingual)
+// Always-visible feedback section (bilingual)
 const FeedbackSection: React.FC<{
   title: string;
   titleArabic: string;
@@ -350,39 +345,28 @@ const FeedbackSection: React.FC<{
   content: string;
   contentArabic: string;
   language: 'en' | 'ar';
-  defaultOpen?: boolean;
   borderColor: string;
   isDark: boolean;
-}> = ({ title, titleArabic, icon, content, contentArabic, language, defaultOpen = false, borderColor, isDark }) => {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
+}> = ({ title, titleArabic, icon, content, contentArabic, language, borderColor, isDark }) => {
   const isAr = language === 'ar';
   const displayTitle = isAr ? titleArabic : title;
   const displayContent = isAr ? (contentArabic || content) : content;
 
   return (
     <div className={`rounded-lg border-l-4 ${borderColor} overflow-hidden ${isDark ? 'bg-slate-700/50' : 'bg-white'}`}>
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className={`w-full px-3 py-2.5 flex items-center justify-between text-left ${isDark ? 'hover:bg-slate-700' : 'hover:bg-slate-50'}`}
-        dir={isAr ? 'rtl' : 'ltr'}
-      >
-        <span className={`text-sm font-medium ${isDark ? 'text-slate-200' : 'text-slate-700'}`} style={isAr ? arabicFontStyle : undefined}>
-          {icon} {displayTitle}
-        </span>
-        <span className={`text-xs transition-transform duration-300 ${isOpen ? 'rotate-180' : ''} ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-          ▼
-        </span>
-      </button>
       <div
-        className={`transition-all duration-300 ease-in-out overflow-hidden ${isOpen ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}
+        className={`px-3 py-2.5 text-sm font-medium ${isDark ? 'text-slate-200' : 'text-slate-700'}`}
+        dir={isAr ? 'rtl' : 'ltr'}
+        style={isAr ? arabicFontStyle : undefined}
       >
-        <div
-          className={`px-3 pb-3 text-sm ${isDark ? 'text-slate-300' : 'text-slate-600'}`}
-          dir={isAr ? 'rtl' : 'ltr'}
-          style={isAr ? arabicFontStyle : undefined}
-        >
-          {displayContent}
-        </div>
+        {icon} {displayTitle}
+      </div>
+      <div
+        className={`px-3 pb-3 text-sm ${isDark ? 'text-slate-300' : 'text-slate-600'}`}
+        dir={isAr ? 'rtl' : 'ltr'}
+        style={isAr ? arabicFontStyle : undefined}
+      >
+        {displayContent}
       </div>
     </div>
   );
@@ -402,17 +386,9 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
   contentModel,
   theme = 'light',
   onBack,
-  studentFontSize = 1,
-  setStudentFontSize,
 }) => {
   const isDark = theme === 'dark';
   const contentLabel = useContentLabel();
-
-  // Pinch-to-zoom refs for answering and feedback content
-  const answeringContentRef = useRef<HTMLDivElement>(null);
-  const feedbackContentRef = useRef<HTMLDivElement>(null);
-  usePinchZoom(answeringContentRef, studentFontSize, setStudentFontSize ?? (() => {}));
-  usePinchZoom(feedbackContentRef, studentFontSize, setStudentFontSize ?? (() => {}));
 
   // Try to restore discussion state from sessionStorage (survives tab suspension)
   const savedDisc = useMemo<SavedDiscussionState | null>(() => {
@@ -604,7 +580,7 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
         </div>
 
         {/* Main content */}
-        <div ref={answeringContentRef} className="flex-1 flex flex-col p-4 max-w-lg mx-auto w-full" style={{ zoom: studentFontSize / 1.125 }}>
+        <div className="flex-1 flex flex-col p-4 max-w-lg mx-auto w-full">
           {/* Question */}
           <div className="mb-4">
             <div className="flex items-center gap-2 mb-2">
@@ -739,7 +715,6 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
             50% { box-shadow: 0 0 0 6px rgba(99,102,241,0); }
           }
         `}</style>
-        {setStudentFontSize && <FloatingZoomWidget studentFontSize={studentFontSize} setStudentFontSize={setStudentFontSize} isDark={isDark} />}
       </FullScreen>
     );
   }
@@ -794,7 +769,7 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
         </div>
 
         {/* Main content */}
-        <div ref={feedbackContentRef} className="flex-1 overflow-y-auto p-4 max-w-lg mx-auto w-full" style={{ zoom: studentFontSize / 1.125 }}>
+        <div className="flex-1 overflow-y-auto p-4 max-w-lg mx-auto w-full">
           {/* Question */}
           <div className="mb-3">
             <div className="flex items-center gap-2 mb-2">
@@ -836,7 +811,7 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
                 content={fb.acknowledge}
                 contentArabic={fb.acknowledgeArabic}
                 language={feedbackLang}
-                defaultOpen={true}
+
                 borderColor="border-blue-400"
                 isDark={isDark}
               />
@@ -847,7 +822,7 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
                 content={fb.connectToTest}
                 contentArabic={fb.connectToTestArabic}
                 language={feedbackLang}
-                defaultOpen={true}
+
                 borderColor="border-purple-400"
                 isDark={isDark}
               />
@@ -858,7 +833,7 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
                 content={fb.extendThinking}
                 contentArabic={fb.extendThinkingArabic}
                 language={feedbackLang}
-                defaultOpen={true}
+
                 borderColor="border-indigo-400"
                 isDark={isDark}
               />
@@ -917,7 +892,6 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
             </button>
           </div>
         </div>
-        {setStudentFontSize && <FloatingZoomWidget studentFontSize={studentFontSize} setStudentFontSize={setStudentFontSize} isDark={isDark} />}
       </FullScreen>
     );
   }
