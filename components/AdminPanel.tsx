@@ -304,7 +304,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
 
               {/* Add user form */}
               {showAddForm ? (
-                <form onSubmit={handleAdd} className="mt-4 rounded-xl border border-indigo-200 bg-indigo-50/50 p-4 space-y-3">
+                <form onSubmit={handleAdd} autoComplete="off" className="mt-4 rounded-xl border border-indigo-200 bg-indigo-50/50 p-4 space-y-3">
                   <h3 className="text-sm font-semibold text-slate-900">Add New User</h3>
                   {addError && (
                     <div className="px-2 py-1.5 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">{addError}</div>
@@ -317,6 +317,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                         onChange={e => setNewName(e.target.value)}
                         placeholder="e.g. Mr. Smith"
                         required
+                        autoComplete="off"
                         className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                       />
                     </div>
@@ -327,6 +328,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                         onChange={e => setNewUsername(e.target.value)}
                         placeholder="login username"
                         required
+                        autoComplete="off"
                         className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                       />
                     </div>
@@ -342,6 +344,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                           type={showNewPassword ? 'text' : 'password'}
                           required
                           minLength={8}
+                          autoComplete="new-password"
                           className="w-full px-2.5 py-1.5 pr-16 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                         />
                         <button type="button" onClick={() => setShowNewPassword(v => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-indigo-600 hover:text-indigo-800 font-medium">
