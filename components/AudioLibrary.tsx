@@ -359,6 +359,11 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
                          test.type === 'reading-comprehension' ? 'Reading' :
                          test.type}
                       </span>
+                      {test.difficulty && (
+                        <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700">
+                          {test.difficulty}
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 mt-1.5 text-xs text-slate-500">
                       <span className="px-2 py-0.5 bg-slate-100 rounded-full font-medium">
@@ -370,6 +375,7 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
                         </span>
                       )}
                       <span className="text-slate-400">{formatDate(test.updatedAt)}</span>
+                      <span className="text-slate-400">by {test.createdBy?.name ?? 'admin'}</span>
                     </div>
                     <p className="mt-3 text-sm text-slate-600 line-clamp-2 leading-relaxed">
                       {test.sourceText

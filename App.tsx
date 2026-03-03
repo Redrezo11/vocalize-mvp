@@ -1099,6 +1099,7 @@ const App: React.FC = () => {
           id: t._id,
           createdAt: t.created_at,
           updatedAt: t.updated_at,
+          createdBy: (t as any).created_by ? { name: (t as any).created_by.name, username: (t as any).created_by.username } : null,
           speakerCount: (t as any).speaker_count ?? undefined,
           sourceText: (t as any).source_text || undefined,
           questions: t.questions.map((q: { _id?: string; questionText: string; options?: string[]; correctAnswer: string; explanation?: string }) => ({ ...q, id: q._id || Math.random().toString(36).substring(2, 11) })),
@@ -1152,6 +1153,7 @@ const App: React.FC = () => {
         id: t._id,
         createdAt: t.created_at,
         updatedAt: t.updated_at,
+        createdBy: t.created_by ? { name: t.created_by.name, username: t.created_by.username } : null,
         speakerCount: t.speaker_count ?? undefined,
         sourceText: t.source_text || undefined,
         questions: t.questions.map((q: { _id?: string; questionText: string; options?: string[]; correctAnswer: string; explanation?: string }) => ({

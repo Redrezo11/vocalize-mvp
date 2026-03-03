@@ -707,6 +707,7 @@ app.get('/api/audio-entries/:audioId/tests', authenticate, async (req, res) => {
 app.get('/api/tests', authenticate, async (req, res) => {
   try {
     const tests = await ListeningTest.find()
+      .populate('created_by', 'name username')
       .select('-lexisAudio -classroomActivity')
       .sort({ created_at: -1 });
     const responseJson = JSON.stringify(tests);
