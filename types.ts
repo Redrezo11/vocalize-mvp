@@ -115,6 +115,7 @@ export interface SavedAudio {
   speakers: string[];
   isTranscriptOnly?: boolean;  // True for transcript-only entries (no audio)
   difficulty?: string;  // CEFR level used when generating (A1, A2, B1, B2, C1)
+  createdBy?: { name: string; username: string } | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -540,7 +540,9 @@ app.get('/api/audio-entries', authenticate, async (req, res) => {
   try {
     const count = await AudioEntry.countDocuments();
     console.log('[API] Audio entries count:', count);
-    const entries = await AudioEntry.find().sort({ updated_at: -1 });
+    const entries = await AudioEntry.find()
+      .populate('created_by', 'name username')
+      .sort({ updated_at: -1 });
     console.log('[API] Found entries:', entries.length);
     res.json(entries);
   } catch (error) {

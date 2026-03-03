@@ -1571,6 +1571,13 @@ const App: React.FC = () => {
     </main>
   );
 
+  // Re-fetch audio entries after login (hook fires on mount before auth completes, gets 401)
+  useEffect(() => {
+    if (user) {
+      audioStorage.loadAll();
+    }
+  }, [user]);
+
   // Preload classroom and prefetch tests when library view is shown
   useEffect(() => {
     if (currentView === 'library') {

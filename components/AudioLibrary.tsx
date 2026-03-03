@@ -489,7 +489,13 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
                           {getEngineLabel(audio.engine)}
                         </span>
                       )}
+                      {audio.difficulty && (
+                        <span className="px-2 py-0.5 rounded-full font-medium bg-amber-50 text-amber-700">
+                          {audio.difficulty}
+                        </span>
+                      )}
                       <span className="text-slate-400">{formatDate(audio.updatedAt)}</span>
+                      <span className="text-slate-400">by {audio.createdBy?.name ?? 'admin'}</span>
                     </div>
                     <p className="mt-3 text-sm text-slate-600 line-clamp-2 leading-relaxed">
                       {truncateText(audio.transcript, 150)}

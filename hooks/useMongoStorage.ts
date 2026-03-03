@@ -17,6 +17,7 @@ interface MongoAudioEntry {
   is_transcript_only?: boolean;
   difficulty?: string;
   duration?: number;
+  created_by?: { _id: string; name: string; username: string } | null;
   created_at: string;
   updated_at: string;
 }
@@ -33,6 +34,7 @@ const docToSavedAudio = (doc: MongoAudioEntry): SavedAudio => {
     speakers: doc.speakers || [],
     isTranscriptOnly: doc.is_transcript_only || false,
     difficulty: doc.difficulty || undefined,
+    createdBy: doc.created_by ? { name: doc.created_by.name, username: doc.created_by.username } : null,
     createdAt: doc.created_at,
     updatedAt: doc.updated_at,
   };
