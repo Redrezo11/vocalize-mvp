@@ -234,8 +234,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                       </div>
                     ) : (
                       /* Display mode */
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3 min-w-0">
+                      <div className="flex items-center">
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
                           <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white ${u.role === 'admin' ? 'bg-violet-500' : 'bg-indigo-500'}`}>
                             {u.name.charAt(0).toUpperCase()}
                           </div>
@@ -252,7 +252,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                             <span className="text-xs text-slate-500">@{u.username}</span>
                           </div>
                         </div>
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1 ml-auto flex-shrink-0">
                           <button
                             onClick={() => startEdit(u)}
                             className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
