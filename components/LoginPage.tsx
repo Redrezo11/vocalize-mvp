@@ -25,15 +25,19 @@ export const LoginPage: React.FC = () => {
         {/* Logo & Brand */}
         <div className="text-center mb-8">
           <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/30 mx-auto mb-4">
-            <svg className="w-9 h-9 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-              <line x1="12" y1="19" x2="12" y2="23" />
-              <line x1="8" y1="23" x2="16" y2="23" />
+            <svg className="w-9 h-9 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              {/* Open book */}
+              <path d="M2 19.5V5a2 2 0 0 1 2-2h5.5a2 2 0 0 1 2 2v14.5" />
+              <path d="M11.5 19.5V5a2 2 0 0 1 2-2H19a2 2 0 0 1 2 2v14.5" />
+              {/* Headphones arc */}
+              <path d="M5 10a7 7 0 0 1 14 0" strokeWidth="2" />
+              {/* Headphone ear cups */}
+              <rect x="3" y="14" width="3" height="4" rx="1" fill="currentColor" stroke="none" />
+              <rect x="18" y="14" width="3" height="4" rx="1" fill="currentColor" stroke="none" />
             </svg>
           </div>
           <h1 className="text-2xl font-bold bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">
-            Vocalize
+            LessonForge
           </h1>
           <p className="text-sm text-slate-500 mt-1">Sign in to your account</p>
         </div>
