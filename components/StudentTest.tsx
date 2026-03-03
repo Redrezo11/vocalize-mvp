@@ -909,6 +909,176 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
         /* Single-scroll layout for listening tests */
         <div className="flex-1 overflow-y-auto">
           <div className="px-3 py-3 space-y-2 max-w-2xl mx-auto">
+            {/* Bonus Practice Section — only after submission */}
+            {isSubmitted && (
+              <>
+                {/* CTA card */}
+                {!isGeneratingBonus && (
+                  <div className={`rounded-xl border mb-3 p-4 text-center ${isDark ? 'border-indigo-700 bg-indigo-900/20' : 'border-indigo-200 bg-indigo-50'}`}>
+                    <p className={`font-medium text-sm mb-3 ${isDark ? 'text-indigo-300' : 'text-indigo-800'}`}>
+                      Want more practice?
+                    </p>
+                    <div className="flex gap-3 justify-center">
+                      <button
+                        onClick={() => handleGenerateBonus(5)}
+                        className="px-4 py-2 rounded-lg text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-500 transition-colors"
+                      >
+                        +5 Questions
+                      </button>
+                      <button
+                        onClick={() => handleGenerateBonus(10)}
+                        className="px-4 py-2 rounded-lg text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-500 transition-colors"
+                      >
+                        +10 Questions
+                      </button>
+                    </div>
+                    {bonusError && (
+                      <p className="text-xs text-red-500 mt-2">{bonusError}</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Loading state */}
+                {isGeneratingBonus && (
+                  <div className={`rounded-xl border mb-3 p-6 text-center ${isDark ? 'border-indigo-700 bg-indigo-900/20' : 'border-indigo-200 bg-indigo-50'}`}>
+                    <svg className="w-6 h-6 animate-spin mx-auto mb-2 text-indigo-500" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    <p className={`text-sm font-medium ${isDark ? 'text-indigo-300' : 'text-indigo-700'}`}>
+                      Generating new questions...
+                    </p>
+                  </div>
+                )}
+
+                {/* Bonus rounds (newest first) */}
+                {[...bonusRounds].reverse().map((round, revIdx) => {
+                  const roundIndex = bonusRounds.length - 1 - revIdx;
+                  const roundSubmitted = bonusSubmitted.has(roundIndex);
+                  const roundScore = bonusScores[roundIndex];
+                  const allAnswered = round.every(q => bonusAnswers[q.id]?.trim());
+
+                  return (
+                    <div key={roundIndex} className="mb-3">
+                      {/* Round header */}
+                      <div className={`flex items-center justify-between px-2 py-1.5 mb-1.5 ${isDark ? 'text-indigo-300' : 'text-indigo-700'}`}>
+                        <span className="text-xs font-bold uppercase tracking-wider">
+                          Bonus Round {roundIndex + 1}
+                          {roundSubmitted && roundScore && (
+                            <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-bold ${
+                              roundScore.score >= 70 ? 'bg-green-500 text-white' : 'bg-amber-500 text-white'
+                            }`}>
+                              {roundScore.score}% ({roundScore.correct}/{roundScore.total})
+                            </span>
+                          )}
+                        </span>
+                      </div>
+
+                      {/* Questions in this round */}
+                      <div className="space-y-2">
+                        {round.map((question, qIdx) => {
+                          const status = getBonusAnswerStatus(question.id, roundIndex);
+                          return (
+                            <div
+                              key={question.id}
+                              className={`rounded-xl border transition-colors ${
+                                status === 'correct'
+                                  ? isDark ? 'border-green-600 bg-green-900/30' : 'border-green-300 bg-green-50'
+                                  : status === 'incorrect'
+                                  ? isDark ? 'border-red-600 bg-red-900/30' : 'border-red-300 bg-red-50'
+                                  : isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-white'
+                              }`}
+                            >
+                              <div className="px-3 py-2 flex items-start gap-2">
+                                <span className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                                  status === 'correct' ? 'bg-green-500 text-white'
+                                  : status === 'incorrect' ? 'bg-red-500 text-white'
+                                  : isDark ? 'bg-indigo-600 text-white' : 'bg-indigo-500 text-white'
+                                }`}>
+                                  {qIdx + 1}
+                                </span>
+                                <p className={`text-sm leading-snug pt-0.5 ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
+                                  {question.questionText}
+                                </p>
+                              </div>
+                              {/* Options */}
+                              {question.options && (
+                                <div className="px-3 pb-2 grid grid-cols-2 gap-1.5">
+                                  {question.options.map((option, optIndex) => {
+                                    const letter = String.fromCharCode(65 + optIndex);
+                                    const isSelected = bonusAnswers[question.id] === option;
+                                    const isCorrectAnswer = option === question.correctAnswer;
+                                    return (
+                                      <button
+                                        key={optIndex}
+                                        onClick={() => {
+                                          if (!roundSubmitted) {
+                                            setBonusAnswers(prev => ({ ...prev, [question.id]: option }));
+                                          }
+                                        }}
+                                        disabled={roundSubmitted}
+                                        className={`p-2 rounded-lg border text-left text-xs transition-colors ${
+                                          roundSubmitted
+                                            ? isCorrectAnswer
+                                              ? isDark ? 'border-green-500 bg-green-900/40 text-green-300' : 'border-green-400 bg-green-100 text-green-800'
+                                              : isSelected && !isCorrectAnswer
+                                              ? isDark ? 'border-red-500 bg-red-900/40 text-red-300' : 'border-red-400 bg-red-100 text-red-800'
+                                              : isDark ? 'border-slate-700 bg-slate-800/50 text-slate-500' : 'border-slate-200 bg-slate-50 text-slate-400'
+                                            : isSelected
+                                            ? isDark ? 'border-indigo-500 bg-indigo-900/50 text-white' : 'border-indigo-500 bg-indigo-50 text-indigo-900'
+                                            : isDark ? 'border-slate-600 bg-slate-700/50 text-slate-300 hover:border-indigo-500' : 'border-slate-200 bg-white text-slate-700 hover:border-indigo-400'
+                                        }`}
+                                      >
+                                        <span className="font-medium mr-1">{letter}.</span>
+                                        {option}
+                                        {roundSubmitted && isCorrectAnswer && (
+                                          <span className="ml-1 text-green-500"><CheckCircleIcon /></span>
+                                        )}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                              {/* Explanation for incorrect answers */}
+                              {roundSubmitted && status === 'incorrect' && (question.explanation || question.explanationArabic) && (
+                                <div className="mx-3 mb-2 px-2 py-1.5 rounded text-xs bg-amber-100 text-amber-800">
+                                  {question.explanation && question.explanationArabic ? (
+                                    <div className="space-y-1">
+                                      <p>{question.explanation}</p>
+                                      <p className="text-right" dir="rtl">{question.explanationArabic}</p>
+                                    </div>
+                                  ) : (
+                                    <p className={question.explanationArabic ? 'text-right' : ''} dir={question.explanationArabic ? 'rtl' : 'ltr'}>
+                                      {question.explanation || question.explanationArabic}
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Submit button for this round */}
+                      {!roundSubmitted && (
+                        <button
+                          onClick={() => handleSubmitBonus(roundIndex)}
+                          disabled={!allAnswered}
+                          className={`w-full mt-2 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
+                            allAnswered
+                              ? 'bg-indigo-600 text-white hover:bg-indigo-500'
+                              : isDark ? 'bg-slate-700 text-slate-500' : 'bg-slate-200 text-slate-400'
+                          }`}
+                        >
+                          Submit Bonus Round {roundIndex + 1}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </>
+            )}
+
             {test.questions.map((question, index) => {
               const status = getAnswerStatus(question.id);
               return (
