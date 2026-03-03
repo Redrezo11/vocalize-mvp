@@ -38,6 +38,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
   const [editUsername, setEditUsername] = useState('');
   const [editPassword, setEditPassword] = useState('');
   const [editError, setEditError] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showEditPassword, setShowEditPassword] = useState(false);
 
   const loadUsers = useCallback(async () => {
     setIsLoading(true);
@@ -181,26 +183,40 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                           <div className="px-2 py-1.5 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">{editError}</div>
                         )}
                         <div className="grid grid-cols-2 gap-2">
-                          <input
-                            value={editName}
-                            onChange={e => setEditName(e.target.value)}
-                            placeholder="Name"
-                            className="px-2.5 py-1.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                          />
-                          <input
-                            value={editUsername}
-                            onChange={e => setEditUsername(e.target.value)}
-                            placeholder="Username"
-                            className="px-2.5 py-1.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                          />
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Display Name</label>
+                            <input
+                              value={editName}
+                              onChange={e => setEditName(e.target.value)}
+                              placeholder="e.g. Mr. Smith"
+                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Username</label>
+                            <input
+                              value={editUsername}
+                              onChange={e => setEditUsername(e.target.value)}
+                              placeholder="login username"
+                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                            />
+                          </div>
                         </div>
-                        <input
-                          value={editPassword}
-                          onChange={e => setEditPassword(e.target.value)}
-                          placeholder="New password (leave blank to keep)"
-                          type="password"
-                          className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                        />
+                        <div>
+                          <label className="block text-xs font-medium text-slate-600 mb-1">New Password <span className="text-slate-400 font-normal">(leave blank to keep current)</span></label>
+                          <div className="relative">
+                            <input
+                              value={editPassword}
+                              onChange={e => setEditPassword(e.target.value)}
+                              placeholder="Enter new password"
+                              type={showEditPassword ? 'text' : 'password'}
+                              className="w-full px-2.5 py-1.5 pr-16 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                            />
+                            <button type="button" onClick={() => setShowEditPassword(v => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-indigo-600 hover:text-indigo-800 font-medium">
+                              {showEditPassword ? 'Hide' : 'Show'}
+                            </button>
+                          </div>
+                        </div>
                         <div className="flex gap-2">
                           <button
                             onClick={() => handleEdit(u._id)}
@@ -294,39 +310,56 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                     <div className="px-2 py-1.5 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">{addError}</div>
                   )}
                   <div className="grid grid-cols-2 gap-2">
-                    <input
-                      value={newName}
-                      onChange={e => setNewName(e.target.value)}
-                      placeholder="Full name"
-                      required
-                      className="px-2.5 py-1.5 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    />
-                    <input
-                      value={newUsername}
-                      onChange={e => setNewUsername(e.target.value)}
-                      placeholder="Username"
-                      required
-                      className="px-2.5 py-1.5 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    />
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Display Name</label>
+                      <input
+                        value={newName}
+                        onChange={e => setNewName(e.target.value)}
+                        placeholder="e.g. Mr. Smith"
+                        required
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Username</label>
+                      <input
+                        value={newUsername}
+                        onChange={e => setNewUsername(e.target.value)}
+                        placeholder="login username"
+                        required
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      />
+                    </div>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
-                    <input
-                      value={newPassword}
-                      onChange={e => setNewPassword(e.target.value)}
-                      placeholder="Password (min 8 chars)"
-                      type="password"
-                      required
-                      minLength={8}
-                      className="px-2.5 py-1.5 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    />
-                    <select
-                      value={newRole}
-                      onChange={e => setNewRole(e.target.value as 'teacher' | 'admin')}
-                      className="px-2.5 py-1.5 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    >
-                      <option value="teacher">Teacher</option>
-                      <option value="admin">Admin</option>
-                    </select>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Password</label>
+                      <div className="relative">
+                        <input
+                          value={newPassword}
+                          onChange={e => setNewPassword(e.target.value)}
+                          placeholder="min 8 characters"
+                          type={showNewPassword ? 'text' : 'password'}
+                          required
+                          minLength={8}
+                          className="w-full px-2.5 py-1.5 pr-16 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                        />
+                        <button type="button" onClick={() => setShowNewPassword(v => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-indigo-600 hover:text-indigo-800 font-medium">
+                          {showNewPassword ? 'Hide' : 'Show'}
+                        </button>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Role</label>
+                      <select
+                        value={newRole}
+                        onChange={e => setNewRole(e.target.value as 'teacher' | 'admin')}
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      >
+                        <option value="teacher">Teacher</option>
+                        <option value="admin">Admin</option>
+                      </select>
+                    </div>
                   </div>
                   <div className="flex gap-2">
                     <button
