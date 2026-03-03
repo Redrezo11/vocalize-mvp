@@ -14,7 +14,9 @@ import { HomePage, CreationMethod } from './components/HomePage';
 import { ImportWizard, ImportData } from './components/ImportWizard';
 import { fullTestCache } from './utils/testCache';
 import { AppModeProvider } from './contexts/AppModeContext';
+import { useAuth } from './contexts/AuthContext';
 import { isTestTypeForMode } from './utils/modeLabels';
+import { LoginPage } from './components/LoginPage';
 
 // Lazy load components for better initial load
 const Visualizer = lazy(() => import('./components/Visualizer'));
@@ -61,6 +63,8 @@ const VisualizerFallback = () => (
 const API_BASE = '/api';
 
 const App: React.FC = () => {
+  const { user, isLoading: authLoading, logout } = useAuth();
+
   // Navigation state — restore from sessionStorage to survive tab suspension
   const [currentView, setCurrentView] = useState<AppView>(() => {
     const saved = sessionStorage.getItem('df_currentView');
@@ -1334,6 +1338,19 @@ const App: React.FC = () => {
           >
             <SettingsIcon className="w-5 h-5" />
           </button>
+          {/* User & Logout */}
+          {user && (
+            <div className="flex items-center gap-2 ml-1 pl-2 border-l border-slate-200">
+              <span className="text-xs text-slate-500 hidden sm:inline">{user.name}</span>
+              <button
+                onClick={logout}
+                className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                title="Log out"
+              >
+                Log Out
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </nav>
@@ -1756,6 +1773,16 @@ const App: React.FC = () => {
         </Suspense>
       </AppModeProvider>
     );
+  }
+
+  // Auth loading - show spinner while checking session
+  if (authLoading) {
+    return <LoadingSpinner />;
+  }
+
+  // Not authenticated - show login page
+  if (!user) {
+    return <LoginPage />;
   }
 
   // Classroom mode (full screen, no nav)

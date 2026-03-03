@@ -6,6 +6,9 @@ import { v2 as cloudinary } from 'cloudinary';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
+import { SignJWT, jwtVerify } from 'jose';
+import bcrypt from 'bcryptjs';
+import cookieParser from 'cookie-parser';
 import { parseDocument, validateFile, getSupportedTypes } from './utils/documentParser/index.js';
 
 // Load env from .env.local in development, Heroku provides env vars in production
@@ -18,8 +21,17 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: process.env.NODE_ENV === 'production'
+    ? process.env.APP_URL || 'https://listening-test-generator-203bfe6d6da6.herokuapp.com'
+    : ['http://localhost:5173', 'http://localhost:3001'],
+  credentials: true
+}));
 app.use(express.json({ limit: '50mb' }));
+app.use(cookieParser());
+
+// JWT secret
+const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'dev-secret-change-in-production');
 
 // Multer configuration for file uploads (memory storage)
 const upload = multer({
@@ -49,7 +61,23 @@ const MONGODB_URI = process.env.MONGODB_URI || process.env.VITE_MONGODB_URI;
 console.log('[MongoDB] Connecting to:', MONGODB_URI);
 
 mongoose.connect(MONGODB_URI)
-  .then(() => console.log('[MongoDB] Connected successfully'))
+  .then(async () => {
+    console.log('[MongoDB] Connected successfully');
+    // Seed admin account if it doesn't exist
+    try {
+      const adminUsername = (process.env.ADMIN_USERNAME || 'admin').toLowerCase().trim();
+      const adminPassword = process.env.ADMIN_PASSWORD || 'changeme123';
+      const existingAdmin = await mongoose.model('User').findOne({ username: adminUsername }).catch(() => null);
+      if (!existingAdmin) {
+        const hash = await bcrypt.hash(adminPassword, 12);
+        await mongoose.model('User').create({ username: adminUsername, password_hash: hash, name: 'Admin', role: 'admin' });
+        console.log(`[Auth] Admin account seeded: ${adminUsername}`);
+      }
+    } catch (err) {
+      // Schema may not be registered yet on first run — that's OK, will seed on next restart
+      console.log('[Auth] Admin seed skipped (will retry on next startup):', err.message);
+    }
+  })
   .catch(err => console.error('MongoDB connection error:', err));
 
 // Audio Entry Schema
@@ -64,6 +92,7 @@ const audioEntrySchema = new mongoose.Schema({
   speakers: [{ type: String }],
   is_transcript_only: { type: Boolean, default: false },
   difficulty: { type: String, default: null },
+  created_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   created_at: { type: Date, default: Date.now },
   updated_at: { type: Date, default: Date.now }
 });
@@ -117,6 +146,7 @@ const listeningTestSchema = new mongoose.Schema({
   source_text: { type: String, default: null },  // Reading passage (null for listening tests)
   difficulty: { type: String, enum: ['A1', 'A2', 'B1', 'B2', 'C1'] },  // CEFR level
   bonus_questions: [testQuestionSchema],  // Pre-generated bonus questions pool
+  created_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   created_at: { type: Date, default: Date.now },
   updated_at: { type: Date, default: Date.now }
 });
@@ -138,6 +168,20 @@ const appSettingsSchema = new mongoose.Schema({
 });
 
 const AppSettings = mongoose.model('AppSettings', appSettingsSchema);
+
+// User Schema
+const userSchema = new mongoose.Schema({
+  username: { type: String, required: true, unique: true, lowercase: true, trim: true },
+  password_hash: { type: String, required: true },
+  name: { type: String, required: true, trim: true },
+  role: { type: String, enum: ['admin', 'teacher'], default: 'teacher' },
+  is_active: { type: Boolean, default: true },
+  refresh_token: { type: String, default: null },
+  created_at: { type: Date, default: Date.now },
+  updated_at: { type: Date, default: Date.now }
+});
+userSchema.index({ username: 1 });
+const User = mongoose.model('User', userSchema);
 
 // Helper: Upload audio to Cloudinary
 const uploadToCloudinary = async (base64Audio, publicId) => {
@@ -257,10 +301,242 @@ app.use('/api', (req, res, next) => {
   next();
 });
 
+// ==================== AUTH HELPERS ====================
+
+// Generate access token (15 min)
+async function generateAccessToken(user) {
+  return new SignJWT({ userId: user._id.toString(), role: user.role, username: user.username })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setExpirationTime('15m')
+    .sign(JWT_SECRET);
+}
+
+// Generate refresh token (7 days)
+async function generateRefreshToken(user) {
+  return new SignJWT({ userId: user._id.toString(), type: 'refresh' })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setExpirationTime('7d')
+    .sign(JWT_SECRET);
+}
+
+// Set auth cookies on response
+function setAuthCookies(res, accessToken, refreshToken) {
+  const isProduction = process.env.NODE_ENV === 'production';
+  res.cookie('accessToken', accessToken, {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? 'strict' : 'lax',
+    maxAge: 15 * 60 * 1000 // 15 min
+  });
+  res.cookie('refreshToken', refreshToken, {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? 'strict' : 'lax',
+    maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+  });
+}
+
+// Clear auth cookies
+function clearAuthCookies(res) {
+  res.clearCookie('accessToken');
+  res.clearCookie('refreshToken');
+}
+
+// ==================== AUTH MIDDLEWARE ====================
+
+// Require authentication
+async function authenticate(req, res, next) {
+  const token = req.cookies?.accessToken;
+  if (!token) return res.status(401).json({ error: 'Authentication required' });
+  try {
+    const { payload } = await jwtVerify(token, JWT_SECRET);
+    req.user = payload;
+    next();
+  } catch {
+    return res.status(401).json({ error: 'Invalid or expired token' });
+  }
+}
+
+// Require admin role
+function requireAdmin(req, res, next) {
+  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
+  next();
+}
+
+// Check if user can modify a resource (creator or admin)
+function canModify(createdBy, user) {
+  if (user.role === 'admin') return true;
+  if (!createdBy) return false; // null = pre-auth data, treated as admin-owned
+  return createdBy.toString() === user.userId;
+}
+
+// ==================== AUTH ROUTES ====================
+
+// Login
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
+
+    const user = await User.findOne({ username: username.toLowerCase().trim() });
+    if (!user) return res.status(401).json({ error: 'Invalid username or password' });
+    if (!user.is_active) return res.status(403).json({ error: 'Account is disabled' });
+
+    const valid = await bcrypt.compare(password, user.password_hash);
+    if (!valid) return res.status(401).json({ error: 'Invalid username or password' });
+
+    const accessToken = await generateAccessToken(user);
+    const refreshToken = await generateRefreshToken(user);
+
+    // Store refresh token in DB
+    user.refresh_token = refreshToken;
+    await user.save();
+
+    setAuthCookies(res, accessToken, refreshToken);
+    res.json({ user: { id: user._id, username: user.username, name: user.name, role: user.role } });
+  } catch (err) {
+    console.error('[Auth] Login error:', err);
+    res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+// Refresh access token
+app.post('/api/auth/refresh', async (req, res) => {
+  try {
+    const token = req.cookies?.refreshToken;
+    if (!token) return res.status(401).json({ error: 'No refresh token' });
+
+    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const user = await User.findById(payload.userId);
+    if (!user || !user.is_active || user.refresh_token !== token) {
+      clearAuthCookies(res);
+      return res.status(401).json({ error: 'Invalid refresh token' });
+    }
+
+    // Rotate tokens
+    const accessToken = await generateAccessToken(user);
+    const refreshToken = await generateRefreshToken(user);
+    user.refresh_token = refreshToken;
+    await user.save();
+
+    setAuthCookies(res, accessToken, refreshToken);
+    res.json({ user: { id: user._id, username: user.username, name: user.name, role: user.role } });
+  } catch {
+    clearAuthCookies(res);
+    res.status(401).json({ error: 'Invalid refresh token' });
+  }
+});
+
+// Logout
+app.post('/api/auth/logout', async (req, res) => {
+  try {
+    const token = req.cookies?.refreshToken;
+    if (token) {
+      // Attempt to parse and clear DB token, but don't fail if invalid
+      try {
+        const { payload } = await jwtVerify(token, JWT_SECRET);
+        await User.findByIdAndUpdate(payload.userId, { refresh_token: null });
+      } catch {}
+    }
+    clearAuthCookies(res);
+    res.json({ message: 'Logged out' });
+  } catch {
+    clearAuthCookies(res);
+    res.json({ message: 'Logged out' });
+  }
+});
+
+// Get current user
+app.get('/api/auth/me', authenticate, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId).select('-password_hash -refresh_token');
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    res.json({ id: user._id, username: user.username, name: user.name, role: user.role, is_active: user.is_active });
+  } catch (err) {
+    console.error('[Auth] Me error:', err);
+    res.status(500).json({ error: 'Failed to get user' });
+  }
+});
+
+// ==================== ADMIN ROUTES ====================
+
+// List all users
+app.get('/api/admin/users', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const users = await User.find().select('-password_hash -refresh_token').sort({ created_at: -1 });
+    res.json(users);
+  } catch (err) {
+    console.error('[Admin] List users error:', err);
+    res.status(500).json({ error: 'Failed to list users' });
+  }
+});
+
+// Create user (teacher)
+app.post('/api/admin/users', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { username, password, name, role } = req.body;
+    if (!username || !password || !name) return res.status(400).json({ error: 'Username, password, and name required' });
+    if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+
+    const existing = await User.findOne({ username: username.toLowerCase().trim() });
+    if (existing) return res.status(409).json({ error: 'Username already in use' });
+
+    const password_hash = await bcrypt.hash(password, 12);
+    const user = await User.create({
+      username: username.toLowerCase().trim(),
+      password_hash,
+      name: name.trim(),
+      role: role === 'admin' ? 'admin' : 'teacher'
+    });
+
+    res.status(201).json({ id: user._id, username: user.username, name: user.name, role: user.role, is_active: user.is_active });
+  } catch (err) {
+    console.error('[Admin] Create user error:', err);
+    res.status(500).json({ error: 'Failed to create user' });
+  }
+});
+
+// Update user
+app.put('/api/admin/users/:id', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { name, username, is_active, password } = req.body;
+    const updates = { updated_at: new Date() };
+    if (name !== undefined) updates.name = name.trim();
+    if (username !== undefined) updates.username = username.toLowerCase().trim();
+    if (is_active !== undefined) updates.is_active = is_active;
+    if (password) {
+      if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+      updates.password_hash = await bcrypt.hash(password, 12);
+    }
+
+    const user = await User.findByIdAndUpdate(req.params.id, updates, { new: true }).select('-password_hash -refresh_token');
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    res.json(user);
+  } catch (err) {
+    console.error('[Admin] Update user error:', err);
+    res.status(500).json({ error: 'Failed to update user' });
+  }
+});
+
+// Delete user
+app.delete('/api/admin/users/:id', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    // Prevent deleting yourself
+    if (user._id.toString() === req.user.userId) return res.status(400).json({ error: 'Cannot delete your own account' });
+    await User.findByIdAndDelete(req.params.id);
+    res.json({ message: 'User deleted' });
+  } catch (err) {
+    console.error('[Admin] Delete user error:', err);
+    res.status(500).json({ error: 'Failed to delete user' });
+  }
+});
+
 // API Routes
 
 // Get all audio entries
-app.get('/api/audio-entries', async (req, res) => {
+app.get('/api/audio-entries', authenticate, async (req, res) => {
   try {
     const count = await AudioEntry.countDocuments();
     console.log('[API] Audio entries count:', count);
@@ -289,7 +565,7 @@ app.get('/api/audio-entries/:id', async (req, res) => {
 });
 
 // Create audio entry
-app.post('/api/audio-entries', async (req, res) => {
+app.post('/api/audio-entries', authenticate, async (req, res) => {
   try {
     const { title, transcript, audio_data, duration, engine, speaker_mapping, speakers, is_transcript_only, difficulty } = req.body;
     console.log('[SERVER] POST /api/audio-entries received:');
@@ -319,7 +595,8 @@ app.post('/api/audio-entries', async (req, res) => {
       speaker_mapping,
       speakers,
       is_transcript_only: is_transcript_only || false,
-      difficulty: difficulty || null
+      difficulty: difficulty || null,
+      created_by: req.user.userId
     });
 
     await entry.save();
@@ -332,13 +609,16 @@ app.post('/api/audio-entries', async (req, res) => {
 });
 
 // Update audio entry
-app.put('/api/audio-entries/:id', async (req, res) => {
+app.put('/api/audio-entries/:id', authenticate, async (req, res) => {
   try {
     const { title, transcript, audio_data, duration, engine, speaker_mapping, speakers, is_transcript_only, difficulty } = req.body;
 
     const existingEntry = await AudioEntry.findById(req.params.id);
     if (!existingEntry) {
       return res.status(404).json({ error: 'Entry not found' });
+    }
+    if (!canModify(existingEntry.created_by, req.user)) {
+      return res.status(403).json({ error: 'You can only edit your own audio entries' });
     }
 
     const updateData = {
@@ -387,11 +667,14 @@ app.put('/api/audio-entries/:id', async (req, res) => {
 });
 
 // Delete audio entry
-app.delete('/api/audio-entries/:id', async (req, res) => {
+app.delete('/api/audio-entries/:id', authenticate, async (req, res) => {
   try {
     const entry = await AudioEntry.findById(req.params.id);
     if (!entry) {
       return res.status(404).json({ error: 'Entry not found' });
+    }
+    if (!canModify(entry.created_by, req.user)) {
+      return res.status(403).json({ error: 'You can only delete your own audio entries' });
     }
 
     // Delete audio from Cloudinary
@@ -409,7 +692,7 @@ app.delete('/api/audio-entries/:id', async (req, res) => {
 // ==================== TEST ROUTES ====================
 
 // Get all tests for an audio entry
-app.get('/api/audio-entries/:audioId/tests', async (req, res) => {
+app.get('/api/audio-entries/:audioId/tests', authenticate, async (req, res) => {
   try {
     const tests = await ListeningTest.find({ audioId: req.params.audioId })
       .select('-lexisAudio -classroomActivity')
@@ -421,7 +704,7 @@ app.get('/api/audio-entries/:audioId/tests', async (req, res) => {
 });
 
 // Get all tests
-app.get('/api/tests', async (req, res) => {
+app.get('/api/tests', authenticate, async (req, res) => {
   try {
     const tests = await ListeningTest.find()
       .select('-lexisAudio -classroomActivity')
@@ -458,7 +741,7 @@ app.get('/api/tests/:id', async (req, res) => {
 });
 
 // Create test
-app.post('/api/tests', async (req, res) => {
+app.post('/api/tests', authenticate, async (req, res) => {
   try {
     const { audioId, title, type, questions, lexis, preview, classroomActivity, transferQuestion, sourceText, speakerCount, difficulty, bonusQuestions } = req.body;
 
@@ -489,7 +772,8 @@ app.post('/api/tests', async (req, res) => {
       speaker_count: speakerCount != null ? speakerCount : null,
       source_text: sourceText || null,
       difficulty: difficulty || null,
-      bonus_questions: bonusQuestions || []
+      bonus_questions: bonusQuestions || [],
+      created_by: req.user.userId
     });
 
     await test.save();
@@ -502,8 +786,13 @@ app.post('/api/tests', async (req, res) => {
 });
 
 // Update test
-app.put('/api/tests/:id', async (req, res) => {
+app.put('/api/tests/:id', authenticate, async (req, res) => {
   try {
+    const existingTest = await ListeningTest.findById(req.params.id);
+    if (!existingTest) return res.status(404).json({ error: 'Test not found' });
+    if (!canModify(existingTest.created_by, req.user)) {
+      return res.status(403).json({ error: 'You can only edit your own tests' });
+    }
     const { title, type, questions, lexis, lexisAudio, preview, classroomActivity, transferQuestion, speakerCount, difficulty, bonusQuestions } = req.body;
 
     console.log('[SERVER PUT /api/tests/:id] Received preview:', preview ? preview.length + ' activities' : 'undefined');
@@ -581,14 +870,18 @@ app.put('/api/tests/:id', async (req, res) => {
 });
 
 // Delete test
-app.delete('/api/tests/:id', async (req, res) => {
+app.delete('/api/tests/:id', authenticate, async (req, res) => {
   console.log('[DELETE /api/tests/:id] Requested ID:', req.params.id, '| type:', typeof req.params.id, '| length:', req.params.id?.length);
   try {
-    const test = await ListeningTest.findByIdAndDelete(req.params.id);
+    const test = await ListeningTest.findById(req.params.id);
     if (!test) {
       console.log('[DELETE /api/tests/:id] Test NOT FOUND for ID:', req.params.id);
       return res.status(404).json({ error: 'Test not found' });
     }
+    if (!canModify(test.created_by, req.user)) {
+      return res.status(403).json({ error: 'You can only delete your own tests' });
+    }
+    await ListeningTest.findByIdAndDelete(req.params.id);
     console.log('[DELETE /api/tests/:id] Deleted test:', test._id, '| title:', test.title);
 
     // Clean up Cloudinary audio assets (fire-and-forget)
@@ -647,7 +940,7 @@ app.get('/api/settings', async (req, res) => {
 });
 
 // Update app settings
-app.put('/api/settings', async (req, res) => {
+app.put('/api/settings', authenticate, requireAdmin, async (req, res) => {
   try {
     const { appMode, difficultyLevel, contentMode, classroomTheme } = req.body;
 
@@ -680,12 +973,12 @@ app.put('/api/settings', async (req, res) => {
 // ==================== DOCUMENT IMPORT ROUTES ====================
 
 // Get supported file types
-app.get('/api/import/supported-types', (req, res) => {
+app.get('/api/import/supported-types', authenticate, (req, res) => {
   res.json(getSupportedTypes());
 });
 
 // Import document (PDF, DOCX, TXT) and parse questions
-app.post('/api/import/document', upload.single('file'), async (req, res) => {
+app.post('/api/import/document', authenticate, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
