@@ -184,20 +184,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                         )}
                         <div className="grid grid-cols-2 gap-2">
                           <div>
-                            <label className="block text-xs font-medium text-slate-600 mb-1">Display Name</label>
-                            <input
-                              value={editName}
-                              onChange={e => setEditName(e.target.value)}
-                              placeholder="e.g. Mr. Smith"
-                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                            />
-                          </div>
-                          <div>
                             <label className="block text-xs font-medium text-slate-600 mb-1">Username</label>
                             <input
                               value={editUsername}
                               onChange={e => setEditUsername(e.target.value)}
                               placeholder="login username"
+                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Display Name</label>
+                            <input
+                              value={editName}
+                              onChange={e => setEditName(e.target.value)}
+                              placeholder="e.g. Mr. Smith"
                               className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                             />
                           </div>
@@ -311,17 +311,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                   )}
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="block text-xs font-medium text-slate-600 mb-1">Display Name</label>
-                      <input
-                        value={newName}
-                        onChange={e => setNewName(e.target.value)}
-                        placeholder="e.g. Mr. Smith"
-                        required
-                        autoComplete="off"
-                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                      />
-                    </div>
-                    <div>
                       <label className="block text-xs font-medium text-slate-600 mb-1">Username</label>
                       <input
                         value={newUsername}
@@ -332,8 +321,30 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                         className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                       />
                     </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Display Name</label>
+                      <input
+                        value={newName}
+                        onChange={e => setNewName(e.target.value)}
+                        placeholder="e.g. Mr. Smith"
+                        required
+                        autoComplete="off"
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      />
+                    </div>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Role</label>
+                      <select
+                        value={newRole}
+                        onChange={e => setNewRole(e.target.value as 'teacher' | 'admin')}
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      >
+                        <option value="teacher">Teacher</option>
+                        <option value="admin">Admin</option>
+                      </select>
+                    </div>
                     <div>
                       <label className="block text-xs font-medium text-slate-600 mb-1">Password</label>
                       <div className="relative">
@@ -351,17 +362,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                           {showNewPassword ? 'Hide' : 'Show'}
                         </button>
                       </div>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-600 mb-1">Role</label>
-                      <select
-                        value={newRole}
-                        onChange={e => setNewRole(e.target.value as 'teacher' | 'admin')}
-                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                      >
-                        <option value="teacher">Teacher</option>
-                        <option value="admin">Admin</option>
-                      </select>
                     </div>
                   </div>
                   <div className="flex gap-2">
