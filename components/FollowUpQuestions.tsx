@@ -908,7 +908,10 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
             <span className="text-2xl text-white">✓</span>
           </div>
           <h2 className={`text-xl font-bold mb-2 ${isDark ? 'text-white' : 'text-slate-800'}`} style={isAr ? arabicFontStyle : undefined}>
-            {isAr ? 'اكتملت المناقشة' : 'Discussion Complete'}
+            {isAr
+              ? (contentLabel.verb === 'read' ? 'اكتملت مهمة القراءة' : 'اكتملت مهمة الاستماع')
+              : (contentLabel.verb === 'read' ? 'Reading Task Complete' : 'Listening Task Complete')
+            }
           </h2>
           <p className={`text-sm mb-6 ${isDark ? 'text-slate-400' : 'text-slate-600'}`} dir={isAr ? 'rtl' : 'ltr'} style={isAr ? arabicFontStyle : undefined}>
             {isAr
