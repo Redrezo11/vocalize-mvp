@@ -5,7 +5,7 @@ import { useElevenLabsTTS } from './hooks/useElevenLabsTTS';
 import { useMongoStorage } from './hooks/useMongoStorage';
 import { parseDialogue, parseLLMTranscript, guessGender } from './utils/parser';
 import { BrowserVoiceConfig, EngineType, GEMINI_VOICES, SpeakerVoiceMapping, AppView, SavedAudio, ListeningTest, TestAttempt } from './types';
-import { PlayIcon, StopIcon, FolderIcon, PlusIcon, SaveIcon, ArrowLeftIcon, PresentationIcon, FileTextIcon, SparklesIcon, SettingsIcon, ImportIcon, BookOpenIcon } from './components/Icons';
+import { PlayIcon, StopIcon, FolderIcon, PlusIcon, SaveIcon, ArrowLeftIcon, PresentationIcon, FileTextIcon, SparklesIcon, SettingsIcon, ImportIcon, BookOpenIcon, UsersIcon } from './components/Icons';
 import { SaveDialog } from './components/SaveDialog';
 import { PromptBuilder } from './components/PromptBuilder';
 import { Settings, AppSettings, DEFAULT_SETTINGS } from './components/Settings';
@@ -17,6 +17,7 @@ import { AppModeProvider } from './contexts/AppModeContext';
 import { useAuth } from './contexts/AuthContext';
 import { isTestTypeForMode } from './utils/modeLabels';
 import { LoginPage } from './components/LoginPage';
+import { AdminPanel } from './components/AdminPanel';
 
 // Lazy load components for better initial load
 const Visualizer = lazy(() => import('./components/Visualizer'));
@@ -129,6 +130,7 @@ const App: React.FC = () => {
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [showPromptBuilder, setShowPromptBuilder] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [showImportWizard, setShowImportWizard] = useState(false);
   const [showOneShotCreator, setShowOneShotCreator] = useState(false);
   const [showJamButton, setShowJamButton] = useState(false);
@@ -1338,6 +1340,16 @@ const App: React.FC = () => {
           >
             <SettingsIcon className="w-5 h-5" />
           </button>
+          {/* Admin Panel Button (admin only) */}
+          {user?.role === 'admin' && (
+            <button
+              onClick={() => setShowAdminPanel(true)}
+              className="p-2 text-slate-500 hover:text-violet-700 hover:bg-violet-50 rounded-lg transition-colors"
+              title="User Management"
+            >
+              <UsersIcon className="w-5 h-5" />
+            </button>
+          )}
           {/* User & Logout */}
           {user && (
             <div className="flex items-center gap-2 ml-1 pl-2 border-l border-slate-200">
@@ -1918,6 +1930,12 @@ const App: React.FC = () => {
         settings={settingsHook.settings}
         onClose={() => setShowSettings(false)}
         onSave={handleSaveSettings}
+      />
+
+      {/* Admin Panel Modal */}
+      <AdminPanel
+        isOpen={showAdminPanel}
+        onClose={() => setShowAdminPanel(false)}
       />
 
       {/* Import Wizard Modal */}
