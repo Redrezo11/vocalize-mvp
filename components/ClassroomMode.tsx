@@ -1728,7 +1728,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                     onClick={handlePlayLexisAudio}
                     className={`flex items-center gap-2 px-6 py-3 rounded-xl font-medium transition-all ${
                       isPlayingLexisAudio
-                        ? 'bg-amber-500 text-white'
+                        ? 'bg-emerald-600 text-white'
                         : 'bg-indigo-600 hover:bg-indigo-500 text-white'
                     }`}
                   >
@@ -1949,7 +1949,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                       <button
                         onClick={handlePlayLexisAudio}
                         className={`mt-2 inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                          isPlayingLexisAudio ? 'bg-amber-500 text-white' : 'bg-emerald-600 text-white hover:bg-emerald-500'
+                          isPlayingLexisAudio ? 'bg-emerald-600 text-white' : 'bg-emerald-600 text-white hover:bg-emerald-500'
                         }`}
                       >
                         {isPlayingLexisAudio ? 'Pause Audio' : 'Play Audio'}
