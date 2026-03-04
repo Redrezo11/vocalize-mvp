@@ -419,6 +419,7 @@ async function deductTokens(userId, role, amount, operation, details = {}) {
       userId, { $inc: { tokens_used: amount } }, { new: true }
     );
     await UsageLog.create({ user_id: userId, tokens_used: amount, operation, ...details });
+    console.log(`[Tokens] Admin deduct: userId=${userId}, amount=${amount}, op=${operation}, new_tokens_used=${updatedUser?.tokens_used}`);
     return { admin: true, tokens_used: updatedUser.tokens_used };
   }
   const user = await User.findOneAndUpdate(
@@ -513,6 +514,7 @@ app.get('/api/auth/me', authenticate, async (req, res) => {
   try {
     const user = await User.findById(req.user.userId).select('-password_hash -refresh_token');
     if (!user) return res.status(404).json({ error: 'User not found' });
+    console.log(`[Auth] /me response: role=${user.role}, token_balance=${user.token_balance}, tokens_used=${user.tokens_used}`);
     res.json({ id: user._id, username: user.username, name: user.name, role: user.role, is_active: user.is_active, token_balance: user.token_balance, tokens_used: user.tokens_used });
   } catch (err) {
     console.error('[Auth] Me error:', err);
@@ -624,6 +626,7 @@ app.post('/api/tokens/use', authenticate, async (req, res) => {
     if (!result) return res.status(402).json({ error: 'Insufficient tokens' });
 
     if (result.admin) {
+      console.log(`[Tokens] Admin /tokens/use response: tokens_used=${result.tokens_used}`);
       return res.json({ unlimited: true, token_balance: result.tokens_used });
     }
     res.json({ token_balance: result.token_balance });
@@ -788,6 +791,34 @@ app.post('/api/admin/migrate-plenary-audio', authenticate, requireAdmin, async (
     res.json({ migrated, total: tests.length });
   } catch (err) {
     console.error('[Admin] Plenary audio migration error:', err);
+    res.status(500).json({ error: 'Migration failed: ' + err.message });
+  }
+});
+
+// Migrate admin tokens_used: sync User.tokens_used from UsageLog aggregation (run once)
+app.post('/api/admin/migrate-token-usage', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const admins = await User.find({ role: 'admin' }).select('_id username tokens_used');
+    const results = [];
+
+    for (const admin of admins) {
+      const [agg] = await UsageLog.aggregate([
+        { $match: { user_id: admin._id } },
+        { $group: { _id: null, total: { $sum: '$tokens_used' } } },
+      ]);
+      const logTotal = agg?.total || 0;
+
+      if (logTotal !== admin.tokens_used) {
+        await User.findByIdAndUpdate(admin._id, { $set: { tokens_used: logTotal } });
+        results.push({ username: admin.username, old: admin.tokens_used, synced: logTotal });
+      } else {
+        results.push({ username: admin.username, already_correct: logTotal });
+      }
+    }
+
+    res.json({ admins: results });
+  } catch (err) {
+    console.error('[Admin] Token usage migration error:', err);
     res.status(500).json({ error: 'Migration failed: ' + err.message });
   }
 });
