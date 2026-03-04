@@ -861,8 +861,8 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
       switch (e.key) {
         case ' ':
           e.preventDefault();
-          // In vocabulary context, Space plays/pauses full batch lexis audio
-          if ((isFullscreen && fullscreenSlide === 'vocabulary') || lexisViewMode === 'focus' || lexisViewMode === 'overview') {
+          // In fullscreen vocabulary slide or focus mode, Space plays lexis audio
+          if ((isFullscreen && fullscreenSlide === 'vocabulary') || lexisViewMode === 'focus') {
             if (selectedTest?.lexisAudio?.url) {
               handlePlayLexisAudio();
             }
@@ -1721,7 +1721,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
             {/* Audio controls - only shown when audio exists */}
             {selectedAudio && (
               <>
-                <span className="cursor-pointer hover:text-indigo-300 transition-colors" onClick={() => { if (selectedTest?.lexisAudio?.url) { handlePlayLexisAudio(); } else { handlePlayPause(); } }}>
+                <span className="cursor-pointer hover:text-indigo-300 transition-colors" onClick={handlePlayPause}>
                   <kbd className="px-2 py-1 rounded bg-slate-700">Space</kbd>
                   {' '}Play/Pause
                 </span>
