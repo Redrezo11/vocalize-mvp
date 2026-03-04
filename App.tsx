@@ -2020,6 +2020,7 @@ const App: React.FC = () => {
                 topic={jamTopic}
                 autoStart={true}
                 onComplete={handleJamComplete}
+                onCancel={() => setShowJamButton(false)}
                 onError={(error) => {
                   console.error('[JamButton] Error:', error);
                   alert(error);

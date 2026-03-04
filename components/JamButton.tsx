@@ -106,6 +106,7 @@ interface JamButtonProps {
   autoStart?: boolean;
   onComplete: (result: { audioEntry: SavedAudio | null; test: ListeningTest }) => void;
   onError?: (error: string) => void;
+  onCancel?: () => void;
 }
 
 // --- Settings Modal Component ---
@@ -273,6 +274,7 @@ export const JamButton: React.FC<JamButtonProps> = ({
   autoStart = false,
   onComplete,
   onError,
+  onCancel,
 }) => {
   const appMode = useAppMode();
   const { user, updateTokenBalance } = useAuth();
@@ -1069,6 +1071,18 @@ export const JamButton: React.FC<JamButtonProps> = ({
         {stage !== 'audio_failed' && (
           <span className="text-xs text-slate-400">{MODEL_CONFIG[profile.contentModel].cost} per test</span>
         )}
+
+        {/* Token Confirmation Dialog (autoStart mode) */}
+        <TokenConfirmDialog
+          isOpen={showTokenConfirm}
+          tokenCost={previewTokenCost}
+          currentBalance={user?.tokenBalance ?? 0}
+          isAdmin={user?.role === 'admin'}
+          operationLabel={isReading ? 'Generate reading test' : 'Generate listening test'}
+          operationDetail={`${profile.difficulty.toUpperCase()}, ${profile.targetDuration} min, ${profile.contentModel === 'gpt-5-mini' ? 'GPT-5 Mini' : 'GPT-5.2'}${profile.useReasoning ? ' + reasoning' : ''}${!isReading ? `, ${speakerCount} speaker${speakerCount > 1 ? 's' : ''}` : ''}`}
+          onConfirm={() => { setShowTokenConfirm(false); handleJam(); }}
+          onCancel={() => { setShowTokenConfirm(false); hasAutoStartedRef.current = false; onCancel?.(); }}
+        />
       </div>
     );
   }
