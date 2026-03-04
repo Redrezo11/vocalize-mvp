@@ -5,7 +5,7 @@ import { useElevenLabsTTS } from './hooks/useElevenLabsTTS';
 import { useMongoStorage } from './hooks/useMongoStorage';
 import { parseDialogue, parseLLMTranscript, guessGender } from './utils/parser';
 import { BrowserVoiceConfig, EngineType, GEMINI_VOICES, SpeakerVoiceMapping, AppView, SavedAudio, ListeningTest, TestAttempt } from './types';
-import { PlayIcon, StopIcon, FolderIcon, PlusIcon, SaveIcon, ArrowLeftIcon, PresentationIcon, FileTextIcon, SparklesIcon, SettingsIcon, ImportIcon, BookOpenIcon, UsersIcon } from './components/Icons';
+import { PlayIcon, StopIcon, FolderIcon, PlusIcon, SaveIcon, ArrowLeftIcon, PresentationIcon, FileTextIcon, SparklesIcon, SettingsIcon, ImportIcon, BookOpenIcon, UsersIcon, HammerIcon } from './components/Icons';
 import { SaveDialog } from './components/SaveDialog';
 import { PromptBuilder } from './components/PromptBuilder';
 import { Settings, AppSettings, DEFAULT_SETTINGS } from './components/Settings';
@@ -71,9 +71,9 @@ const App: React.FC = () => {
     const saved = sessionStorage.getItem('df_currentView');
     // Don't restore 'student-test' without a test ID — leads to blank page
     if (saved === 'student-test' && !sessionStorage.getItem('df_studentTestId')) {
-      return 'home';
+      return 'gateway';
     }
-    return (saved as AppView) || 'home';
+    return (saved as AppView) || 'gateway';
   });
   const [libraryTab, setLibraryTab] = useState<'audio' | 'transcripts' | 'tests'>('audio');
   const [selectedAudio, setSelectedAudio] = useState<SavedAudio | null>(null);
@@ -1277,7 +1277,7 @@ const App: React.FC = () => {
         : 'bg-white/70 border-slate-200/50 shadow-slate-200/50'
     }`}>
       <div className="max-w-7xl mx-auto flex items-center justify-between">
-        <div className="flex items-center gap-3 group cursor-pointer" onClick={() => setCurrentView('home')}>
+        <div className="flex items-center gap-3 group cursor-pointer" onClick={() => setCurrentView('gateway')}>
           {settingsHook.settings.appMode === 'reading' ? (
             <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/30 group-hover:shadow-emerald-500/50 group-hover:scale-105 transition-all duration-200">
               <BookOpenIcon className="w-6 h-6 text-white" />
@@ -1305,16 +1305,18 @@ const App: React.FC = () => {
               {analysis.speakers.length} Speakers
             </span>
           )}
-          <button
-            onClick={handleEnterClassroom}
-            onMouseEnter={preloadClassroom}
-            onTouchStart={preloadClassroom}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl font-medium hover:bg-slate-800 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 shadow-sm"
-            title="Enter Classroom Mode"
-          >
-            <PresentationIcon className="w-4 h-4" />
-            <span className="text-sm">Classroom</span>
-          </button>
+          {currentView !== 'gateway' && (
+            <button
+              onClick={handleEnterClassroom}
+              onMouseEnter={preloadClassroom}
+              onTouchStart={preloadClassroom}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl font-medium hover:bg-slate-800 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 shadow-sm"
+              title="Enter Classroom Mode"
+            >
+              <PresentationIcon className="w-4 h-4" />
+              <span className="text-sm">Classroom</span>
+            </button>
+          )}
           {/* Hide Text Only button on home/library (redundant - home has cards, library has Create New modal) */}
           {currentView !== 'home' && currentView !== 'library' && (
             <button
@@ -1965,6 +1967,35 @@ const App: React.FC = () => {
         : 'selection:bg-indigo-500/20'
     }`}>
       {renderNav()}
+      {currentView === 'gateway' && (
+        <main className="flex items-center justify-center" style={{ minHeight: 'calc(100vh - 64px)' }}>
+          <div className="flex flex-col sm:flex-row items-center gap-8 sm:gap-16 px-6">
+            {/* Create Card */}
+            <button
+              onClick={() => setCurrentView('home')}
+              className="group flex flex-col items-center gap-6 p-10 sm:p-14 rounded-3xl border-2 border-slate-200 bg-white/80 backdrop-blur-sm hover:border-indigo-400 hover:shadow-2xl hover:shadow-indigo-500/10 hover:scale-[1.03] active:scale-[0.98] transition-all duration-300 cursor-pointer w-64 sm:w-72"
+            >
+              <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/30 group-hover:shadow-indigo-500/50 transition-all duration-300">
+                <HammerIcon className="w-10 h-10 sm:w-12 sm:h-12 text-white" />
+              </div>
+              <span className="text-xl sm:text-2xl font-bold text-slate-800 group-hover:text-indigo-700 transition-colors">Create</span>
+            </button>
+
+            {/* Present Card */}
+            <button
+              onClick={handleEnterClassroom}
+              onMouseEnter={preloadClassroom}
+              onTouchStart={preloadClassroom}
+              className="group flex flex-col items-center gap-6 p-10 sm:p-14 rounded-3xl border-2 border-slate-200 bg-white/80 backdrop-blur-sm hover:border-slate-700 hover:shadow-2xl hover:shadow-slate-500/10 hover:scale-[1.03] active:scale-[0.98] transition-all duration-300 cursor-pointer w-64 sm:w-72"
+            >
+              <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-gradient-to-br from-slate-800 to-slate-900 flex items-center justify-center shadow-lg shadow-slate-500/30 group-hover:shadow-slate-500/50 transition-all duration-300">
+                <PresentationIcon className="w-10 h-10 sm:w-12 sm:h-12 text-white" />
+              </div>
+              <span className="text-xl sm:text-2xl font-bold text-slate-800 group-hover:text-slate-900 transition-colors">Present Test</span>
+            </button>
+          </div>
+        </main>
+      )}
       {currentView === 'home' && renderHome()}
       {currentView === 'editor' && renderEditor()}
       {currentView === 'library' && renderLibrary()}

@@ -1949,7 +1949,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                       <button
                         onClick={handlePlayLexisAudio}
                         className={`mt-2 inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                          isPlayingLexisAudio ? 'bg-amber-500 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                          isPlayingLexisAudio ? 'bg-amber-500 text-white' : 'bg-emerald-600 text-white hover:bg-emerald-500'
                         }`}
                       >
                         {isPlayingLexisAudio ? 'Pause Audio' : 'Play Audio'}
@@ -1958,7 +1958,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                       <button
                         onClick={() => { if (!isGeneratingLexisAudio) setShowLexisAudioConfirm(true); }}
                         disabled={isGeneratingLexisAudio}
-                        className="mt-2 inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50"
+                        className="mt-2 inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-amber-600 text-white hover:bg-amber-500 disabled:opacity-50"
                       >
                         {isGeneratingLexisAudio ? 'Generating...' : 'Generate Lexis Audio'}
                       </button>
