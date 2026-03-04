@@ -71,7 +71,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         if (res.ok) {
           const data = await res.json();
-          setUser({ id: data.id, username: data.username, name: data.name, role: data.role, tokenBalance: data.token_balance ?? 0 });
+          setUser({ id: data.id, username: data.username, name: data.name, role: data.role, tokenBalance: data.role === 'admin' ? (data.tokens_used ?? 0) : (data.token_balance ?? 0) });
           startAutoRefresh();
         }
       } catch {
@@ -115,7 +115,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { success: false, error: data.error || 'Login failed' };
       }
       const u = data.user;
-      setUser({ id: u.id, username: u.username, name: u.name, role: u.role, tokenBalance: u.token_balance ?? 0 });
+      setUser({ id: u.id, username: u.username, name: u.name, role: u.role, tokenBalance: u.role === 'admin' ? (u.tokens_used ?? 0) : (u.token_balance ?? 0) });
       startAutoRefresh();
       return { success: true };
     } catch {

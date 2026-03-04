@@ -414,9 +414,12 @@ function canModify(createdBy, user) {
 // Deduct tokens atomically. Admins are unlimited (log only). Returns null if insufficient.
 async function deductTokens(userId, role, amount, operation, details = {}) {
   if (role === 'admin') {
-    // Admin: log only, no deduction
+    // Admin: unlimited, but track cumulative usage on User doc for navbar display
+    const updatedUser = await User.findByIdAndUpdate(
+      userId, { $inc: { tokens_used: amount } }, { new: true }
+    );
     await UsageLog.create({ user_id: userId, tokens_used: amount, operation, ...details });
-    return { admin: true };
+    return { admin: true, tokens_used: updatedUser.tokens_used };
   }
   const user = await User.findOneAndUpdate(
     { _id: userId, token_balance: { $gte: amount } },
@@ -452,7 +455,7 @@ app.post('/api/auth/login', async (req, res) => {
     await user.save();
 
     setAuthCookies(res, accessToken, refreshToken);
-    res.json({ user: { id: user._id, username: user.username, name: user.name, role: user.role, token_balance: user.token_balance } });
+    res.json({ user: { id: user._id, username: user.username, name: user.name, role: user.role, token_balance: user.token_balance, tokens_used: user.tokens_used } });
   } catch (err) {
     console.error('[Auth] Login error:', err);
     res.status(500).json({ error: 'Login failed' });
@@ -479,7 +482,7 @@ app.post('/api/auth/refresh', async (req, res) => {
     await user.save();
 
     setAuthCookies(res, accessToken, refreshToken);
-    res.json({ user: { id: user._id, username: user.username, name: user.name, role: user.role, token_balance: user.token_balance } });
+    res.json({ user: { id: user._id, username: user.username, name: user.name, role: user.role, token_balance: user.token_balance, tokens_used: user.tokens_used } });
   } catch {
     clearAuthCookies(res);
     res.status(401).json({ error: 'Invalid refresh token' });
@@ -510,7 +513,7 @@ app.get('/api/auth/me', authenticate, async (req, res) => {
   try {
     const user = await User.findById(req.user.userId).select('-password_hash -refresh_token');
     if (!user) return res.status(404).json({ error: 'User not found' });
-    res.json({ id: user._id, username: user.username, name: user.name, role: user.role, is_active: user.is_active, token_balance: user.token_balance });
+    res.json({ id: user._id, username: user.username, name: user.name, role: user.role, is_active: user.is_active, token_balance: user.token_balance, tokens_used: user.tokens_used });
   } catch (err) {
     console.error('[Auth] Me error:', err);
     res.status(500).json({ error: 'Failed to get user' });
@@ -621,7 +624,7 @@ app.post('/api/tokens/use', authenticate, async (req, res) => {
     if (!result) return res.status(402).json({ error: 'Insufficient tokens' });
 
     if (result.admin) {
-      return res.json({ unlimited: true });
+      return res.json({ unlimited: true, token_balance: result.tokens_used });
     }
     res.json({ token_balance: result.token_balance });
   } catch (err) {
