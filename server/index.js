@@ -1285,6 +1285,17 @@ app.get('/api/settings', authenticate, async (req, res) => {
   }
 });
 
+// Public: get a teacher's classroom theme (no auth — used by student test view)
+app.get('/api/teacher/:id/theme', async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id).select('settings.classroom_theme');
+    if (!user) return res.status(404).json({ error: 'Not found' });
+    res.json({ classroomTheme: user.settings?.classroom_theme || 'light' });
+  } catch {
+    res.json({ classroomTheme: 'light' });
+  }
+});
+
 // Update user settings (per-user, any authenticated user can save their own)
 app.put('/api/settings', authenticate, async (req, res) => {
   try {

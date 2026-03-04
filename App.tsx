@@ -91,6 +91,8 @@ const App: React.FC = () => {
   const [studentTestId, setStudentTestId] = useState<string | null>(null);
   const [studentTest, setStudentTest] = useState<ListeningTest | null>(null);
   const [presenterTeacherId, setPresenterTeacherId] = useState<string | null>(null);
+  const [presenterTheme, setPresenterTheme] = useState<'light' | 'dark'>('light');
+  const [presenterThemeLoaded, setPresenterThemeLoaded] = useState(false);
   // Restore preview mode from sessionStorage (only when no URL param — QR code students are never in preview)
   const [isPreviewMode, setIsPreviewMode] = useState(() => {
     const params = new URLSearchParams(window.location.search);
@@ -205,6 +207,20 @@ const App: React.FC = () => {
     } else {
       sessionStorage.removeItem('df_presenterTeacherId');
     }
+  }, [presenterTeacherId]);
+
+  // Fetch presenter teacher's theme for student view (prevents wrong-theme flash)
+  useEffect(() => {
+    if (!presenterTeacherId) {
+      setPresenterThemeLoaded(true);
+      return;
+    }
+    setPresenterThemeLoaded(false);
+    fetch(`/api/teacher/${presenterTeacherId}/theme`)
+      .then(r => r.json())
+      .then(d => setPresenterTheme(d.classroomTheme || 'light'))
+      .catch(() => {})
+      .finally(() => setPresenterThemeLoaded(true));
   }, [presenterTeacherId]);
 
   // Persist preview mode flag
@@ -1795,13 +1811,17 @@ const App: React.FC = () => {
 
   // Student test view (accessed via URL or preview)
   if (currentView === 'student-test' && studentTest) {
+    // Wait for presenter theme to load before rendering (prevents flash of wrong theme)
+    if (!isPreviewMode && !presenterThemeLoaded) {
+      return <LoadingSpinner />;
+    }
     return (
       <AppModeProvider mode={settingsHook.settings.appMode}>
         <Suspense fallback={<LoadingSpinner />}>
           <StudentTest
             key={isPreviewMode ? `preview-${previewKey}` : studentTest.id}
             test={studentTest}
-            theme={settingsHook.settings.classroomTheme}
+            theme={isPreviewMode ? settingsHook.settings.classroomTheme : presenterTheme}
             isPreview={isPreviewMode}
             onExitPreview={handleExitPreview}
             contentModel={settingsHook.settings.contentModel}
