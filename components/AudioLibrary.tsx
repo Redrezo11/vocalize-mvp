@@ -1,8 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { SavedAudio, EngineType, ListeningTest } from '../types';
-import { PlayIcon, TrashIcon, PlusIcon, FileAudioIcon, FileTextIcon, ClipboardIcon, EditIcon, SquareIcon, CheckSquareIcon } from './Icons';
-import { CreationMethodSelector, CreationMethod } from './CreationMethodSelector';
-import { ImportWizard, ImportData } from './ImportWizard';
+import { PlayIcon, TrashIcon, HammerIcon, FileAudioIcon, FileTextIcon, ClipboardIcon, EditIcon, SquareIcon, CheckSquareIcon } from './Icons';
 import { useAppMode } from '../contexts/AppModeContext';
 
 type LibraryTab = 'audio' | 'transcripts' | 'tests';
@@ -19,9 +17,6 @@ interface AudioLibraryProps {
   onDeleteTest?: (test: ListeningTest) => void;
   onEditTest?: (test: ListeningTest) => void;
   onCreateNew: () => void;
-  onCreateTranscript: () => void;
-  onOneShot: () => void;
-  onImportComplete: (data: ImportData) => void;
   onViewDetail: (audio: SavedAudio) => void;
   onViewTest?: (test: ListeningTest) => void;
   onBatchDelete?: (audios: SavedAudio[]) => Promise<void>;
@@ -66,9 +61,6 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
   onDeleteTest,
   onEditTest,
   onCreateNew,
-  onCreateTranscript,
-  onOneShot,
-  onImportComplete,
   onViewDetail,
   onViewTest,
   onBatchDelete,
@@ -78,37 +70,11 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
   const appMode = useAppMode();
   const isReading = appMode === 'reading';
   const [activeTab, setActiveTab] = useState<LibraryTab>(isReading ? 'tests' : initialTab);
-  const [showMethodSelector, setShowMethodSelector] = useState(false);
-  const [showImportWizard, setShowImportWizard] = useState(false);
-
   // Batch selection state
   const [isSelecting, setIsSelecting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-
-  const handleMethodSelect = (method: CreationMethod) => {
-    setShowMethodSelector(false);
-    switch (method) {
-      case 'audio':
-        onCreateNew();
-        break;
-      case 'transcript':
-        onCreateTranscript();
-        break;
-      case 'import':
-        setShowImportWizard(true);
-        break;
-      case 'oneshot':
-        onOneShot();
-        break;
-    }
-  };
-
-  const handleImportComplete = (data: ImportData) => {
-    setShowImportWizard(false);
-    onImportComplete(data);
-  };
 
   // Sync with initialTab prop when it changes; reading mode always uses 'tests'
   useEffect(() => {
@@ -240,11 +206,11 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
                 </button>
               )}
               <button
-                onClick={() => setShowMethodSelector(true)}
+                onClick={onCreateNew}
                 className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-xl font-semibold hover:from-indigo-500 hover:to-violet-500 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 shadow-lg shadow-indigo-500/30"
               >
-                <PlusIcon className="w-4 h-4" />
-                Create New
+                <HammerIcon className="w-4 h-4" />
+                Create
               </button>
             </>
           )}
@@ -450,8 +416,8 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
                 onClick={onCreateNew}
                 className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-xl font-semibold hover:from-indigo-500 hover:to-violet-500 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 shadow-lg shadow-indigo-500/30"
               >
-                <PlusIcon className="w-4 h-4" />
-                Create Audio
+                <HammerIcon className="w-4 h-4" />
+                Create
               </button>
             )}
           </div>
@@ -529,20 +495,6 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
           </div>
         )
       )}
-
-      {/* Creation Method Selector Modal */}
-      <CreationMethodSelector
-        isOpen={showMethodSelector}
-        onClose={() => setShowMethodSelector(false)}
-        onSelect={handleMethodSelect}
-      />
-
-      {/* Import Wizard Modal */}
-      <ImportWizard
-        isOpen={showImportWizard}
-        onClose={() => setShowImportWizard(false)}
-        onComplete={handleImportComplete}
-      />
 
       {/* Batch Action Bar */}
       {isSelecting && selectedIds.size > 0 && (

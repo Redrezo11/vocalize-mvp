@@ -5,7 +5,7 @@ import { useElevenLabsTTS } from './hooks/useElevenLabsTTS';
 import { useMongoStorage } from './hooks/useMongoStorage';
 import { parseDialogue, parseLLMTranscript, guessGender } from './utils/parser';
 import { BrowserVoiceConfig, EngineType, GEMINI_VOICES, SpeakerVoiceMapping, AppView, SavedAudio, ListeningTest, TestAttempt } from './types';
-import { PlayIcon, StopIcon, FolderIcon, PlusIcon, SaveIcon, ArrowLeftIcon, PresentationIcon, FileTextIcon, SparklesIcon, SettingsIcon, ImportIcon, BookOpenIcon, UsersIcon, HammerIcon } from './components/Icons';
+import { PlayIcon, StopIcon, FolderIcon, SaveIcon, ArrowLeftIcon, PresentationIcon, SparklesIcon, SettingsIcon, BookOpenIcon, UsersIcon, HammerIcon } from './components/Icons';
 import { SaveDialog } from './components/SaveDialog';
 import { PromptBuilder } from './components/PromptBuilder';
 import { Settings, AppSettings, DEFAULT_SETTINGS } from './components/Settings';
@@ -1317,33 +1317,17 @@ const App: React.FC = () => {
               <span className="text-sm">Classroom</span>
             </button>
           )}
-          {/* Hide Text Only button on home/library (redundant - home has cards, library has Create New modal) */}
-          {currentView !== 'home' && currentView !== 'library' && (
+          {/* Show Create button on creation modes (editor, transcript) and non-main views */}
+          {(currentView === 'editor' || currentView === 'transcript' || currentView === 'test-builder' || currentView === 'test-take') && (
             <button
-              onClick={() => setCurrentView('transcript')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] ${
-                currentView === 'editor'
-                  ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-500/30 hover:from-indigo-500 hover:to-violet-500'
-                  : 'bg-white text-indigo-600 hover:bg-indigo-50 border border-indigo-300'
-              }`}
-              title="Text-only mode - create tests without storing audio"
+              onClick={() => setCurrentView('home')}
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-xl font-medium hover:from-indigo-500 hover:to-violet-500 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 shadow-lg shadow-indigo-500/30"
             >
-              <FileTextIcon className="w-4 h-4" />
-              <span className="text-sm">Text Only</span>
+              <HammerIcon className="w-4 h-4" />
+              <span className="text-sm">Create</span>
             </button>
           )}
-          {/* Show Import button on editor and transcript views */}
-          {(currentView === 'editor' || currentView === 'transcript') && (
-            <button
-              onClick={() => setShowImportWizard(true)}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl font-medium transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] bg-white text-amber-600 hover:bg-amber-50 border border-amber-300"
-              title="Import existing questions and vocabulary"
-            >
-              <ImportIcon className="w-4 h-4" />
-              <span className="text-sm">Import</span>
-            </button>
-          )}
-          {currentView === 'home' || currentView === 'editor' || currentView === 'library' || currentView === 'detail' ? (
+          {(currentView === 'home' || currentView === 'editor' || currentView === 'library' || currentView === 'detail') && (
             <button
               onClick={() => {
                 // Reading mode: always show tests tab (no audio entries)
@@ -1371,14 +1355,6 @@ const App: React.FC = () => {
             >
               <FolderIcon className="w-4 h-4" />
               <span className="text-sm font-medium">My Library</span>
-            </button>
-          ) : (
-            <button
-              onClick={handleCreateNew}
-              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-xl font-medium hover:from-indigo-500 hover:to-violet-500 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 shadow-lg shadow-indigo-500/30"
-            >
-              <PlusIcon className="w-4 h-4" />
-              <span className="text-sm">New Audio</span>
             </button>
           )}
           {/* Settings Button */}
@@ -1655,10 +1631,7 @@ const App: React.FC = () => {
           onDelete={handleDelete}
           onDeleteTest={handleDeleteTestFromLibrary}
           onEditTest={handleEditTestFromLibrary}
-          onCreateNew={handleCreateNew}
-          onCreateTranscript={handleCreateTranscript}
-          onOneShot={() => setShowOneShotCreator(true)}
-          onImportComplete={handleImportComplete}
+          onCreateNew={() => setCurrentView('home')}
           onViewDetail={handleViewDetail}
           onViewTest={handleViewTestFromLibrary}
           onBatchDelete={handleBatchDelete}
