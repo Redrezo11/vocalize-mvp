@@ -295,14 +295,17 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
   const handleGenerateBonus = useCallback(async (count: 5 | 10) => {
     setBonusError(null);
 
+    // Stable ID for a question: DB returns _id (MongoDB ObjectId), our code sets id
+    const qid = (q: any): string => q._id || q.id || q.questionText;
+
     // Read seen question IDs from sessionStorage
     const seenKey = getSeenBonusKey(test.id);
-    const seenIds: string[] = JSON.parse(sessionStorage.getItem(seenKey) || '[]');
+    let seenIds: string[] = JSON.parse(sessionStorage.getItem(seenKey) || '[]');
 
-    // Helper to mark question IDs as seen
+    // Helper to mark question IDs as seen and persist
     const markSeen = (ids: string[]) => {
-      const updated = [...seenIds, ...ids];
-      sessionStorage.setItem(seenKey, JSON.stringify(updated));
+      seenIds = [...seenIds, ...ids];
+      sessionStorage.setItem(seenKey, JSON.stringify(seenIds));
     };
 
     // Fetch latest pool from DB
@@ -319,7 +322,7 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
 
     // Filter pool to unseen questions
     const seenSet = new Set(seenIds);
-    const unseen = pool.filter(q => !seenSet.has(q.id));
+    const unseen = pool.filter(q => !seenSet.has(qid(q)));
     const available = unseen.slice(0, count);
     const remaining = count - available.length;
 
@@ -367,9 +370,9 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
       const served = available.slice(0, count);
       const servedQs = served.map((q, i) => ({
         ...q,
-        id: q.id || `bonus-${bonusRounds.length}-${i}`,
+        id: qid(q) || `bonus-${bonusRounds.length}-${i}`,
       }));
-      markSeen(served.map(q => q.id));
+      markSeen(served.map(q => qid(q)));
       setBonusRounds(prev => [...prev, servedQs]);
       return;
     }
@@ -378,9 +381,9 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
     if (available.length > 0 && remaining > 0) {
       const pregenQs = available.map((q, i) => ({
         ...q,
-        id: q.id || `bonus-${bonusRounds.length}-${i}`,
+        id: qid(q) || `bonus-${bonusRounds.length}-${i}`,
       }));
-      markSeen(available.map(q => q.id));
+      markSeen(available.map(q => qid(q)));
 
       setIsGeneratingBonus(true);
       try {
@@ -389,7 +392,7 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
         // Append live questions to DB pool so other students benefit
         if (liveQs.length > 0) {
           appendToPool(liveQs);
-          markSeen(liveQs.map(q => q.id));
+          markSeen(liveQs.map(q => qid(q)));
         }
         setBonusRounds(prev => [...prev, [...pregenQs, ...liveQs]]);
       } catch (err) {
@@ -410,7 +413,7 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
       if (liveQs.length === 0) throw new Error('No questions generated');
       // Append to DB pool so other students benefit
       appendToPool(liveQs);
-      markSeen(liveQs.map(q => q.id));
+      markSeen(liveQs.map(q => qid(q)));
       setBonusRounds(prev => [...prev, liveQs]);
     } catch (err) {
       console.error('[Bonus] Generate error:', err);
