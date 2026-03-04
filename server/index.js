@@ -206,6 +206,7 @@ const usageLogSchema = new mongoose.Schema({
   created_at: { type: Date, default: Date.now }
 });
 usageLogSchema.index({ user_id: 1, created_at: -1 });
+usageLogSchema.index({ created_at: -1 });
 const UsageLog = mongoose.model('UsageLog', usageLogSchema);
 
 // Helper: Upload audio to Cloudinary
@@ -704,8 +705,14 @@ app.put('/api/admin/users/:id/tokens', authenticate, requireAdmin, async (req, r
 // Admin: usage analytics
 app.get('/api/admin/usage', authenticate, requireAdmin, async (req, res) => {
   try {
-    const { userId } = req.query;
-    const match = userId ? { user_id: new mongoose.Types.ObjectId(userId) } : {};
+    const { userId, startDate, endDate } = req.query;
+    const match = {};
+    if (userId) match.user_id = new mongoose.Types.ObjectId(userId);
+    if (startDate || endDate) {
+      match.created_at = {};
+      if (startDate) match.created_at.$gte = new Date(startDate);
+      if (endDate) match.created_at.$lte = new Date(endDate);
+    }
 
     // Per-user summary
     const userSummary = await UsageLog.aggregate([
@@ -755,6 +762,57 @@ app.get('/api/admin/usage', authenticate, requireAdmin, async (req, res) => {
   } catch (err) {
     console.error('[Admin] Usage analytics error:', err);
     res.status(500).json({ error: 'Failed to get usage data' });
+  }
+});
+
+// Admin: timeseries usage analytics (daily/weekly/monthly)
+app.get('/api/admin/usage/timeseries', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { granularity = 'daily', days, userId } = req.query;
+    const defaultDays = granularity === 'monthly' ? 365 : granularity === 'weekly' ? 90 : 30;
+    const lookback = parseInt(days) || defaultDays;
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - lookback);
+
+    const match = { created_at: { $gte: startDate } };
+    if (userId) match.user_id = new mongoose.Types.ObjectId(userId);
+
+    // Build group-by expression based on granularity
+    let groupId;
+    if (granularity === 'weekly') {
+      // Truncate to Monday of each ISO week (subtract isoDayOfWeek-1 days in ms)
+      const weekStartExpr = {
+        $subtract: [
+          '$created_at',
+          { $multiply: [{ $subtract: [{ $isoDayOfWeek: '$created_at' }, 1] }, 86400000] }
+        ]
+      };
+      groupId = { $dateToString: { format: '%Y-%m-%d', date: weekStartExpr } };
+    } else {
+      const dateFormat = granularity === 'monthly' ? '%Y-%m' : '%Y-%m-%d';
+      groupId = { $dateToString: { format: dateFormat, date: '$created_at' } };
+    }
+
+    const timeseries = await UsageLog.aggregate([
+      { $match: match },
+      { $group: { _id: groupId, tokens: { $sum: '$tokens_used' }, operations: { $sum: 1 } } },
+      { $sort: { _id: 1 } },
+    ]);
+
+    // Per-operation breakdown for stacked charts
+    const byOperation = await UsageLog.aggregate([
+      { $match: match },
+      { $group: {
+        _id: { date: groupId, operation: '$operation' },
+        tokens: { $sum: '$tokens_used' },
+      }},
+      { $sort: { '_id.date': 1 } },
+    ]);
+
+    res.json({ timeseries, byOperation, granularity, startDate: startDate.toISOString() });
+  } catch (err) {
+    console.error('[Admin] Timeseries usage error:', err);
+    res.status(500).json({ error: 'Failed to get timeseries data' });
   }
 });
 

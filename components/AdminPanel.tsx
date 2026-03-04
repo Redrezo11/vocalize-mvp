@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { UsageCharts } from './UsageCharts';
 
 const API_BASE = '/api';
 
@@ -546,7 +547,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
 
           {/* Usage Analytics Tab */}
           {activeTab === 'usage' && (
-            <div className="space-y-4">
+            <div className="space-y-6">
+              {/* Timeseries charts */}
+              <UsageCharts />
+
+              {/* All-time summary tables */}
+              <div className="border-t border-slate-200 pt-4">
+                <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">All-Time Summary</h3>
+              </div>
               {usageLoading ? (
                 <div className="flex items-center justify-center py-12">
                   <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin" />
