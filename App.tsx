@@ -1813,7 +1813,7 @@ const App: React.FC = () => {
       return <LoadingSpinner />;
     }
     return (
-      <AppModeProvider mode={settingsHook.settings.appMode}>
+      <AppModeProvider mode={studentTest.type.startsWith('reading') ? 'reading' : 'listening'}>
         <Suspense fallback={<LoadingSpinner />}>
           <StudentTest
             key={isPreviewMode ? `preview-${previewKey}` : studentTest.id}
