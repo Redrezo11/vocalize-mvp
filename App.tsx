@@ -1252,8 +1252,9 @@ const App: React.FC = () => {
     setCurrentView('student-test');
   };
 
-  // Exit preview — clear persisted session state
+  // Exit preview — clear persisted session state and return to classroom
   const handleExitPreview = () => {
+    const previewedTestId = studentTest?.id || null;
     if (studentTest) {
       sessionStorage.removeItem(`st_${studentTest.id}`);
       sessionStorage.removeItem(`st_${studentTest.id}_disc`);
@@ -1261,6 +1262,10 @@ const App: React.FC = () => {
     sessionStorage.removeItem('df_studentTestId');
     sessionStorage.removeItem('df_isPreviewMode');
     setIsPreviewMode(false);
+    // Restore classroom presentation view for the same test
+    if (previewedTestId) {
+      setAutoSelectTestId(previewedTestId);
+    }
     setCurrentView('classroom');
   };
 
