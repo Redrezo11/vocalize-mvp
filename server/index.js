@@ -1094,7 +1094,7 @@ app.get('/api/tests/:id', async (req, res) => {
 // Create test
 app.post('/api/tests', authenticate, async (req, res) => {
   try {
-    const { audioId, title, type, questions, lexis, preview, classroomActivity, transferQuestion, sourceText, speakerCount, difficulty, bonusQuestions } = req.body;
+    const { audioId, title, type, questions, lexis, lexisAudio, preview, classroomActivity, transferQuestion, sourceText, speakerCount, difficulty, bonusQuestions } = req.body;
 
     console.log('[POST /api/tests] Creating test with preview:', preview ? preview.length + ' activities' : 'none', '| type:', type);
 
@@ -1117,6 +1117,7 @@ app.post('/api/tests', authenticate, async (req, res) => {
       type,
       questions,
       lexis: lexis || [],
+      lexisAudio: lexisAudio || null,
       preview: preview || [],
       classroomActivity: classroomActivity || null,
       transferQuestion: transferQuestion || null,
@@ -1128,6 +1129,21 @@ app.post('/api/tests', authenticate, async (req, res) => {
     });
 
     await test.save();
+
+    // Upload any base64 audio to Cloudinary (lexisAudio, classroomActivity, transferQuestion)
+    const testData = test.toObject();
+    await processTestAudioUploads(test._id.toString(), testData);
+
+    // If processTestAudioUploads converted any base64 → Cloudinary URLs, persist them
+    if (testData.lexisAudio || testData.classroomActivity || testData.transferQuestion) {
+      const audioUpdate = {};
+      if (testData.lexisAudio) audioUpdate.lexisAudio = testData.lexisAudio;
+      if (testData.classroomActivity) audioUpdate.classroomActivity = testData.classroomActivity;
+      if (testData.transferQuestion) audioUpdate.transferQuestion = testData.transferQuestion;
+      await ListeningTest.findByIdAndUpdate(test._id, audioUpdate);
+      Object.assign(test, audioUpdate);
+    }
+
     console.log('[POST /api/tests] Saved test has preview:', test.preview ? test.preview.length + ' activities' : 'none');
     res.status(201).json(test);
   } catch (error) {
