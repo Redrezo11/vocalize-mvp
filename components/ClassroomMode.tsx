@@ -7,6 +7,10 @@ import { generateLexisAudio, generateAllWordAudios, LexisTTSEngine } from '../ut
 import { fullTestCache } from '../utils/testCache';
 import { useAppMode } from '../contexts/AppModeContext';
 import { modeLabel, isTestTypeForMode } from '../utils/modeLabels';
+import { useAuth } from '../contexts/AuthContext';
+import { OPERATION_COSTS } from '../utils/tokenCosts';
+import { reportTokenUsage, hasEnoughTokens } from '../utils/tokenApi';
+import TokenConfirmDialog from './TokenConfirmDialog';
 
 // Map server test document to client ListeningTest format
 const mapTestFromServer = (t: any): ListeningTest => ({
@@ -185,6 +189,7 @@ type ClassroomView = 'select' | 'present';
 export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTests = false, audioEntries, theme = 'light', autoSelectTestId, onAutoSelectHandled, onExit, onPreviewStudent, onEditTest, onDeleteTest, onUpdateTest }) => {
   const appMode = useAppMode();
   const labels = modeLabel(appMode);
+  const { user, updateTokenBalance } = useAuth();
   const isDark = theme === 'dark';
   const [view, setView] = useState<ClassroomView>('select');
   const [selectedTest, setSelectedTest] = useState<ListeningTest | null>(null);
@@ -238,6 +243,10 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
   const [isGeneratingPlenaryAudio, setIsGeneratingPlenaryAudio] = useState(false);
   const [plenaryAudioLang, setPlenaryAudioLang] = useState<'en' | 'ar' | null>(null);
   const [isPlayingPlenaryAudio, setIsPlayingPlenaryAudio] = useState(false);
+
+  // Token confirmation for narration
+  const [pendingNarration, setPendingNarration] = useState<{ type: 'preListening' | 'plenary'; language: 'en' | 'ar' } | null>(null);
+  const [pendingLexisAction, setPendingLexisAction] = useState<'batch' | 'perWord' | null>(null);
 
   // Word pronunciation pre-loading state
   const [preloadProgress, setPreloadProgress] = useState<{ done: number; total: number } | null>(null);
@@ -356,6 +365,13 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
   const handleGenerateLexisAudio = async () => {
     if (!selectedTest?.lexis || selectedTest.lexis.length === 0) return;
 
+    // Token pre-check
+    const tokenCost = OPERATION_COSTS.lexis_audio_batch;
+    if (!hasEnoughTokens(user, tokenCost)) {
+      setLexisAudioError(`Insufficient tokens (need ${tokenCost}, have ${user?.tokenBalance ?? 0}). Contact your admin for more.`);
+      return;
+    }
+
     setIsGeneratingLexisAudio(true);
     setLexisAudioError(null);
 
@@ -378,6 +394,15 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
 
         // Close modal on success
         setShowLexisAudioConfirm(false);
+
+        // Report token usage
+        reportTokenUsage('lexis_audio_batch', tokenCost, {
+          provider: lexisTTSEngine === 'openai' ? 'openai' : 'gemini',
+          model: lexisTTSEngine === 'openai' ? 'tts-1' : 'gemini-2.5-flash-preview-tts',
+          metadata: { wordCount: selectedTest.lexis.length },
+        }).then(res => {
+          if (res.token_balance !== undefined) updateTokenBalance(res.token_balance);
+        }).catch(console.error);
       } else {
         // Keep modal open and show error
         setLexisAudioError(result.error || 'Failed to generate audio');
@@ -425,6 +450,13 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
   const handleGenerateWordAudios = async () => {
     if (!selectedTest?.lexis || selectedTest.lexis.length === 0) return;
 
+    // Token pre-check
+    const tokenCost = OPERATION_COSTS.per_word_audio;
+    if (!hasEnoughTokens(user, tokenCost)) {
+      setLexisAudioError(`Insufficient tokens (need ${tokenCost}, have ${user?.tokenBalance ?? 0}). Contact your admin for more.`);
+      return;
+    }
+
     setIsGeneratingWordAudios(true);
     setLexisAudioError(null);
 
@@ -460,6 +492,15 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
 
         // Close modal on success
         setShowLexisAudioConfirm(false);
+
+        // Report token usage
+        reportTokenUsage('per_word_audio', tokenCost, {
+          provider: lexisTTSEngine === 'openai' ? 'openai' : 'gemini',
+          model: lexisTTSEngine === 'openai' ? 'tts-1' : 'gemini-2.5-flash-preview-tts',
+          metadata: { wordCount: selectedTest.lexis.length },
+        }).then(res => {
+          if (res.token_balance !== undefined) updateTokenBalance(res.token_balance);
+        }).catch(console.error);
 
         if (result.failedWords && result.failedWords.length > 0) {
           console.warn('[ClassroomMode] Some words failed to generate:', result.failedWords);
@@ -596,7 +637,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
   // Generate QR code for student access
   const generateQRCode = async (test: ListeningTest) => {
     const baseUrl = window.location.origin + window.location.pathname;
-    const url = `${baseUrl}?student-test=${test.id}`;
+    const url = `${baseUrl}?student-test=${test.id}${user ? `&pt=${user.id}` : ''}`;
     setStudentUrl(url);
 
     try {
@@ -656,6 +697,13 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
   const handleGeneratePreListeningAudio = async (language: 'en' | 'ar') => {
     if (!selectedTest?.classroomActivity) return;
     const activity = selectedTest.classroomActivity;
+
+    // Token pre-check
+    const tokenCost = OPERATION_COSTS.classroom_narration;
+    if (!hasEnoughTokens(user, tokenCost)) {
+      console.error(`Insufficient tokens (need ${tokenCost}, have ${user?.tokenBalance ?? 0})`);
+      return;
+    }
 
     setIsGeneratingPreListeningAudio(true);
     setPreListeningAudioLang(language);
@@ -717,6 +765,14 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
       if (onUpdateTest) onUpdateTest(updatedTest);
       fullTestCache.set(updatedTest.id, updatedTest);
 
+      // Report token usage
+      reportTokenUsage('classroom_narration', tokenCost, {
+        provider: 'openai', model: narrationModel,
+        metadata: { type: 'pre-listening', language },
+      }).then(res => {
+        if (res.token_balance !== undefined) updateTokenBalance(res.token_balance);
+      }).catch(console.error);
+
     } catch (error) {
       console.error('[ClassroomMode] Pre-listening audio error:', error);
     } finally {
@@ -744,6 +800,13 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
   const handleGeneratePlenaryAudio = async (language: 'en' | 'ar') => {
     if (!selectedTest?.transferQuestion) return;
     const tq = selectedTest.transferQuestion;
+
+    // Token pre-check
+    const tokenCost = OPERATION_COSTS.classroom_narration;
+    if (!hasEnoughTokens(user, tokenCost)) {
+      console.error(`Insufficient tokens (need ${tokenCost}, have ${user?.tokenBalance ?? 0})`);
+      return;
+    }
 
     setIsGeneratingPlenaryAudio(true);
     setPlenaryAudioLang(language);
@@ -800,6 +863,14 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
       setSelectedTest(updatedTest);
       if (onUpdateTest) onUpdateTest(updatedTest);
       fullTestCache.set(updatedTest.id, updatedTest);
+
+      // Report token usage
+      reportTokenUsage('classroom_narration', tokenCost, {
+        provider: 'openai', model: narrationModel,
+        metadata: { type: 'plenary', language },
+      }).then(res => {
+        if (res.token_balance !== undefined) updateTokenBalance(res.token_balance);
+      }).catch(console.error);
 
     } catch (error) {
       console.error('[ClassroomMode] Plenary audio error:', error);
@@ -1995,7 +2066,13 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                           </button>
                         ) : (
                           <button
-                            onClick={() => handleGeneratePreListeningAudio('en')}
+                            onClick={() => {
+                              if (user) {
+                                setPendingNarration({ type: 'preListening', language: 'en' });
+                              } else {
+                                handleGeneratePreListeningAudio('en');
+                              }
+                            }}
                             disabled={isGeneratingPreListeningAudio}
                             className={`flex items-center gap-2 px-6 py-3 rounded-xl text-lg font-medium transition-colors ${
                               isGeneratingPreListeningAudio && preListeningAudioLang === 'en'
@@ -2019,7 +2096,13 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                           </button>
                         ) : (
                           <button
-                            onClick={() => handleGeneratePreListeningAudio('ar')}
+                            onClick={() => {
+                              if (user) {
+                                setPendingNarration({ type: 'preListening', language: 'ar' });
+                              } else {
+                                handleGeneratePreListeningAudio('ar');
+                              }
+                            }}
                             disabled={isGeneratingPreListeningAudio}
                             className={`flex items-center gap-2 px-6 py-3 rounded-xl text-lg font-medium transition-colors ${
                               isGeneratingPreListeningAudio && preListeningAudioLang === 'ar'
@@ -2189,7 +2272,13 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                           </button>
                         ) : (
                           <button
-                            onClick={() => handleGeneratePlenaryAudio('en')}
+                            onClick={() => {
+                              if (user) {
+                                setPendingNarration({ type: 'plenary', language: 'en' });
+                              } else {
+                                handleGeneratePlenaryAudio('en');
+                              }
+                            }}
                             disabled={isGeneratingPlenaryAudio}
                             className={`flex items-center gap-2 px-6 py-3 rounded-xl text-lg font-medium transition-colors ${
                               isGeneratingPlenaryAudio && plenaryAudioLang === 'en'
@@ -2213,7 +2302,13 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                           </button>
                         ) : (
                           <button
-                            onClick={() => handleGeneratePlenaryAudio('ar')}
+                            onClick={() => {
+                              if (user) {
+                                setPendingNarration({ type: 'plenary', language: 'ar' });
+                              } else {
+                                handleGeneratePlenaryAudio('ar');
+                              }
+                            }}
                             disabled={isGeneratingPlenaryAudio}
                             className={`flex items-center gap-2 px-6 py-3 rounded-xl text-lg font-medium transition-colors ${
                               isGeneratingPlenaryAudio && plenaryAudioLang === 'ar'
@@ -2668,11 +2763,35 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                     </div>
                   )}
 
+                  {/* Token cost info */}
+                  {user && (
+                    <div className={`mb-4 p-3 rounded-xl border ${isDark ? 'bg-slate-700/50 border-slate-600' : 'bg-emerald-50 border-emerald-200'}`}>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className={isDark ? 'text-slate-300' : 'text-slate-600'}>Full Audio cost</span>
+                        <span className="font-semibold text-amber-600">{OPERATION_COSTS.lexis_audio_batch} tokens</span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm mt-1">
+                        <span className={isDark ? 'text-slate-300' : 'text-slate-600'}>Per-word Audio cost</span>
+                        <span className="font-semibold text-amber-600">{OPERATION_COSTS.per_word_audio} token</span>
+                      </div>
+                      <div className={`flex items-center justify-between text-sm mt-2 pt-2 border-t ${isDark ? 'border-slate-600' : 'border-emerald-200'}`}>
+                        <span className={isDark ? 'text-slate-300' : 'text-slate-600'}>{user.role === 'admin' ? 'Tokens used' : 'Your balance'}</span>
+                        <span className="font-semibold text-emerald-600">{user.tokenBalance}{user.role !== 'admin' ? ' tokens' : ''}</span>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex flex-col gap-3">
                     {/* Full Audio Button */}
                     <button
-                      onClick={handleGenerateLexisAudio}
-                      disabled={isGeneratingLexisAudio || isGeneratingWordAudios}
+                      onClick={() => {
+                        if (user) {
+                          setPendingLexisAction('batch');
+                        } else {
+                          handleGenerateLexisAudio();
+                        }
+                      }}
+                      disabled={isGeneratingLexisAudio || isGeneratingWordAudios || (user?.role === 'teacher' && !hasEnoughTokens(user, OPERATION_COSTS.lexis_audio_batch))}
                       className="w-full px-4 py-3 bg-amber-600 text-white rounded-xl font-medium hover:bg-amber-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
                       {isGeneratingLexisAudio ? (
@@ -2691,11 +2810,15 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                     {/* Per-Word Audio Button (for slideshow) - Always uses GPT-4o mini to avoid Gemini quota issues */}
                     <button
                       onClick={() => {
-                        // Force OpenAI for per-word generation (Gemini quota issues with many requests)
-                        setLexisTTSEngine('openai');
-                        handleGenerateWordAudios();
+                        if (user) {
+                          setPendingLexisAction('perWord');
+                        } else {
+                          // Force OpenAI for per-word generation (Gemini quota issues with many requests)
+                          setLexisTTSEngine('openai');
+                          handleGenerateWordAudios();
+                        }
                       }}
-                      disabled={isGeneratingLexisAudio || isGeneratingWordAudios}
+                      disabled={isGeneratingLexisAudio || isGeneratingWordAudios || (user?.role === 'teacher' && !hasEnoughTokens(user, OPERATION_COSTS.per_word_audio))}
                       className="w-full px-4 py-3 bg-green-600 text-white rounded-xl font-medium hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
                       {isGeneratingWordAudios ? (
@@ -2791,6 +2914,46 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
           preload="metadata"
           className="hidden"
           onEnded={() => setPlayingWordId(null)}
+        />
+
+        {/* Token Confirmation Dialog for lexis audio */}
+        <TokenConfirmDialog
+          isOpen={!!pendingLexisAction}
+          tokenCost={pendingLexisAction === 'batch' ? OPERATION_COSTS.lexis_audio_batch : OPERATION_COSTS.per_word_audio}
+          currentBalance={user?.tokenBalance ?? 0}
+          isAdmin={user?.role === 'admin'}
+          operationLabel={pendingLexisAction === 'batch' ? 'Generate full lexis audio' : 'Generate per-word audio'}
+          isDark={isDark}
+          onConfirm={() => {
+            if (pendingLexisAction === 'batch') {
+              handleGenerateLexisAudio();
+            } else {
+              setLexisTTSEngine('openai');
+              handleGenerateWordAudios();
+            }
+            setPendingLexisAction(null);
+          }}
+          onCancel={() => setPendingLexisAction(null)}
+        />
+
+        {/* Token Confirmation Dialog for narration */}
+        <TokenConfirmDialog
+          isOpen={!!pendingNarration}
+          tokenCost={OPERATION_COSTS.classroom_narration}
+          currentBalance={user?.tokenBalance ?? 0}
+          isAdmin={user?.role === 'admin'}
+          operationLabel={pendingNarration?.type === 'preListening' ? 'Generate pre-listening audio' : 'Generate plenary audio'}
+          operationDetail={pendingNarration?.language === 'ar' ? 'Arabic narration' : 'English narration'}
+          isDark={isDark}
+          onConfirm={() => {
+            if (pendingNarration?.type === 'preListening') {
+              handleGeneratePreListeningAudio(pendingNarration.language);
+            } else if (pendingNarration?.type === 'plenary') {
+              handleGeneratePlenaryAudio(pendingNarration.language);
+            }
+            setPendingNarration(null);
+          }}
+          onCancel={() => setPendingNarration(null)}
         />
       </div>
     );

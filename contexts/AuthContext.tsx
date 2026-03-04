@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { fullTestCache } from '../utils/testCache';
 
 const API_BASE = '/api';
 
@@ -108,6 +109,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     setUser(null);
     stopAutoRefresh();
+    // Clear all session/cache data to prevent leaking to next user
+    try { sessionStorage.clear(); } catch {}
+    fullTestCache.clear();
   }, [stopAutoRefresh]);
 
   return (

@@ -29,7 +29,7 @@ function migrateToTargetDuration(data: Record<string, unknown>): number {
   return 30;
 }
 
-export const useSettings = () => {
+export const useSettings = (userId?: string) => {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -98,10 +98,16 @@ export const useSettings = () => {
     }
   }, []);
 
-  // Load on mount
+  // Load on mount AND when user changes
   useEffect(() => {
-    loadSettings();
-  }, [loadSettings]);
+    if (userId) {
+      loadSettings();
+    } else {
+      // No user logged in — reset to defaults, no API call
+      setSettings(DEFAULT_SETTINGS);
+      setIsLoading(false);
+    }
+  }, [loadSettings, userId]);
 
   return {
     settings,

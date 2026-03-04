@@ -90,6 +90,7 @@ const App: React.FC = () => {
   const [previewKey, setPreviewKey] = useState(0); // Key to force StudentTest remount on preview
   const [studentTestId, setStudentTestId] = useState<string | null>(null);
   const [studentTest, setStudentTest] = useState<ListeningTest | null>(null);
+  const [presenterTeacherId, setPresenterTeacherId] = useState<string | null>(null);
   // Restore preview mode from sessionStorage (only when no URL param — QR code students are never in preview)
   const [isPreviewMode, setIsPreviewMode] = useState(() => {
     const params = new URLSearchParams(window.location.search);
@@ -138,7 +139,7 @@ const App: React.FC = () => {
   const [jamSettings, setJamSettings] = useState<{ targetDuration: number; contentMode: import('./components/Settings').ContentMode; contentModel?: import('./components/HomePage').ContentModel; useReasoning?: boolean; speakerCount?: import('./utils/eflTopics').SpeakerCount } | null>(null);
   const [jamTopic, setJamTopic] = useState<string | undefined>();
   const [autoSelectTestId, setAutoSelectTestId] = useState<string | null>(null);
-  const settingsHook = useSettings();
+  const settingsHook = useSettings(user?.id);
 
   // Filter tests by current app mode (reading tests only in reading mode, listening only in listening)
   const modeFilteredTests = useMemo(() => {
@@ -196,6 +197,15 @@ const App: React.FC = () => {
       sessionStorage.removeItem('df_studentTestId');
     }
   }, [studentTest]);
+
+  // Persist presenter teacher ID for student token billing on tab restore
+  useEffect(() => {
+    if (presenterTeacherId) {
+      sessionStorage.setItem('df_presenterTeacherId', presenterTeacherId);
+    } else {
+      sessionStorage.removeItem('df_presenterTeacherId');
+    }
+  }, [presenterTeacherId]);
 
   // Persist preview mode flag
   useEffect(() => {
@@ -1190,6 +1200,7 @@ const App: React.FC = () => {
     const testId = params.get('student-test');
     if (testId) {
       setStudentTestId(testId);
+      setPresenterTeacherId(params.get('pt'));
       loadStudentTest(testId);
     }
   }, []);
@@ -1197,6 +1208,7 @@ const App: React.FC = () => {
   // Restore student test from sessionStorage (uses ref captured synchronously before effects erased it)
   useEffect(() => {
     if (pendingRestoreTestId.current) {
+      setPresenterTeacherId(sessionStorage.getItem('df_presenterTeacherId'));
       loadStudentTest(pendingRestoreTestId.current);
       pendingRestoreTestId.current = null;
     }
@@ -1355,11 +1367,9 @@ const App: React.FC = () => {
           {/* User & Logout */}
           {user && (
             <div className="flex items-center gap-2 ml-1 pl-2 border-l border-slate-200">
-              {user.role !== 'admin' && (
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 hidden sm:inline">
-                  {user.tokenBalance} tokens
-                </span>
-              )}
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold hidden sm:inline ${user.role === 'admin' ? 'bg-slate-100 text-slate-600' : 'bg-emerald-50 text-emerald-700'}`}>
+                {user.role === 'admin' ? `${user.tokenBalance} used` : `${user.tokenBalance} tokens`}
+              </span>
               <span className="text-xs text-slate-500 hidden sm:inline">{user.name}</span>
               <button
                 onClick={logout}
@@ -1795,6 +1805,7 @@ const App: React.FC = () => {
             isPreview={isPreviewMode}
             onExitPreview={handleExitPreview}
             contentModel={settingsHook.settings.contentModel}
+            presenterId={presenterTeacherId}
           />
         </Suspense>
       </AppModeProvider>

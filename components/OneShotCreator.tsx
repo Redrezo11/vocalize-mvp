@@ -6,8 +6,12 @@ import { concatenateAudioBlobs } from '../hooks/useElevenLabsTTS';
 import { EFL_TOPICS, SpeakerCount, AudioFormat, getRandomTopic, getRandomFormat, getFormatsForSpeakerCount, getCompatibleTopic, isTopicCompatible, shuffleFormat, randomSpeakerCount, resolveSpeakerDefault } from '../utils/eflTopics';
 import { getRandomReadingTopic, getRandomReadingGenre, getCompatibleReadingTopic, shuffleReadingGenre } from '../utils/readingTopics';
 import { useAppMode } from '../contexts/AppModeContext';
+import { useAuth } from '../contexts/AuthContext';
 import type { SpeakerCountDefault } from './Settings';
 import { generateBonusForTest } from '../helpers/bonusGeneration';
+import { OPERATION_COSTS } from '../utils/tokenCosts';
+import { reportTokenUsage, hasEnoughTokens } from '../utils/tokenApi';
+import TokenConfirmDialog from './TokenConfirmDialog';
 
 const API_BASE = '/api';
 
@@ -1031,6 +1035,7 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
   onComplete,
 }) => {
   const appMode = useAppMode();
+  const { user, updateTokenBalance } = useAuth();
   const isReading = appMode === 'reading';
   const initialSpeakers = useMemo(() => resolveSpeakerDefault(defaultSpeakerCount), []);
   const [difficulty, setDifficulty] = useState<CEFRLevel>(defaultDifficulty);
@@ -1050,6 +1055,7 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
   const [copyFeedback, setCopyFeedback] = useState(false);
   const [stage, setStage] = useState<ProcessingStage>('idle');
   const [errorMsg, setErrorMsg] = useState('');
+  const [showTokenConfirm, setShowTokenConfirm] = useState(false);
 
   // Pending data for audio fallback
   const [pendingPayload, setPendingPayload] = useState<OneShotPayload | null>(null);
@@ -1108,6 +1114,14 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
   const processOneShot = useCallback(async () => {
     setErrorMsg('');
 
+    // Pre-check token balance
+    const tokenCost = isReading ? OPERATION_COSTS.oneshot_reading : OPERATION_COSTS.oneshot_listening;
+    if (!hasEnoughTokens(user, tokenCost)) {
+      setErrorMsg(`Insufficient tokens (need ${tokenCost}, have ${user?.tokenBalance ?? 0}). Contact your admin for more.`);
+      setStage('error');
+      return;
+    }
+
     // Stage 1: Parse
     setStage('parsing');
     let payload: OneShotPayload;
@@ -1162,6 +1176,14 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
 
         // Fire-and-forget: pre-generate bonus questions
         generateBonusForTest(savedTest._id || savedTest.id, payload.transcript, payload.difficulty, true, payload.questions.map(q => q.questionText), 'gpt-5-mini').catch(console.error);
+
+        // Report token usage
+        reportTokenUsage('oneshot_generation', OPERATION_COSTS.oneshot_reading, {
+          provider: 'openai', model: 'gpt-5-mini',
+          metadata: { isReading: true },
+        }).then(res => {
+          if (res.token_balance !== undefined) updateTokenBalance(res.token_balance);
+        }).catch(console.error);
 
         setStage('done');
         // Reading mode: no audioEntry, pass null
@@ -1365,6 +1387,14 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
       // Fire-and-forget: pre-generate bonus questions
       generateBonusForTest(savedTest._id || savedTest.id, payload.transcript, payload.difficulty, false, payload.questions.map(q => q.questionText), 'gpt-5-mini').catch(console.error);
 
+      // Report token usage
+      reportTokenUsage('oneshot_generation', OPERATION_COSTS.oneshot_listening, {
+        provider: 'gemini', model: 'gemini-2.5-flash-preview-tts',
+        metadata: { isReading: false, speakerCount: analysis.speakers.length },
+      }).then(res => {
+        if (res.token_balance !== undefined) updateTokenBalance(res.token_balance);
+      }).catch(console.error);
+
       setStage('done');
       onComplete({ audioEntry, test: savedTest });
     } catch (err) {
@@ -1372,7 +1402,7 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
       setStage('error');
       return;
     }
-  }, [pasteContent, onComplete]);
+  }, [pasteContent, onComplete, isReading, user, updateTokenBalance]);
 
   // Generate audio with OpenAI TTS (fallback, multi-voice for dialogues)
   const generateOpenAIAudio = async (transcript: string): Promise<Blob> => {
@@ -1805,7 +1835,13 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
 
               {/* Step 3: Create */}
               <button
-                onClick={processOneShot}
+                onClick={() => {
+                  if (user) {
+                    setShowTokenConfirm(true);
+                  } else {
+                    processOneShot();
+                  }
+                }}
                 disabled={!pasteContent.trim()}
                 className="w-full py-4 bg-gradient-to-r from-rose-500 to-pink-500 text-white rounded-xl font-bold text-lg hover:from-rose-400 hover:to-pink-400 transition-all disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98]"
               >
@@ -1941,6 +1977,17 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
           )}
         </div>
       </div>
+
+      {/* Token Confirmation Dialog */}
+      <TokenConfirmDialog
+        isOpen={showTokenConfirm}
+        tokenCost={isReading ? OPERATION_COSTS.oneshot_reading : OPERATION_COSTS.oneshot_listening}
+        currentBalance={user?.tokenBalance ?? 0}
+        isAdmin={user?.role === 'admin'}
+        operationLabel={isReading ? 'Create reading test' : 'Create listening test'}
+        onConfirm={() => { setShowTokenConfirm(false); processOneShot(); }}
+        onCancel={() => setShowTokenConfirm(false)}
+      />
     </div>
   );
 };

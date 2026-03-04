@@ -12,6 +12,7 @@ import { getContentLabels } from '../utils/contentLabels';
 import { FloatingZoomWidget } from './FloatingZoomWidget';
 import { usePinchZoom } from '../hooks/usePinchZoom';
 import { callOpenAI, buildBonusPrompt } from '../helpers/bonusGeneration';
+import { reportStudentTokenUsage } from '../utils/tokenApi';
 
 interface StudentTestProps {
   test: ListeningTest;
@@ -19,6 +20,7 @@ interface StudentTestProps {
   isPreview?: boolean;
   onExitPreview?: () => void;
   contentModel?: ContentModel;
+  presenterId?: string | null;
 }
 
 // SessionStorage key for tracking completed pre-test activities per test
@@ -64,7 +66,7 @@ const getInitialTestPhase = (test: ListeningTest, isPreview: boolean): TestPhase
   return 'questions';
 };
 
-export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light', isPreview = false, onExitPreview, contentModel = 'gpt-5-mini' }) => {
+export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light', isPreview = false, onExitPreview, contentModel = 'gpt-5-mini', presenterId }) => {
   const isDark = theme === 'dark';
   const appMode = useAppMode();
   const isReading = appMode === 'reading';
@@ -314,6 +316,7 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
         buildBonusPrompt(liveCount, test.difficulty || 'B1', isReading),
         input,
       );
+      reportStudentTokenUsage(test.id, 'student_bonus_generation', contentModel, presenterId);
 
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (!jsonMatch) throw new Error('No JSON in response');
@@ -458,6 +461,7 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
           contentModel={contentModel}
           theme={theme}
           onBack={handleBackFromDiscussion}
+          presenterId={presenterId}
         />
       </ContentLabelProvider>
     );

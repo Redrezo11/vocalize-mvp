@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { CEFRLevel, ContentMode } from './Settings';
 import { EngineType, SavedAudio, ListeningTest, SpeakerVoiceMapping } from '../types';
 import { parseDialogue, assignOpenAIVoices } from '../utils/parser';
@@ -7,7 +7,11 @@ import { buildDialoguePrompt, buildPassagePrompt, buildTestContentPrompt, valida
 import { EFL_TOPICS, SpeakerCount, AudioFormat, getRandomTopic, getRandomFormat, getCompatibleTopic, shuffleFormat, randomSpeakerCount } from '../utils/eflTopics';
 import { getRandomReadingTopic, getRandomReadingGenre, getCompatibleReadingTopic, shuffleReadingGenre } from '../utils/readingTopics';
 import { useAppMode } from '../contexts/AppModeContext';
+import { useAuth } from '../contexts/AuthContext';
 import { generateBonusForTest } from '../helpers/bonusGeneration';
+import { getGenerationCost, SpeakerCount as TokenSpeakerCount } from '../utils/tokenCosts';
+import { reportTokenUsage, hasEnoughTokens } from '../utils/tokenApi';
+import TokenConfirmDialog from './TokenConfirmDialog';
 
 const API_BASE = '/api';
 
@@ -271,6 +275,7 @@ export const JamButton: React.FC<JamButtonProps> = ({
   onError,
 }) => {
   const appMode = useAppMode();
+  const { user, updateTokenBalance } = useAuth();
   const isReading = appMode === 'reading';
 
   // Profile state - merge defaults with any passed profile/settings
@@ -285,6 +290,9 @@ export const JamButton: React.FC<JamButtonProps> = ({
   // Use ref instead of state to prevent StrictMode double-invocation
   const hasAutoStartedRef = useRef(false);
 
+  // Token confirmation state
+  const [showTokenConfirm, setShowTokenConfirm] = useState(false);
+
   // Processing state
   const [stage, setStage] = useState<JamStage>('idle');
   const [progress, setProgress] = useState(0);
@@ -297,6 +305,14 @@ export const JamButton: React.FC<JamButtonProps> = ({
 
   // Reading genre state
   const [readingGenre, setReadingGenre] = useState(() => getRandomReadingGenre());
+
+  // Preview token cost for confirmation dialog
+  const previewTokenCost = useMemo(() => getGenerationCost({
+    contentModel: profile.contentModel,
+    useReasoning: profile.useReasoning,
+    speakerCount: (isReading ? 1 : speakerCount) as TokenSpeakerCount,
+    isReading,
+  }), [profile.contentModel, profile.useReasoning, isReading, speakerCount]);
 
   // Topic state
   const [currentTopic, setCurrentTopic] = useState(() =>
@@ -571,6 +587,21 @@ export const JamButton: React.FC<JamButtonProps> = ({
     // Fire-and-forget: pre-generate bonus questions
     generateBonusForTest(savedTest.id, payload.transcript, payload.difficulty, false, payload.questions.map(q => q.questionText), 'gpt-5-mini').catch(console.error);
 
+    // Report token usage (fire-and-forget, don't block completion)
+    const tokenCost = getGenerationCost({
+      contentModel: profile.contentModel,
+      useReasoning: profile.useReasoning,
+      speakerCount: (speakers.length > 3 ? 3 : speakers.length || 1) as TokenSpeakerCount,
+      isReading: !audioBase64,
+    });
+    reportTokenUsage('jam_generation', tokenCost, {
+      provider: 'openai',
+      model: profile.contentModel,
+      metadata: { speakerCount: speakers.length, isReading: !audioBase64, engine },
+    }).then(res => {
+      if (res.token_balance !== undefined) updateTokenBalance(res.token_balance);
+    }).catch(console.error);
+
     setStage('done');
     setProgress(100);
 
@@ -628,6 +659,21 @@ export const JamButton: React.FC<JamButtonProps> = ({
     setProgress(10);
     setErrorMsg('');
     setGeneratingLabel(isReading ? 'Generating passage...' : 'Generating dialogue...');
+
+    // Calculate token cost for this generation config
+    const tokenCost = getGenerationCost({
+      contentModel: profile.contentModel,
+      useReasoning: profile.useReasoning,
+      speakerCount: (isReading ? 1 : speakerCount) as TokenSpeakerCount,
+      isReading,
+    });
+
+    // Pre-check token balance (teachers only)
+    if (!hasEnoughTokens(user, tokenCost)) {
+      setStage('idle');
+      setErrorMsg(`Insufficient tokens (need ${tokenCost}, have ${user?.tokenBalance ?? 0}). Contact your admin for more.`);
+      return;
+    }
 
     try {
       const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
@@ -810,6 +856,15 @@ export const JamButton: React.FC<JamButtonProps> = ({
         // Fire-and-forget: pre-generate bonus questions
         generateBonusForTest(savedTest.id, mergedPayload.transcript, mergedPayload.difficulty, true, mergedPayload.questions.map(q => q.questionText), 'gpt-5-mini').catch(console.error);
 
+        // Report token usage for reading generation
+        reportTokenUsage('jam_generation', tokenCost, {
+          provider: 'openai',
+          model: profile.contentModel,
+          metadata: { isReading: true },
+        }).then(res => {
+          if (res.token_balance !== undefined) updateTokenBalance(res.token_balance);
+        }).catch(console.error);
+
         setStage('done');
         setProgress(100);
 
@@ -876,7 +931,11 @@ export const JamButton: React.FC<JamButtonProps> = ({
   useEffect(() => {
     if (autoStart && !hasAutoStartedRef.current && stage === 'idle') {
       hasAutoStartedRef.current = true;
-      handleJam();
+      if (user) {
+        setShowTokenConfirm(true);
+      } else {
+        handleJam();
+      }
     }
   }, [autoStart, stage]);
 
@@ -1136,7 +1195,13 @@ export const JamButton: React.FC<JamButtonProps> = ({
 
           {/* The JAM button */}
           <button
-            onClick={handleJam}
+            onClick={() => {
+              if (user) {
+                setShowTokenConfirm(true);
+              } else {
+                handleJam();
+              }
+            }}
             disabled={stage !== 'idle'}
             className="relative w-36 h-36 rounded-full bg-gradient-to-br from-red-500 to-red-700
                        text-white font-bold text-3xl shadow-lg shadow-red-500/50
@@ -1197,6 +1262,18 @@ export const JamButton: React.FC<JamButtonProps> = ({
           onClose={() => setShowSettings(false)}
         />
       )}
+
+      {/* Token Confirmation Dialog */}
+      <TokenConfirmDialog
+        isOpen={showTokenConfirm}
+        tokenCost={previewTokenCost}
+        currentBalance={user?.tokenBalance ?? 0}
+        isAdmin={user?.role === 'admin'}
+        operationLabel={isReading ? 'Generate reading test' : 'Generate listening test'}
+        operationDetail={`${profile.difficulty.toUpperCase()}, ${profile.targetDuration} min, ${profile.contentModel === 'gpt-5-mini' ? 'GPT-5 Mini' : 'GPT-5.2'}${profile.useReasoning ? ' + reasoning' : ''}${!isReading ? `, ${speakerCount} speaker${speakerCount > 1 ? 's' : ''}` : ''}`}
+        onConfirm={() => { setShowTokenConfirm(false); handleJam(); }}
+        onCancel={() => { setShowTokenConfirm(false); if (autoStart) hasAutoStartedRef.current = false; }}
+      />
     </div>
   );
 };

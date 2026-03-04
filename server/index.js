@@ -180,6 +180,15 @@ const userSchema = new mongoose.Schema({
   token_limit: { type: Number, default: 0 },
   tokens_used: { type: Number, default: 0 },
   refresh_token: { type: String, default: null },
+  settings: {
+    app_mode: { type: String, enum: ['listening', 'reading'], default: 'listening' },
+    difficulty_level: { type: String, enum: ['A1', 'A2', 'B1', 'B2', 'C1'], default: 'B1' },
+    content_mode: { type: String, enum: ['standard', 'halal', 'elsd'], default: 'standard' },
+    classroom_theme: { type: String, enum: ['light', 'dark'], default: 'light' },
+    target_duration: { type: Number, default: 10 },
+    content_model: { type: String, enum: ['gpt-5-mini', 'gpt-5.2'], default: 'gpt-5-mini' },
+    default_speaker_count: { type: mongoose.Schema.Types.Mixed, default: 'random' },
+  },
   created_at: { type: Date, default: Date.now },
   updated_at: { type: Date, default: Date.now }
 });
@@ -286,6 +295,22 @@ const processTestAudioUploads = async (testId, data) => {
     uploads.push(
       uploadTestAudio(data.classroomActivity.audioAr, `classroom_ar_${testId}`)
         .then(url => { if (url) data.classroomActivity.audioAr = url; })
+    );
+  }
+
+  // transferQuestion.audioEn (plenary)
+  if (data.transferQuestion?.audioEn?.startsWith('data:')) {
+    uploads.push(
+      uploadTestAudio(data.transferQuestion.audioEn, `plenary_en_${testId}`)
+        .then(url => { if (url) data.transferQuestion.audioEn = url; })
+    );
+  }
+
+  // transferQuestion.audioAr (plenary)
+  if (data.transferQuestion?.audioAr?.startsWith('data:')) {
+    uploads.push(
+      uploadTestAudio(data.transferQuestion.audioAr, `plenary_ar_${testId}`)
+        .then(url => { if (url) data.transferQuestion.audioAr = url; })
     );
   }
 
@@ -605,6 +630,53 @@ app.post('/api/tokens/use', authenticate, async (req, res) => {
   }
 });
 
+// Student token usage — unauthenticated, bills the presenting teacher (or test creator as fallback)
+const STUDENT_OP_COSTS = {
+  student_discussion_generation: { 'gpt-5-mini': 1, 'gpt-5.2': 2 },
+  student_discussion_evaluation: { 'gpt-5-mini': 1, 'gpt-5.2': 3 },
+  student_bonus_generation:      { 'gpt-5-mini': 1, 'gpt-5.2': 2 },
+};
+
+app.post('/api/tokens/student-use', async (req, res) => {
+  try {
+    const { testId, operation, model, presenterId } = req.body;
+    if (!operation || !STUDENT_OP_COSTS[operation]) {
+      return res.status(400).json({ error: 'Invalid operation' });
+    }
+    if (!testId || !mongoose.isValidObjectId(testId)) {
+      return res.status(400).json({ error: 'Invalid testId' });
+    }
+
+    // Determine who to bill: presenting teacher first, then test creator as fallback
+    let billUserId = null;
+    if (presenterId && mongoose.isValidObjectId(presenterId)) {
+      billUserId = presenterId;
+    } else {
+      const test = await ListeningTest.findById(testId).select('created_by');
+      if (!test || !test.created_by) return res.json({ ok: true });
+      billUserId = test.created_by;
+    }
+
+    const owner = await User.findById(billUserId).select('role');
+    if (!owner) return res.json({ ok: true });
+
+    const costTable = STUDENT_OP_COSTS[operation];
+    const cost = costTable[model] || costTable['gpt-5-mini'] || 1;
+    const result = await deductTokens(
+      billUserId, owner.role, cost, operation,
+      { provider: 'openai', model: model || 'gpt-5-mini', metadata: { testId, source: 'student', presenterId: presenterId || null } }
+    );
+
+    if (!result && owner.role !== 'admin') {
+      console.warn(`[Tokens] Student usage: insufficient tokens for user ${billUserId}, op=${operation}`);
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[Tokens] Student usage error:', err);
+    res.json({ ok: true }); // never block student
+  }
+});
+
 // Admin: grant/set tokens for a user
 app.put('/api/admin/users/:id/tokens', authenticate, requireAdmin, async (req, res) => {
   try {
@@ -677,6 +749,43 @@ app.get('/api/admin/usage', authenticate, requireAdmin, async (req, res) => {
   } catch (err) {
     console.error('[Admin] Usage analytics error:', err);
     res.status(500).json({ error: 'Failed to get usage data' });
+  }
+});
+
+// Migrate existing base64 plenary audio to Cloudinary (run once after deploy)
+app.post('/api/admin/migrate-plenary-audio', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const tests = await ListeningTest.find({
+      $or: [
+        { 'transferQuestion.audioEn': { $regex: /^data:/ } },
+        { 'transferQuestion.audioAr': { $regex: /^data:/ } },
+      ]
+    }).select('transferQuestion');
+
+    let migrated = 0;
+    for (const test of tests) {
+      const testId = test._id.toString();
+      const updates = {};
+
+      if (test.transferQuestion?.audioEn?.startsWith('data:')) {
+        const url = await uploadTestAudio(test.transferQuestion.audioEn, `plenary_en_${testId}`);
+        if (url) updates['transferQuestion.audioEn'] = url;
+      }
+      if (test.transferQuestion?.audioAr?.startsWith('data:')) {
+        const url = await uploadTestAudio(test.transferQuestion.audioAr, `plenary_ar_${testId}`);
+        if (url) updates['transferQuestion.audioAr'] = url;
+      }
+
+      if (Object.keys(updates).length > 0) {
+        await ListeningTest.findByIdAndUpdate(test._id, { $set: updates });
+        migrated++;
+      }
+    }
+
+    res.json({ migrated, total: tests.length });
+  } catch (err) {
+    console.error('[Admin] Plenary audio migration error:', err);
+    res.status(500).json({ error: 'Migration failed: ' + err.message });
   }
 });
 
@@ -844,7 +953,7 @@ app.delete('/api/audio-entries/:id', authenticate, async (req, res) => {
 app.get('/api/audio-entries/:audioId/tests', authenticate, async (req, res) => {
   try {
     const tests = await ListeningTest.find({ audioId: req.params.audioId })
-      .select('-lexisAudio -classroomActivity')
+      .select('-lexisAudio -classroomActivity -transferQuestion')
       .sort({ created_at: -1 });
     res.json(tests);
   } catch (error) {
@@ -857,7 +966,7 @@ app.get('/api/tests', authenticate, async (req, res) => {
   try {
     const tests = await ListeningTest.find()
       .populate('created_by', 'name username')
-      .select('-lexisAudio -classroomActivity')
+      .select('-lexisAudio -classroomActivity -transferQuestion')
       .sort({ created_at: -1 });
     const responseJson = JSON.stringify(tests);
     console.log(`[GET /api/tests] Response size: ${(responseJson.length / 1024).toFixed(1)}KB, ${tests.length} tests`);
@@ -1040,6 +1149,8 @@ app.delete('/api/tests/:id', authenticate, async (req, res) => {
       deleteFromCloudinary(`vocalize-test-audio/lexis_audio_${testId}`),
       deleteFromCloudinary(`vocalize-test-audio/classroom_en_${testId}`),
       deleteFromCloudinary(`vocalize-test-audio/classroom_ar_${testId}`),
+      deleteFromCloudinary(`vocalize-test-audio/plenary_en_${testId}`),
+      deleteFromCloudinary(`vocalize-test-audio/plenary_ar_${testId}`),
     ];
     if (test.lexisAudio?.wordAudios) {
       for (const wordId of Object.keys(test.lexisAudio.wordAudios)) {
@@ -1061,27 +1172,20 @@ app.delete('/api/tests/:id', authenticate, async (req, res) => {
 
 // ==================== SETTINGS ROUTES ====================
 
-// Get app settings
-app.get('/api/settings', async (req, res) => {
+// Get user settings (per-user, falls back to defaults for missing fields)
+app.get('/api/settings', authenticate, async (req, res) => {
   try {
-    let settings = await AppSettings.findById('default');
-
-    // Create default settings if none exist
-    if (!settings) {
-      settings = new AppSettings({
-        _id: 'default',
-        difficulty_level: 'B1',
-        content_mode: 'standard',
-        classroom_theme: 'light'
-      });
-      await settings.save();
-    }
-
+    const user = await User.findById(req.user.userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    const s = user.settings || {};
     res.json({
-      appMode: settings.app_mode || 'listening',
-      difficultyLevel: settings.difficulty_level,
-      contentMode: settings.content_mode,
-      classroomTheme: settings.classroom_theme || 'light'
+      appMode: s.app_mode || 'listening',
+      difficultyLevel: s.difficulty_level || 'B1',
+      contentMode: s.content_mode || 'standard',
+      classroomTheme: s.classroom_theme || 'light',
+      targetDuration: s.target_duration ?? 10,
+      contentModel: s.content_model || 'gpt-5-mini',
+      defaultSpeakerCount: s.default_speaker_count ?? 'random',
     });
   } catch (error) {
     console.error('Get settings error:', error);
@@ -1089,30 +1193,38 @@ app.get('/api/settings', async (req, res) => {
   }
 });
 
-// Update app settings
-app.put('/api/settings', authenticate, requireAdmin, async (req, res) => {
+// Update user settings (per-user, any authenticated user can save their own)
+app.put('/api/settings', authenticate, async (req, res) => {
   try {
-    const { appMode, difficultyLevel, contentMode, classroomTheme } = req.body;
+    const { appMode, difficultyLevel, contentMode, classroomTheme, targetDuration, contentModel, defaultSpeakerCount } = req.body;
 
-    const settings = await AppSettings.findByIdAndUpdate(
-      'default',
+    const user = await User.findByIdAndUpdate(
+      req.user.userId,
       {
         $set: {
-          app_mode: appMode,
-          difficulty_level: difficultyLevel,
-          content_mode: contentMode,
-          classroom_theme: classroomTheme,
-          updated_at: new Date()
+          'settings.app_mode': appMode,
+          'settings.difficulty_level': difficultyLevel,
+          'settings.content_mode': contentMode,
+          'settings.classroom_theme': classroomTheme,
+          'settings.target_duration': targetDuration,
+          'settings.content_model': contentModel,
+          'settings.default_speaker_count': defaultSpeakerCount,
+          updated_at: new Date(),
         }
       },
-      { new: true, upsert: true }
+      { new: true }
     );
 
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    const s = user.settings || {};
     res.json({
-      appMode: settings.app_mode || 'listening',
-      difficultyLevel: settings.difficulty_level,
-      contentMode: settings.content_mode,
-      classroomTheme: settings.classroom_theme
+      appMode: s.app_mode,
+      difficultyLevel: s.difficulty_level,
+      contentMode: s.content_mode,
+      classroomTheme: s.classroom_theme,
+      targetDuration: s.target_duration,
+      contentModel: s.content_model,
+      defaultSpeakerCount: s.default_speaker_count,
     });
   } catch (error) {
     console.error('Update settings error:', error);

@@ -30,4 +30,5 @@ export const fullTestCache = {
   get: (key: string) => cache.get(key),
   set: (key: string, value: ListeningTest) => { cache.set(key, value); persistCache(cache); return fullTestCache; },
   has: (key: string) => cache.has(key),
+  clear: () => { cache.clear(); },
 };

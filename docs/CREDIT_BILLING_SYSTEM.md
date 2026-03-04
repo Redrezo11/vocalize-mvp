@@ -21,10 +21,15 @@
 
 ### LLM Providers (question gen / evaluation)
 
+*Verified against OpenAI pricing page, March 4, 2026*
+
 | Provider | Model | Input | Output | Unit |
 |----------|-------|-------|--------|------|
-| OpenAI | gpt-4o-mini | $0.15 | $0.60 | per 1M tokens |
-| OpenAI | gpt-4.1-nano | $0.10 | $0.40 | per 1M tokens |
+| OpenAI | gpt-4o-mini (current) | $0.15 | $0.60 | per 1M tokens |
+| OpenAI | gpt-5-mini | $0.25 | $2.00 | per 1M tokens |
+| OpenAI | gpt-4.1-nano | $0.20 | $0.80 | per 1M tokens |
+| OpenAI | gpt-4.1-mini | $0.80 | $3.20 | per 1M tokens |
+| OpenAI | gpt-5.2 | $1.75 | $14.00 | per 1M tokens |
 | Anthropic | Claude Haiku 4.5 | $1.00 | $5.00 | per 1M tokens |
 
 ### Cost Per Operation (typical 300-word passage, 10 questions)
@@ -35,8 +40,8 @@
 | Passage TTS (OpenAI) | gpt-4o-mini-tts | ~$0.023 |
 | Passage TTS (ElevenLabs) | eleven_multilingual_v2 | $0.18-$0.45 |
 | Per-word lexis (10 words) | OpenAI tts-1 | ~$0.001 |
-| Bonus question generation | OpenAI Responses API | ~$0.001 |
-| Answer evaluation (10 Qs) | OpenAI Responses API | ~$0.005 |
+| Bonus question generation | gpt-5-mini (Responses API) | ~$0.001 |
+| Answer evaluation (10 Qs) | gpt-5-mini (Responses API) | ~$0.005 |
 | **Full test cycle** | **Combined (Gemini TTS)** | **$0.01-$0.05** |
 
 **Key insight**: TTS is 90%+ of cost. Gemini Flash is cheapest. ElevenLabs is 10-20x more expensive.
@@ -119,12 +124,14 @@ Token deduction uses **variable rates** based on the exact configuration chosen 
 
 ### LLM Cost Variables
 
+*Based on verified pricing: gpt-5-mini $0.25/$2.00, gpt-5.2 $1.75/$14.00 per 1M tokens*
+
 | Model | Reasoning | Est. Cost/Call | Token Multiplier |
 |-------|-----------|---------------|-----------------|
-| gpt-5-mini | None | <$0.001 | 1x (base) |
+| gpt-5-mini | None | ~$0.001 | 1x (base) |
 | gpt-5-mini | Low | ~$0.001 | 1x |
-| gpt-5.2 | None | ~$0.005 | 3x |
-| gpt-5.2 | Low | ~$0.008 | 5x |
+| gpt-5.2 | None | ~$0.004 | 3x |
+| gpt-5.2 | Low | ~$0.007 | 5x |
 | gpt-5.2 | Medium | ~$0.012 | 7x |
 
 ### TTS Cost Variables
@@ -137,23 +144,35 @@ Token deduction uses **variable rates** based on the exact configuration chosen 
 
 ### Speaker Count Impact (TTS)
 
-| Speakers | TTS Calls | Notes |
-|----------|-----------|-------|
-| 1 (monologue) | 1 | Single call for full passage |
-| 2 (dialogue) | 2 | One per speaker |
-| 3+ (multi) | 3-4 | One per speaker; Gemini max 2 speakers |
+*Verified: Gemini TTS handles all speakers (1-3) in a single API call via `multiSpeakerVoiceConfig`. Speaker count does NOT multiply TTS calls. Audio output rate: 32 tokens/sec.*
 
-### Full JAM/OneShot Generation — Token Matrix
+| Speakers | Gemini TTS Calls | Notes |
+|----------|-----------------|-------|
+| 1 (monologue) | 1 | Single call, `voiceConfig` |
+| 2 (dialogue) | 1 | Single call, `multiSpeakerVoiceConfig` |
+| 3 (multi) | 1 | Single call, `multiSpeakerVoiceConfig` |
 
-| Config | LLM Calls | Reasoning | TTS (spk) | Lexis | Est. Cost | Tokens |
-|--------|-----------|-----------|-----------|-------|-----------|--------|
-| mini, no reasoning, 1 spk | 2+bonus | none | 1 | batch | ~$0.005 | **5** |
-| mini, no reasoning, 2 spk | 2+bonus | none | 2 | batch | ~$0.008 | **7** |
-| mini, reasoning, 2 spk | 2+bonus | low+med | 2 | per-word(8) | ~$0.01 | **10** |
-| 5.2, no reasoning, 1 spk | 2+bonus | none | 1 | batch | ~$0.015 | **12** |
-| 5.2, no reasoning, 2 spk | 2+bonus | none | 2 | batch | ~$0.018 | **14** |
-| 5.2, reasoning, 2 spk | 2+bonus | low+med | 2 | per-word(8) | ~$0.03 | **20** |
-| 5.2, reasoning, 3 spk | 2+bonus | low+med | 3 | per-word(10) | ~$0.04 | **25** |
+### Reasoning Token Impact
+
+*Reasoning tokens are billed as output tokens at the model's rate. `effort: low` generates fewer reasoning tokens, `effort: medium` generates more. Exact counts vary by prompt complexity.*
+
+### Full JAM/OneShot Generation — Token Matrix (all permutations)
+
+| Model | Reasoning | Speakers | Est. Cost | Tokens | Source |
+|-------|-----------|----------|-----------|--------|--------|
+| mini | none | 1 | ~$0.005 | **5** | verified |
+| mini | none | 2 | ~$0.008 | **7** | verified |
+| mini | none | 3 | ~$0.009 | **8** | calculated (+1 LLM complexity) |
+| mini | reasoning | 1 | ~$0.008 | **8** | calculated (10 − 2 spk delta) |
+| mini | reasoning | 2 | ~$0.01 | **10** | verified |
+| mini | reasoning | 3 | ~$0.011 | **11** | calculated (+1 LLM complexity) |
+| 5.2 | none | 1 | ~$0.015 | **12** | verified |
+| 5.2 | none | 2 | ~$0.018 | **14** | verified |
+| 5.2 | none | 3 | ~$0.019 | **15** | calculated (+1 LLM complexity) |
+| 5.2 | reasoning | 1 | ~$0.025 | **18** | calculated (20 − 2 spk delta) |
+| 5.2 | reasoning | 2 | ~$0.03 | **20** | verified |
+| 5.2 | reasoning | 3 | ~$0.032 | **21** | calculated (+1 LLM complexity) |
+| any | any | any (reading) | listening ÷ 2 | **÷ 2** | no TTS cost |
 
 ### Student Test Operations
 

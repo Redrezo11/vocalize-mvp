@@ -3,6 +3,7 @@ import { ListeningTest, TestSessionLog, FollowUpQuestion, FollowUpFeedbackItem }
 import { ClassroomTheme, ContentModel } from './Settings';
 import { useContentLabel } from '../contexts/ContentLabelContext';
 import type { ContentLabel } from '../utils/contentLabels';
+import { reportStudentTokenUsage } from '../utils/tokenApi';
 interface FollowUpQuestionsProps {
   sessionLog: TestSessionLog;
   transcript: string;
@@ -10,6 +11,7 @@ interface FollowUpQuestionsProps {
   contentModel: ContentModel;
   theme?: ClassroomTheme;
   onBack: () => void;
+  presenterId?: string | null;
 }
 
 type FollowUpPhase = 'generating' | 'answering' | 'evaluating' | 'feedback' | 'done';
@@ -386,6 +388,7 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
   contentModel,
   theme = 'light',
   onBack,
+  presenterId,
 }) => {
   const isDark = theme === 'dark';
   const contentLabel = useContentLabel();
@@ -437,6 +440,7 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
 
       // No reasoning for generation — speed over depth
       const text = await callOpenAI(model, getGenerateInstructions(contentLabel), input);
+      reportStudentTokenUsage(test.id, 'student_discussion_generation', model, presenterId);
       console.log('[FollowUp] Generate response:', text);
 
       const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -499,6 +503,7 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
 
       // Low reasoning for evaluation — needs some thought for quality feedback
       const text = await callOpenAI(model, getEvaluateInstructions(contentLabel), input, { effort: 'low' });
+      reportStudentTokenUsage(test.id, 'student_discussion_evaluation', model, presenterId);
       console.log('[FollowUp] Evaluate response:', text);
 
       const jsonMatch = text.match(/\{[\s\S]*\}/);
