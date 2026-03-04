@@ -1327,9 +1327,19 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                         <span className={`px-3 py-1 text-sm font-medium rounded-lg ${getTestTypeBadge(test.type)}`}>
                           {getTestTypeLabel(test.type)}
                         </span>
+                        {test.difficulty && (
+                          <span className={`px-2 py-0.5 text-xs font-semibold rounded ${isDark ? 'bg-indigo-900/50 text-indigo-300' : 'bg-indigo-100 text-indigo-700'}`}>
+                            {test.difficulty}
+                          </span>
+                        )}
                         <span className={`text-sm ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
                           {test.lexis?.length || 0} vocab word{(test.lexis?.length || 0) !== 1 ? 's' : ''}
                         </span>
+                        {test.createdBy && (
+                          <span className={`text-sm ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                            by {test.createdBy.name}
+                          </span>
+                        )}
                       </div>
                       <h3 className={`text-xl font-semibold mb-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>{test.title}</h3>
                       {audio && (
