@@ -1771,7 +1771,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
               </>
             )}
             {selectedTest?.lexis?.length && (
-              <span className="cursor-pointer hover:text-indigo-300 transition-colors" onClick={() => { if (selectedTest?.lexisAudio?.url) { handlePlayLexisAudio(); } else if (selectedTest?.lexis?.length) { setShowLexisAudioConfirm(true); } }}><kbd className={`px-2 py-1 rounded ${isPlayingLexisAudio ? 'bg-green-600' : 'bg-slate-700'}`}>S</kbd> {selectedTest?.lexisAudio?.url ? (isPlayingLexisAudio ? 'Pause' : 'Play Audio') : 'Generate Audio'}</span>
+              <span className="cursor-pointer hover:text-indigo-300 transition-colors" onClick={() => { if (selectedTest?.lexisAudio?.url) { handlePlayLexisAudio(); } else if (selectedTest?.lexis?.length) { setShowLexisAudioConfirm(true); } }}><kbd className={`px-2 py-1 rounded ${isPlayingLexisAudio ? 'bg-green-600' : 'bg-slate-700'}`}>S</kbd> {selectedTest?.lexisAudio?.url ? (isPlayingLexisAudio ? 'Pause Lexis Audio' : 'Play Lexis Audio') : 'Generate Lexis Audio'}</span>
             )}
             {fullscreenSlides.length > 0 && (
               <span className="cursor-pointer hover:text-indigo-300 transition-colors" onClick={() => { const startSlide = fullscreenSlides.includes('vocabulary') ? 'vocabulary' : fullscreenSlides[0]; if (startSlide) setFullscreenSlide(startSlide); }}><kbd className="px-2 py-1 rounded bg-slate-700">F</kbd> Fullscreen</span>
@@ -1945,7 +1945,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                     <h2 className="text-2xl font-semibold text-slate-400 tracking-wide uppercase">
                       Vocabulary
                     </h2>
-                    {selectedTest.lexisAudio?.url && (
+                    {selectedTest.lexisAudio?.url ? (
                       <button
                         onClick={handlePlayLexisAudio}
                         className={`mt-2 inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
@@ -1953,6 +1953,14 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                         }`}
                       >
                         {isPlayingLexisAudio ? 'Pause Audio' : 'Play Audio'}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => { if (!isGeneratingLexisAudio) setShowLexisAudioConfirm(true); }}
+                        disabled={isGeneratingLexisAudio}
+                        className="mt-2 inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50"
+                      >
+                        {isGeneratingLexisAudio ? 'Generating...' : 'Generate Lexis Audio'}
                       </button>
                     )}
                   </div>
@@ -2256,7 +2264,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                   {fullscreenSlide === 'vocabulary' && selectedTest?.lexis?.length && (
                     <span className="cursor-pointer hover:text-indigo-300 transition-colors" onClick={() => { if (selectedTest?.lexisAudio?.url) { handlePlayLexisAudio(); } else if (selectedTest?.lexis?.length) { setShowLexisAudioConfirm(true); } }}>
                       <kbd className={`px-2 py-1 rounded ${isPlayingLexisAudio ? 'bg-green-600' : 'bg-slate-700'}`}>S</kbd>
-                      {' '}{selectedTest?.lexisAudio?.url ? (isPlayingLexisAudio ? 'Pause' : 'Play Audio') : 'Generate Audio'}
+                      {' '}{selectedTest?.lexisAudio?.url ? (isPlayingLexisAudio ? 'Pause Lexis Audio' : 'Play Lexis Audio') : 'Generate Lexis Audio'}
                     </span>
                   )}
                   {selectedAudio && (
