@@ -5,6 +5,7 @@ import { ArrowLeftIcon, PlayIcon, PauseIcon, EditIcon, TrashIcon, ClipboardIcon,
 interface AudioDetailProps {
   audio: SavedAudio;
   tests?: ListeningTest[];
+  isAdmin?: boolean;
   onBack: () => void;
   onDelete: (audio: SavedAudio) => void;
   onCreateTest: (audio: SavedAudio) => void;
@@ -51,6 +52,7 @@ const getTestTypeBadge = (type: string): { label: string; color: string } => {
 export const AudioDetail: React.FC<AudioDetailProps> = ({
   audio,
   tests = [],
+  isAdmin = false,
   onBack,
   onDelete,
   onCreateTest,
@@ -126,13 +128,15 @@ export const AudioDetail: React.FC<AudioDetailProps> = ({
           <ArrowLeftIcon className="w-4 h-4" />
           <span className="font-medium">Back to Library</span>
         </button>
-        <button
-          onClick={handleDelete}
-          className="flex items-center gap-2 px-4 py-2 text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200"
-        >
-          <TrashIcon className="w-4 h-4" />
-          <span className="text-sm font-semibold">Delete</span>
-        </button>
+        {isAdmin && (
+          <button
+            onClick={handleDelete}
+            className="flex items-center gap-2 px-4 py-2 text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200"
+          >
+            <TrashIcon className="w-4 h-4" />
+            <span className="text-sm font-semibold">Delete</span>
+          </button>
+        )}
       </div>
 
       {/* Main Content */}
@@ -274,17 +278,19 @@ export const AudioDetail: React.FC<AudioDetailProps> = ({
                       >
                         <EditIcon className="w-4 h-4" />
                       </button>
-                      <button
-                        onClick={() => {
-                          if (confirm('Are you sure you want to delete this test?')) {
-                            onDeleteTest(test);
-                          }
-                        }}
-                        className="p-2.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200"
-                        title="Delete test"
-                      >
-                        <TrashIcon className="w-4 h-4" />
-                      </button>
+                      {isAdmin && (
+                        <button
+                          onClick={() => {
+                            if (confirm('Are you sure you want to delete this test?')) {
+                              onDeleteTest(test);
+                            }
+                          }}
+                          className="p-2.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200"
+                          title="Delete test"
+                        >
+                          <TrashIcon className="w-4 h-4" />
+                        </button>
+                      )}
                       <button
                         onClick={() => onTakeTest(test)}
                         className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-xl font-semibold hover:from-indigo-500 hover:to-violet-500 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 shadow-md shadow-indigo-500/25"

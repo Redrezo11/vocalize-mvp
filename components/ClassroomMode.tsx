@@ -1199,7 +1199,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                               <EditIcon className="w-4 h-4" />
                             </button>
                           )}
-                          {onDeleteTest && (
+                          {onDeleteTest && user?.role === 'admin' && (
                             <button
                               onClick={() => handleDeleteClick(test)}
                               className={`p-1.5 rounded-lg transition-colors ${isDark ? 'text-slate-500 hover:text-red-400 hover:bg-slate-700' : 'text-slate-400 hover:text-red-500 hover:bg-red-50'}`}

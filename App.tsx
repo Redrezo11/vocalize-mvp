@@ -1631,6 +1631,7 @@ const App: React.FC = () => {
           tests={modeFilteredTests}
           isLoading={audioStorage.isLoading}
           initialTab={settingsHook.settings.appMode === 'reading' ? 'tests' : libraryTab}
+          isAdmin={user?.role === 'admin'}
           onPlay={handlePlayFromLibrary}
           onDelete={handleDelete}
           onDeleteTest={handleDeleteTestFromLibrary}
@@ -1661,6 +1662,7 @@ const App: React.FC = () => {
           <AudioDetail
             audio={selectedAudio}
             tests={audioTests}
+            isAdmin={user?.role === 'admin'}
             onBack={() => {
               // Go back to the correct tab based on entry type
               console.log('[AudioDetail onBack] selectedAudio:', selectedAudio?.id, 'isTranscriptOnly:', selectedAudio?.isTranscriptOnly);
