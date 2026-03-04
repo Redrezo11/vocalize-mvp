@@ -549,7 +549,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
           {activeTab === 'usage' && (
             <div className="space-y-6">
               {/* Timeseries charts */}
-              <UsageCharts />
+              <UsageCharts users={users} />
 
               {/* All-time summary tables */}
               <div className="border-t border-slate-200 pt-4">
