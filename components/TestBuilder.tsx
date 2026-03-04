@@ -6,6 +6,7 @@ import { CEFRLevel } from './Settings';
 import DocumentImport from './DocumentImport';
 import { useAppMode } from '../contexts/AppModeContext';
 import { modeLabel } from '../utils/modeLabels';
+import { repairAndParse } from '../utils/jsonRepair';
 
 export interface ReadingPassage {
   title: string;
@@ -464,14 +465,18 @@ JSON FORMAT (return exactly this structure):
   // Import explanations from LLM response (merges with existing questions)
   const handleImportExplanations = () => {
     try {
-      // Try to extract JSON array from the pasted content
-      const jsonMatch = updateExplanationPaste.match(/\[[\s\S]*\]/);
-      if (!jsonMatch) {
-        alert('Could not find a valid JSON array in the pasted content. Make sure the LLM output contains a JSON array.');
+      let parsed: Partial<TestQuestion>[];
+      try {
+        parsed = repairAndParse(updateExplanationPaste) as Partial<TestQuestion>[];
+        // If it parsed as an object with an array property, extract it
+        if (!Array.isArray(parsed)) {
+          const obj = parsed as any;
+          parsed = obj.questions || obj.explanations || [];
+        }
+      } catch {
+        alert('Could not find valid JSON in the pasted content. Make sure the LLM output contains a JSON array.');
         return;
       }
-
-      const parsed = JSON.parse(jsonMatch[0]) as Partial<TestQuestion>[];
 
       if (!Array.isArray(parsed) || parsed.length === 0) {
         alert('The JSON array is empty or invalid.');
@@ -531,35 +536,15 @@ JSON FORMAT (return exactly this structure):
   // Import lexis + preview from LLM response (bundled format)
   const handleImportLexis = () => {
     try {
-      // Try to parse as the new bundled format { lexis: [], preview: [] }
       let parsedLexis: Partial<LexisItem>[] = [];
       let parsedPreview: any[] = [];
 
-      // First try to find an object with lexis/preview keys
-      const objectMatch = lexisPasteContent.match(/\{[\s\S]*\}/);
-      if (objectMatch) {
-        try {
-          const parsed = JSON.parse(objectMatch[0]);
-          if (parsed.lexis && Array.isArray(parsed.lexis)) {
-            parsedLexis = parsed.lexis;
-            parsedPreview = parsed.preview || [];
-          } else {
-            // Might be a legacy array format, check for array
-            throw new Error('No lexis key found, try array format');
-          }
-        } catch {
-          // Fall back to array format for backwards compatibility
-          const arrayMatch = lexisPasteContent.match(/\[[\s\S]*\]/);
-          if (arrayMatch) {
-            parsedLexis = JSON.parse(arrayMatch[0]);
-          }
-        }
-      } else {
-        // Try array format (legacy)
-        const arrayMatch = lexisPasteContent.match(/\[[\s\S]*\]/);
-        if (arrayMatch) {
-          parsedLexis = JSON.parse(arrayMatch[0]);
-        }
+      const parsed = repairAndParse(lexisPasteContent);
+      if (Array.isArray(parsed)) {
+        parsedLexis = parsed;
+      } else if (parsed.lexis && Array.isArray(parsed.lexis)) {
+        parsedLexis = parsed.lexis;
+        parsedPreview = parsed.preview || [];
       }
 
       if (!parsedLexis || parsedLexis.length === 0) {
@@ -644,36 +629,16 @@ JSON FORMAT (return exactly this structure):
       const text = messageOutput?.content?.[0]?.text || '';
       console.log('[TestBuilder] LLM raw response:', text.slice(0, 500) + '...');
 
-      // Try to parse as bundled format { lexis: [], preview: [] }
       let parsedLexis: Partial<LexisItem>[] = [];
       let parsedPreview: any[] = [];
 
-      const objectMatch = text.match(/\{[\s\S]*\}/);
-      console.log('[TestBuilder] Object match found:', !!objectMatch);
-      if (objectMatch) {
-        try {
-          const parsed = JSON.parse(objectMatch[0]);
-          console.log('[TestBuilder] Parsed JSON keys:', Object.keys(parsed));
-          console.log('[TestBuilder] parsed.lexis length:', parsed.lexis?.length);
-          console.log('[TestBuilder] parsed.preview:', parsed.preview);
-          if (parsed.lexis && Array.isArray(parsed.lexis)) {
-            parsedLexis = parsed.lexis;
-            parsedPreview = parsed.preview || [];
-          }
-        } catch (parseError) {
-          console.error('[TestBuilder] JSON parse error:', parseError);
-          // Fall back to array format
-          const arrayMatch = text.match(/\[[\s\S]*\]/);
-          if (arrayMatch) {
-            parsedLexis = JSON.parse(arrayMatch[0]);
-          }
-        }
-      } else {
-        // Try array format (legacy)
-        const arrayMatch = text.match(/\[[\s\S]*\]/);
-        if (arrayMatch) {
-          parsedLexis = JSON.parse(arrayMatch[0]);
-        }
+      const parsed = repairAndParse(text);
+      console.log('[TestBuilder] Parsed JSON:', Array.isArray(parsed) ? `array[${parsed.length}]` : Object.keys(parsed));
+      if (Array.isArray(parsed)) {
+        parsedLexis = parsed;
+      } else if (parsed.lexis && Array.isArray(parsed.lexis)) {
+        parsedLexis = parsed.lexis;
+        parsedPreview = parsed.preview || [];
       }
 
       if (parsedLexis.length > 0) {
@@ -747,14 +712,14 @@ JSON FORMAT (return exactly this structure):
   // Parse pasted JSON from LLM
   const handlePasteFromLLM = () => {
     try {
-      // Try to extract JSON array from the pasted content
-      const jsonMatch = pasteContent.match(/\[[\s\S]*\]/);
-      if (!jsonMatch) {
-        alert('Could not find a valid JSON array in the pasted content. Make sure the LLM output contains a JSON array.');
+      let parsed: Partial<TestQuestion>[];
+      try {
+        const raw = repairAndParse(pasteContent);
+        parsed = Array.isArray(raw) ? raw : (raw.questions || []);
+      } catch {
+        alert('Could not find valid JSON in the pasted content. Make sure the LLM output contains a JSON array.');
         return;
       }
-
-      const parsed = JSON.parse(jsonMatch[0]) as Partial<TestQuestion>[];
 
       if (!Array.isArray(parsed) || parsed.length === 0) {
         alert('The JSON array is empty or invalid.');

@@ -1,4 +1,5 @@
 import { TestQuestion } from '../types';
+import { repairAndParse } from '../utils/jsonRepair';
 
 const API_BASE = '/api';
 
@@ -69,10 +70,12 @@ export async function generateBonusForTest(
   });
 
   const text = await callOpenAI(contentModel, buildBonusPrompt(10, difficulty, isReading), input);
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) return;
-
-  const parsed = JSON.parse(jsonMatch[0]);
+  let parsed: any;
+  try {
+    parsed = repairAndParse(text);
+  } catch {
+    return; // silent fail — bonus generation is fire-and-forget
+  }
   const qs: TestQuestion[] = (parsed.questions || []).map((q: any, i: number) => ({
     ...q,
     id: `pregen-${i}`,

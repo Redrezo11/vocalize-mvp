@@ -53,4 +53,5 @@ export const OPERATION_COSTS = {
   lexis_audio_batch: 2,
   per_word_audio: 1,       // per batch generation, not per word
   classroom_narration: 1,  // per narration segment (pre-listening or plenary)
+  json_repair: 1,          // LLM-based JSON repair fallback
 } as const;

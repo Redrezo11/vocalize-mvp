@@ -11,6 +11,7 @@ import type { SpeakerCountDefault } from './Settings';
 import { generateBonusForTest } from '../helpers/bonusGeneration';
 import { OPERATION_COSTS } from '../utils/tokenCosts';
 import { reportTokenUsage, hasEnoughTokens } from '../utils/tokenApi';
+import { repairAndParse, robustJsonParse } from '../utils/jsonRepair';
 import TokenConfirmDialog from './TokenConfirmDialog';
 
 const API_BASE = '/api';
@@ -25,11 +26,12 @@ interface OneShotCreatorProps {
 }
 
 // --- Processing stages ---
-type ProcessingStage = 'idle' | 'parsing' | 'generating-audio' | 'audio_failed' | 'saving-audio' | 'creating-test' | 'done' | 'error';
+type ProcessingStage = 'idle' | 'parsing' | 'repairing' | 'generating-audio' | 'audio_failed' | 'saving-audio' | 'creating-test' | 'done' | 'error';
 
 const STAGE_CONFIG: Record<ProcessingStage, { label: string; labelAr: string; progress: number }> = {
   idle: { label: '', labelAr: '', progress: 0 },
   parsing: { label: 'Parsing response...', labelAr: 'جاري التحليل...', progress: 10 },
+  repairing: { label: 'Fixing JSON with AI...', labelAr: 'إصلاح JSON بالذكاء الاصطناعي...', progress: 15 },
   'generating-audio': { label: 'Generating audio...', labelAr: 'جاري إنشاء الصوت...', progress: 40 },
   audio_failed: { label: 'Audio generation failed', labelAr: 'فشل إنشاء الصوت', progress: 40 },
   'saving-audio': { label: 'Saving audio...', labelAr: 'جاري حفظ الصوت...', progress: 70 },
@@ -233,13 +235,7 @@ export interface OneShotPayload {
 
 // Exported for use by JamButton
 export function validatePayload(jsonText: string): OneShotPayload {
-  // Strip markdown code fences
-  let cleaned = jsonText.trim();
-  if (cleaned.startsWith('```')) {
-    cleaned = cleaned.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
-  }
-
-  const parsed = JSON.parse(cleaned);
+  const parsed = repairAndParse(jsonText);
 
   if (!parsed.title || typeof parsed.title !== 'string') throw new Error('Missing "title"');
   // Accept "passage" as alias for "transcript" (reading mode)
@@ -1122,15 +1118,36 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
       return;
     }
 
-    // Stage 1: Parse
+    // Stage 1: Parse (with hardcoded repair, then LLM repair fallback)
     setStage('parsing');
     let payload: OneShotPayload;
     try {
       payload = validatePayload(pasteContent);
-    } catch (err) {
-      setErrorMsg(`Parse error: ${err instanceof Error ? err.message : 'Invalid JSON'}`);
-      setStage('error');
-      return;
+    } catch (parseErr) {
+      // Tier 2: Try LLM repair if user is authenticated
+      if (user) {
+        setStage('repairing');
+        try {
+          const { result } = await robustJsonParse(pasteContent, { llmRepair: true });
+          // Re-validate the repaired JSON through field checks
+          payload = validatePayload(JSON.stringify(result));
+          // Deduct 1 token for the repair call
+          reportTokenUsage('json_repair', OPERATION_COSTS.json_repair, {
+            provider: 'openai',
+            model: 'gpt-5-mini',
+          }).then(res => {
+            if (res.token_balance !== undefined) updateTokenBalance(res.token_balance);
+          }).catch(console.error);
+        } catch (repairErr) {
+          setErrorMsg(`Parse failed even after AI repair: ${repairErr instanceof Error ? repairErr.message : 'Invalid JSON'}`);
+          setStage('error');
+          return;
+        }
+      } else {
+        setErrorMsg(`Parse error: ${parseErr instanceof Error ? parseErr.message : 'Invalid JSON'}`);
+        setStage('error');
+        return;
+      }
     }
 
     // Reading mode: skip all audio stages, save test directly

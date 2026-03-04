@@ -57,11 +57,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
-  // Check existing session on mount
+  // Check existing session on mount (with refresh fallback for expired access tokens)
   useEffect(() => {
     const checkSession = async () => {
       try {
-        const res = await fetch(`${API_BASE}/auth/me`);
+        let res = await fetch(`${API_BASE}/auth/me`);
+        if (!res.ok) {
+          // Access token expired — try refreshing with 7-day refresh token
+          const refreshRes = await fetch(`${API_BASE}/auth/refresh`, { method: 'POST' });
+          if (refreshRes.ok) {
+            res = await fetch(`${API_BASE}/auth/me`);
+          }
+        }
         if (res.ok) {
           const data = await res.json();
           setUser({ id: data.id, username: data.username, name: data.name, role: data.role, tokenBalance: data.token_balance ?? 0 });
@@ -76,6 +83,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     checkSession();
     return () => stopAutoRefresh();
   }, [startAutoRefresh, stopAutoRefresh]);
+
+  // Proactively refresh tokens when tab becomes visible (browser suspends intervals in background)
+  useEffect(() => {
+    const onVisible = async () => {
+      if (document.visibilityState === 'visible' && user) {
+        try {
+          const res = await fetch(`${API_BASE}/auth/refresh`, { method: 'POST' });
+          if (!res.ok) {
+            setUser(null);
+            stopAutoRefresh();
+          }
+        } catch {
+          // Network error — don't log out, will retry
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [user, stopAutoRefresh]);
 
   const login = useCallback(async (username: string, password: string): Promise<{ success: boolean; error?: string }> => {
     try {

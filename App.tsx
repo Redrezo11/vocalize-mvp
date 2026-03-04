@@ -1885,9 +1885,21 @@ const App: React.FC = () => {
                 body: JSON.stringify(test),
               });
               if (!response.ok) throw new Error('Failed to update test');
-              const updatedTest = await response.json();
-              console.log('[onUpdateTest] Server response:', updatedTest);
-              console.log('[onUpdateTest] Server response lexisAudio:', updatedTest.lexisAudio);
+              const raw = await response.json();
+              console.log('[onUpdateTest] Server response:', raw);
+              console.log('[onUpdateTest] Server response lexisAudio:', raw.lexisAudio);
+              // Map MongoDB field names to client-side names (same as loadAllTests)
+              const updatedTest = {
+                ...raw,
+                id: raw._id,
+                createdAt: raw.created_at,
+                updatedAt: raw.updated_at,
+                createdBy: raw.created_by ? { name: raw.created_by.name, username: raw.created_by.username } : null,
+                speakerCount: raw.speaker_count ?? undefined,
+                sourceText: raw.source_text || undefined,
+                questions: raw.questions?.map((q: any) => ({ ...q, id: q._id || q.id })) || [],
+                lexis: raw.lexis?.map((l: any) => ({ ...l, id: l._id || l.id })),
+              };
               // Update both local state lists
               setAllTests(prev => prev.map(t => t.id === test.id ? updatedTest : t));
               setAudioTests(prev => prev.map(t => t.id === test.id ? updatedTest : t));
