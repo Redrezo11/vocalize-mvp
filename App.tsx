@@ -246,11 +246,11 @@ const App: React.FC = () => {
         const audio = audioStorage.savedAudios.find(a => a.id === savedId);
         if (audio) {
           setSelectedAudio(audio);
-        } else if (['detail', 'test-builder', 'classroom'].includes(currentView)) {
+        } else if (['detail', 'test-builder'].includes(currentView)) {
           // Audio not found — fall back to library instead of broken view
           setCurrentView('library');
         }
-      } else if (['detail', 'test-builder', 'classroom'].includes(currentView)) {
+      } else if (['detail', 'test-builder'].includes(currentView)) {
         setCurrentView('library');
       }
     }
