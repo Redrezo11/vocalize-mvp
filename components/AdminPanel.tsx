@@ -9,8 +9,39 @@ interface User {
   name: string;
   role: 'admin' | 'teacher';
   is_active: boolean;
+  token_balance: number;
+  token_limit: number;
+  tokens_used: number;
   created_at: string;
 }
+
+interface UsageSummary {
+  _id: string;
+  name: string;
+  username: string;
+  total_tokens: number;
+  operation_count: number;
+  token_balance: number;
+  token_limit: number;
+}
+
+interface UsageByOp {
+  _id: string;
+  total_tokens: number;
+  count: number;
+}
+
+interface UsageByProvider {
+  _id: { provider: string; model: string };
+  total_tokens: number;
+  count: number;
+}
+
+const TOKEN_PRESETS = [
+  { label: '$1', tokens: 300 },
+  { label: '$2', tokens: 600 },
+  { label: '$5', tokens: 1500 },
+];
 
 interface AdminPanelProps {
   isOpen: boolean;
@@ -19,9 +50,18 @@ interface AdminPanelProps {
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
   const { user: currentUser } = useAuth();
+  const [activeTab, setActiveTab] = useState<'users' | 'usage'>('users');
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+
+  // Token grant state
+  const [grantingUserId, setGrantingUserId] = useState<string | null>(null);
+  const [customTokens, setCustomTokens] = useState('');
+
+  // Usage analytics state
+  const [usageData, setUsageData] = useState<{ userSummary: UsageSummary[]; byOperation: UsageByOp[]; byProvider: UsageByProvider[] } | null>(null);
+  const [usageLoading, setUsageLoading] = useState(false);
 
   // Add form state
   const [showAddForm, setShowAddForm] = useState(false);
@@ -61,8 +101,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
       loadUsers();
       setShowAddForm(false);
       setEditingId(null);
+      setGrantingUserId(null);
+      setActiveTab('users');
     }
   }, [isOpen, loadUsers]);
+
+  useEffect(() => {
+    if (isOpen && activeTab === 'usage') loadUsageData();
+  }, [isOpen, activeTab]);
 
   if (!isOpen) return null;
 
@@ -138,6 +184,38 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
     } catch {}
   };
 
+  const handleGrantTokens = async (userId: string, tokens: number) => {
+    const user = users.find(u => u._id === userId);
+    if (!user) return;
+    try {
+      const res = await fetch(`${API_BASE}/admin/users/${userId}/tokens`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token_balance: user.token_balance + tokens,
+          token_limit: user.token_limit + tokens,
+        }),
+      });
+      if (res.ok) {
+        await loadUsers();
+        setGrantingUserId(null);
+        setCustomTokens('');
+      }
+    } catch {}
+  };
+
+  const loadUsageData = async () => {
+    setUsageLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/admin/usage`);
+      if (res.ok) {
+        const data = await res.json();
+        setUsageData(data);
+      }
+    } catch {}
+    setUsageLoading(false);
+  };
+
   const startEdit = (user: User) => {
     setEditingId(user._id);
     setEditName(user.name);
@@ -151,13 +229,29 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
-          <h2 className="text-xl font-bold text-slate-900">User Management</h2>
-          <button onClick={onClose} className="p-1 text-slate-400 hover:text-slate-600 transition-colors">
-            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
+        <div className="px-6 pt-4 pb-0 border-b border-slate-200">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-xl font-bold text-slate-900">Admin Panel</h2>
+            <button onClick={onClose} className="p-1 text-slate-400 hover:text-slate-600 transition-colors">
+              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+          <div className="flex gap-4">
+            <button
+              onClick={() => setActiveTab('users')}
+              className={`pb-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'users' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+            >
+              Users
+            </button>
+            <button
+              onClick={() => setActiveTab('usage')}
+              className={`pb-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'usage' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+            >
+              Usage
+            </button>
+          </div>
         </div>
 
         {/* Content */}
@@ -166,6 +260,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
             <div className="mb-4 px-3 py-2.5 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">{error}</div>
           )}
 
+          {activeTab === 'users' && (
+          <>
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
               <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin" />
@@ -234,6 +330,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                       </div>
                     ) : (
                       /* Display mode */
+                      <>
                       <div className="flex items-center">
                         <div className="flex items-center gap-3 min-w-0 flex-1">
                           <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white ${u.role === 'admin' ? 'bg-violet-500' : 'bg-indigo-500'}`}>
@@ -249,10 +346,28 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                                 <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-orange-100 text-orange-700">disabled</span>
                               )}
                             </div>
-                            <span className="text-xs text-slate-500">@{u.username}</span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs text-slate-500">@{u.username}</span>
+                              {u.role !== 'admin' && (
+                                <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-emerald-50 text-emerald-700">
+                                  {u.token_balance}/{u.token_limit} tokens
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                         <div className="flex items-center gap-1 ml-auto flex-shrink-0">
+                          {u.role !== 'admin' && (
+                            <button
+                              onClick={() => setGrantingUserId(grantingUserId === u._id ? null : u._id)}
+                              className={`p-1.5 rounded-lg transition-colors ${grantingUserId === u._id ? 'text-emerald-600 bg-emerald-50' : 'text-slate-400 hover:text-emerald-600 hover:bg-emerald-50'}`}
+                              title="Grant tokens"
+                            >
+                              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="16" /><line x1="8" y1="12" x2="16" y2="12" />
+                              </svg>
+                            </button>
+                          )}
                           <button
                             onClick={() => startEdit(u)}
                             className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
@@ -294,6 +409,41 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                           )}
                         </div>
                       </div>
+                      {/* Token grant panel */}
+                      {grantingUserId === u._id && (
+                        <div className="mt-2 pt-2 border-t border-slate-100">
+                          <p className="text-xs font-medium text-slate-600 mb-1.5">Grant tokens to {u.name}</p>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {TOKEN_PRESETS.map(p => (
+                              <button
+                                key={p.label}
+                                onClick={() => handleGrantTokens(u._id, p.tokens)}
+                                className="px-2.5 py-1 text-xs font-medium rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors"
+                              >
+                                {p.label} ({p.tokens})
+                              </button>
+                            ))}
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="number"
+                                value={customTokens}
+                                onChange={e => setCustomTokens(e.target.value)}
+                                placeholder="Custom"
+                                min="1"
+                                className="w-20 px-2 py-1 rounded-lg border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                              />
+                              <button
+                                onClick={() => { if (customTokens && Number(customTokens) > 0) handleGrantTokens(u._id, Number(customTokens)); }}
+                                disabled={!customTokens || Number(customTokens) <= 0}
+                                className="px-2.5 py-1 text-xs font-medium rounded-lg bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-40 transition-colors"
+                              >
+                                Grant
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      </>
                     )}
                   </div>
                 ))}
@@ -390,6 +540,86 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                 </button>
               )}
             </>
+          )}
+          </>
+          )}
+
+          {/* Usage Analytics Tab */}
+          {activeTab === 'usage' && (
+            <div className="space-y-4">
+              {usageLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : usageData ? (
+                <>
+                  {/* Per-user summary */}
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-900 mb-2">Usage by User</h3>
+                    {usageData.userSummary.length === 0 ? (
+                      <p className="text-sm text-slate-500 text-center py-4">No usage data yet</p>
+                    ) : (
+                      <div className="border border-slate-200 rounded-xl overflow-hidden">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="bg-slate-50 text-slate-600 font-medium">
+                              <th className="text-left px-3 py-2">User</th>
+                              <th className="text-right px-3 py-2">Used</th>
+                              <th className="text-right px-3 py-2">Balance</th>
+                              <th className="text-right px-3 py-2">Ops</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {usageData.userSummary.map(u => (
+                              <tr key={u._id} className="border-t border-slate-100">
+                                <td className="px-3 py-2 font-medium text-slate-900">{u.name} <span className="text-slate-400 font-normal">@{u.username}</span></td>
+                                <td className="px-3 py-2 text-right text-slate-700">{u.total_tokens}</td>
+                                <td className="px-3 py-2 text-right text-emerald-700">{u.token_balance}/{u.token_limit}</td>
+                                <td className="px-3 py-2 text-right text-slate-500">{u.operation_count}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* By operation */}
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-900 mb-2">By Operation</h3>
+                    {usageData.byOperation.length === 0 ? (
+                      <p className="text-sm text-slate-500 text-center py-4">No data</p>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-2">
+                        {usageData.byOperation.map(op => (
+                          <div key={op._id} className="px-3 py-2 rounded-lg border border-slate-200 bg-slate-50">
+                            <div className="text-xs font-medium text-slate-700">{op._id}</div>
+                            <div className="text-sm font-bold text-slate-900">{op.total_tokens} tokens <span className="text-xs font-normal text-slate-500">({op.count} calls)</span></div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* By provider */}
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-900 mb-2">By Provider / Model</h3>
+                    {usageData.byProvider.length === 0 ? (
+                      <p className="text-sm text-slate-500 text-center py-4">No data</p>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-2">
+                        {usageData.byProvider.map((p, i) => (
+                          <div key={i} className="px-3 py-2 rounded-lg border border-slate-200 bg-slate-50">
+                            <div className="text-xs font-medium text-slate-700">{p._id.provider || 'unknown'} {p._id.model ? `/ ${p._id.model}` : ''}</div>
+                            <div className="text-sm font-bold text-slate-900">{p.total_tokens} tokens <span className="text-xs font-normal text-slate-500">({p.count} calls)</span></div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : null}
+            </div>
           )}
         </div>
       </div>

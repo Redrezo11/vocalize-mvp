@@ -176,12 +176,28 @@ const userSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   role: { type: String, enum: ['admin', 'teacher'], default: 'teacher' },
   is_active: { type: Boolean, default: true },
+  token_balance: { type: Number, default: 0 },
+  token_limit: { type: Number, default: 0 },
+  tokens_used: { type: Number, default: 0 },
   refresh_token: { type: String, default: null },
   created_at: { type: Date, default: Date.now },
   updated_at: { type: Date, default: Date.now }
 });
 userSchema.index({ username: 1 });
 const User = mongoose.model('User', userSchema);
+
+// Usage Log Schema (append-only ledger for token tracking)
+const usageLogSchema = new mongoose.Schema({
+  user_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  operation: { type: String, required: true },
+  tokens_used: { type: Number, required: true },
+  provider: { type: String },
+  model: { type: String },
+  metadata: { type: mongoose.Schema.Types.Mixed },
+  created_at: { type: Date, default: Date.now }
+});
+usageLogSchema.index({ user_id: 1, created_at: -1 });
+const UsageLog = mongoose.model('UsageLog', usageLogSchema);
 
 // Helper: Upload audio to Cloudinary
 const uploadToCloudinary = async (base64Audio, publicId) => {
@@ -370,6 +386,24 @@ function canModify(createdBy, user) {
   return createdBy.toString() === user.userId;
 }
 
+// Deduct tokens atomically. Admins are unlimited (log only). Returns null if insufficient.
+async function deductTokens(userId, role, amount, operation, details = {}) {
+  if (role === 'admin') {
+    // Admin: log only, no deduction
+    await UsageLog.create({ user_id: userId, tokens_used: amount, operation, ...details });
+    return { admin: true };
+  }
+  const user = await User.findOneAndUpdate(
+    { _id: userId, token_balance: { $gte: amount } },
+    { $inc: { token_balance: -amount, tokens_used: amount } },
+    { new: true }
+  );
+  if (user) {
+    await UsageLog.create({ user_id: userId, tokens_used: amount, operation, ...details });
+  }
+  return user;
+}
+
 // ==================== AUTH ROUTES ====================
 
 // Login
@@ -393,7 +427,7 @@ app.post('/api/auth/login', async (req, res) => {
     await user.save();
 
     setAuthCookies(res, accessToken, refreshToken);
-    res.json({ user: { id: user._id, username: user.username, name: user.name, role: user.role } });
+    res.json({ user: { id: user._id, username: user.username, name: user.name, role: user.role, token_balance: user.token_balance } });
   } catch (err) {
     console.error('[Auth] Login error:', err);
     res.status(500).json({ error: 'Login failed' });
@@ -420,7 +454,7 @@ app.post('/api/auth/refresh', async (req, res) => {
     await user.save();
 
     setAuthCookies(res, accessToken, refreshToken);
-    res.json({ user: { id: user._id, username: user.username, name: user.name, role: user.role } });
+    res.json({ user: { id: user._id, username: user.username, name: user.name, role: user.role, token_balance: user.token_balance } });
   } catch {
     clearAuthCookies(res);
     res.status(401).json({ error: 'Invalid refresh token' });
@@ -451,7 +485,7 @@ app.get('/api/auth/me', authenticate, async (req, res) => {
   try {
     const user = await User.findById(req.user.userId).select('-password_hash -refresh_token');
     if (!user) return res.status(404).json({ error: 'User not found' });
-    res.json({ id: user._id, username: user.username, name: user.name, role: user.role, is_active: user.is_active });
+    res.json({ id: user._id, username: user.username, name: user.name, role: user.role, is_active: user.is_active, token_balance: user.token_balance });
   } catch (err) {
     console.error('[Auth] Me error:', err);
     res.status(500).json({ error: 'Failed to get user' });
@@ -530,6 +564,119 @@ app.delete('/api/admin/users/:id', authenticate, requireAdmin, async (req, res) 
   } catch (err) {
     console.error('[Admin] Delete user error:', err);
     res.status(500).json({ error: 'Failed to delete user' });
+  }
+});
+
+// ==================== TOKEN ROUTES ====================
+
+// Get own token balance
+app.get('/api/tokens/balance', authenticate, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId).select('token_balance token_limit tokens_used role');
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    res.json({
+      token_balance: user.token_balance,
+      token_limit: user.token_limit,
+      tokens_used: user.tokens_used,
+      unlimited: user.role === 'admin'
+    });
+  } catch (err) {
+    console.error('[Tokens] Balance error:', err);
+    res.status(500).json({ error: 'Failed to get balance' });
+  }
+});
+
+// Report usage & deduct tokens
+app.post('/api/tokens/use', authenticate, async (req, res) => {
+  try {
+    const { operation, tokens, provider, model, metadata } = req.body;
+    if (!operation || !tokens || tokens <= 0) return res.status(400).json({ error: 'operation and tokens (>0) required' });
+
+    const result = await deductTokens(req.user.userId, req.user.role, tokens, operation, { provider, model, metadata });
+    if (!result) return res.status(402).json({ error: 'Insufficient tokens' });
+
+    if (result.admin) {
+      return res.json({ unlimited: true });
+    }
+    res.json({ token_balance: result.token_balance });
+  } catch (err) {
+    console.error('[Tokens] Use error:', err);
+    res.status(500).json({ error: 'Failed to deduct tokens' });
+  }
+});
+
+// Admin: grant/set tokens for a user
+app.put('/api/admin/users/:id/tokens', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { token_balance, token_limit } = req.body;
+    const updates = { updated_at: new Date() };
+    if (token_balance !== undefined) updates.token_balance = token_balance;
+    if (token_limit !== undefined) updates.token_limit = token_limit;
+
+    const user = await User.findByIdAndUpdate(req.params.id, updates, { new: true })
+      .select('-password_hash -refresh_token');
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    res.json(user);
+  } catch (err) {
+    console.error('[Admin] Token update error:', err);
+    res.status(500).json({ error: 'Failed to update tokens' });
+  }
+});
+
+// Admin: usage analytics
+app.get('/api/admin/usage', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { userId } = req.query;
+    const match = userId ? { user_id: new mongoose.Types.ObjectId(userId) } : {};
+
+    // Per-user summary
+    const userSummary = await UsageLog.aggregate([
+      { $match: match },
+      { $group: {
+        _id: '$user_id',
+        total_tokens: { $sum: '$tokens_used' },
+        operation_count: { $sum: 1 }
+      }},
+      { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'user' }},
+      { $unwind: '$user' },
+      { $project: {
+        _id: 1,
+        name: '$user.name',
+        username: '$user.username',
+        total_tokens: 1,
+        operation_count: 1,
+        token_balance: '$user.token_balance',
+        token_limit: '$user.token_limit'
+      }},
+      { $sort: { total_tokens: -1 }}
+    ]);
+
+    // Breakdown by operation
+    const byOperation = await UsageLog.aggregate([
+      { $match: match },
+      { $group: {
+        _id: '$operation',
+        total_tokens: { $sum: '$tokens_used' },
+        count: { $sum: 1 }
+      }},
+      { $sort: { total_tokens: -1 }}
+    ]);
+
+    // Breakdown by provider
+    const byProvider = await UsageLog.aggregate([
+      { $match: match },
+      { $group: {
+        _id: { provider: '$provider', model: '$model' },
+        total_tokens: { $sum: '$tokens_used' },
+        count: { $sum: 1 }
+      }},
+      { $sort: { total_tokens: -1 }}
+    ]);
+
+    res.json({ userSummary, byOperation, byProvider });
+  } catch (err) {
+    console.error('[Admin] Usage analytics error:', err);
+    res.status(500).json({ error: 'Failed to get usage data' });
   }
 });
 

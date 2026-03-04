@@ -7,6 +7,7 @@ interface AuthUser {
   username: string;
   name: string;
   role: 'admin' | 'teacher';
+  tokenBalance: number;
 }
 
 interface AuthContextType {
@@ -14,6 +15,7 @@ interface AuthContextType {
   isLoading: boolean;
   login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
+  updateTokenBalance: (balance: number) => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -21,6 +23,7 @@ const AuthContext = createContext<AuthContextType>({
   isLoading: true,
   login: async () => ({ success: false }),
   logout: async () => {},
+  updateTokenBalance: () => {},
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -60,7 +63,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const res = await fetch(`${API_BASE}/auth/me`);
         if (res.ok) {
           const data = await res.json();
-          setUser({ id: data.id, username: data.username, name: data.name, role: data.role });
+          setUser({ id: data.id, username: data.username, name: data.name, role: data.role, tokenBalance: data.token_balance ?? 0 });
           startAutoRefresh();
         }
       } catch {
@@ -84,13 +87,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!res.ok) {
         return { success: false, error: data.error || 'Login failed' };
       }
-      setUser(data.user);
+      const u = data.user;
+      setUser({ id: u.id, username: u.username, name: u.name, role: u.role, tokenBalance: u.token_balance ?? 0 });
       startAutoRefresh();
       return { success: true };
     } catch {
       return { success: false, error: 'Network error. Please try again.' };
     }
   }, [startAutoRefresh]);
+
+  const updateTokenBalance = useCallback((balance: number) => {
+    setUser(prev => prev ? { ...prev, tokenBalance: balance } : null);
+  }, []);
 
   const logout = useCallback(async () => {
     try {
@@ -103,7 +111,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [stopAutoRefresh]);
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, login, logout, updateTokenBalance }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1355,6 +1355,11 @@ const App: React.FC = () => {
           {/* User & Logout */}
           {user && (
             <div className="flex items-center gap-2 ml-1 pl-2 border-l border-slate-200">
+              {user.role !== 'admin' && (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 hidden sm:inline">
+                  {user.tokenBalance} tokens
+                </span>
+              )}
               <span className="text-xs text-slate-500 hidden sm:inline">{user.name}</span>
               <button
                 onClick={logout}
