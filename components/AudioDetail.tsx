@@ -6,6 +6,7 @@ interface AudioDetailProps {
   audio: SavedAudio;
   tests?: ListeningTest[];
   isAdmin?: boolean;
+  currentUsername?: string;
   onBack: () => void;
   onDelete: (audio: SavedAudio) => void;
   onCreateTest: (audio: SavedAudio) => void;
@@ -53,6 +54,7 @@ export const AudioDetail: React.FC<AudioDetailProps> = ({
   audio,
   tests = [],
   isAdmin = false,
+  currentUsername,
   onBack,
   onDelete,
   onCreateTest,
@@ -128,7 +130,7 @@ export const AudioDetail: React.FC<AudioDetailProps> = ({
           <ArrowLeftIcon className="w-4 h-4" />
           <span className="font-medium">Back to Library</span>
         </button>
-        {isAdmin && (
+        {(isAdmin || currentUsername === audio.createdBy?.username) && (
           <button
             onClick={handleDelete}
             className="flex items-center gap-2 px-4 py-2 text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200"
@@ -278,7 +280,7 @@ export const AudioDetail: React.FC<AudioDetailProps> = ({
                       >
                         <EditIcon className="w-4 h-4" />
                       </button>
-                      {isAdmin && (
+                      {(isAdmin || currentUsername === test.createdBy?.username) && (
                         <button
                           onClick={() => {
                             if (confirm('Are you sure you want to delete this test?')) {

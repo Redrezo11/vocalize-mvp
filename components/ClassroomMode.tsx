@@ -275,7 +275,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
   // Reset content tab when test changes
   const selectedTestId = selectedTest?.id;
   useEffect(() => {
-    setContentTab('passage');
+    setContentTab(appMode === 'reading' ? 'vocabulary' : 'passage');
     setPassageFontSize(1.25);
   }, [selectedTestId]);
 
@@ -330,7 +330,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
           setSelectedAudio(audio || null);
           setPlayCount(0);
           setIsPlaying(false);
-          setContentTab('passage');
+          setContentTab(appMode === 'reading' ? 'vocabulary' : 'passage');
           setPassageFontSize(1.25);
           setCurrentTime(0);
           setDuration(0);
@@ -489,7 +489,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
     setShowPreListeningArabic(false);
     setIsPlayingPreListeningAudio(false);
     setFullscreenSlide(null);
-    setContentTab('passage');
+    setContentTab(appMode === 'reading' ? 'vocabulary' : 'passage');
     setPassageFontSize(1.25);
     setCurrentTime(0);
     setDuration(0);
@@ -1199,7 +1199,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                               <EditIcon className="w-4 h-4" />
                             </button>
                           )}
-                          {onDeleteTest && user?.role === 'admin' && (
+                          {onDeleteTest && (user?.role === 'admin' || user?.username === test.createdBy?.username) && (
                             <button
                               onClick={() => handleDeleteClick(test)}
                               className={`p-1.5 rounded-lg transition-colors ${isDark ? 'text-slate-500 hover:text-red-400 hover:bg-slate-700' : 'text-slate-400 hover:text-red-500 hover:bg-red-50'}`}

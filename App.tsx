@@ -150,6 +150,17 @@ const App: React.FC = () => {
     return filtered;
   }, [allTests, settingsHook.settings.appMode]);
 
+  // Filter content by ownership for teachers (admin sees everything)
+  const userFilteredTests = useMemo(() => {
+    if (user?.role === 'admin') return modeFilteredTests;
+    return modeFilteredTests.filter(t => t.createdBy?.username === user?.username);
+  }, [modeFilteredTests, user]);
+
+  const userFilteredAudios = useMemo(() => {
+    if (user?.role === 'admin') return audioStorage.savedAudios;
+    return audioStorage.savedAudios.filter(a => a.createdBy?.username === user?.username);
+  }, [audioStorage.savedAudios, user]);
+
   // Analysis State
   const analysis = useMemo(() => parseDialogue(text), [text]);
   const [speakerMapping, setSpeakerMapping] = useState<SpeakerVoiceMapping>({});
@@ -1627,11 +1638,12 @@ const App: React.FC = () => {
       <Suspense fallback={<InlineSpinner />}>
         <AudioLibrary
           key={libraryTab}
-          savedAudios={settingsHook.settings.appMode === 'reading' ? [] : audioStorage.savedAudios}
-          tests={modeFilteredTests}
+          savedAudios={settingsHook.settings.appMode === 'reading' ? [] : userFilteredAudios}
+          tests={userFilteredTests}
           isLoading={audioStorage.isLoading}
           initialTab={settingsHook.settings.appMode === 'reading' ? 'tests' : libraryTab}
           isAdmin={user?.role === 'admin'}
+          currentUsername={user?.username}
           onPlay={handlePlayFromLibrary}
           onDelete={handleDelete}
           onDeleteTest={handleDeleteTestFromLibrary}
@@ -1663,6 +1675,7 @@ const App: React.FC = () => {
             audio={selectedAudio}
             tests={audioTests}
             isAdmin={user?.role === 'admin'}
+            currentUsername={user?.username}
             onBack={() => {
               // Go back to the correct tab based on entry type
               console.log('[AudioDetail onBack] selectedAudio:', selectedAudio?.id, 'isTranscriptOnly:', selectedAudio?.isTranscriptOnly);
@@ -1852,9 +1865,9 @@ const App: React.FC = () => {
       <AppModeProvider mode={settingsHook.settings.appMode}>
         <Suspense fallback={<LoadingSpinner />}>
           <ClassroomMode
-          tests={modeFilteredTests}
+          tests={userFilteredTests}
           isLoadingTests={isLoadingTests}
-          audioEntries={audioStorage.savedAudios}
+          audioEntries={userFilteredAudios}
           theme={settingsHook.settings.classroomTheme}
           autoSelectTestId={autoSelectTestId}
           onAutoSelectHandled={() => setAutoSelectTestId(null)}

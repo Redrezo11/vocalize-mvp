@@ -13,6 +13,7 @@ interface AudioLibraryProps {
   isLoading: boolean;
   initialTab?: LibraryTab;
   isAdmin?: boolean;
+  currentUsername?: string;
   onPlay: (audio: SavedAudio) => void;
   onDelete: (audio: SavedAudio) => void;
   onDeleteTest?: (test: ListeningTest) => void;
@@ -59,6 +60,7 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
   isLoading,
   initialTab = 'audio',
   isAdmin = false,
+  currentUsername,
   onPlay,
   onDelete,
   onDeleteTest,
@@ -401,7 +403,7 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
                           <EditIcon className="w-4 h-4" />
                         </button>
                       )}
-                      {isAdmin && (
+                      {(isAdmin || currentUsername === test.createdBy?.username) && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
