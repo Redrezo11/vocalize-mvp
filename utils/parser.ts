@@ -1,4 +1,5 @@
-import { DialogueAnalysis, SpeakerSegment, SpeakerVoiceMapping, OPENAI_VOICES } from '../types';
+import { DialogueAnalysis, SpeakerSegment, SpeakerVoiceMapping, OPENAI_VOICES, GEMINI_VOICES } from '../types';
+import { callOpenAI } from '../helpers/bonusGeneration';
 
 const MALE_NAMES = new Set([
   'john', 'james', 'robert', 'michael', 'william', 'david', 'richard', 'joseph', 'thomas', 'charles', 
@@ -194,6 +195,54 @@ export const parseDialogue = (text: string): DialogueAnalysis => {
   };
 };
 
+// Style-matched Gemini → OpenAI voice mapping (from VOICE_ASSIGNMENT_GUIDE.md)
+const GEMINI_TO_OPENAI: Record<string, string> = {
+  // Female: Gemini voice → OpenAI voice (style-matched)
+  Aoede: 'coral', Kore: 'sage', Leda: 'nova', Zephyr: 'nova',
+  Autonoe: 'coral', Callirhoe: 'shimmer', Despina: 'sage', Erinome: 'sage',
+  Gacrux: 'ballad', Laomedeia: 'shimmer', Pulcherrima: 'ballad',
+  Sulafat: 'shimmer', Vindemiatrix: 'sage', Achernar: 'shimmer',
+  // Male: Gemini voice → OpenAI voice (style-matched)
+  Puck: 'verse', Charon: 'ash', Fenrir: 'echo', Orus: 'onyx',
+  Achird: 'fable', Algenib: 'onyx', Algieba: 'fable', Alnilam: 'onyx',
+  Enceladus: 'echo', Iapetus: 'echo', Rasalgethi: 'verse',
+  Sadachbia: 'ash', Sadaltager: 'ash', Schedar: 'ash',
+  Umbriel: 'fable', Zubenelgenubi: 'fable',
+};
+
+/**
+ * Map Gemini voice assignments to style-matched OpenAI voices.
+ * Preserves gender and matches tone/style. Avoids duplicate assignments.
+ */
+export function mapGeminiToOpenAIVoices(
+  geminiMapping: SpeakerVoiceMapping
+): SpeakerVoiceMapping {
+  const result: SpeakerVoiceMapping = {};
+  const usedVoices = new Set<string>();
+
+  for (const [speaker, geminiVoice] of Object.entries(geminiMapping)) {
+    let openaiVoice = GEMINI_TO_OPENAI[geminiVoice];
+
+    // If mapped voice already used by another speaker, find alternative of same gender
+    if (openaiVoice && usedVoices.has(openaiVoice)) {
+      const geminiDef = GEMINI_VOICES.find(v => v.name === geminiVoice);
+      const gender = geminiDef?.gender || 'Male';
+      const candidates = OPENAI_VOICES.filter(v => v.gender === gender && !usedVoices.has(v.name));
+      openaiVoice = candidates[0]?.name || openaiVoice; // allow duplicate if exhausted
+    }
+
+    // Gender-aware fallback if voice not in mapping
+    if (!openaiVoice) {
+      const geminiDef = GEMINI_VOICES.find(v => v.name === geminiVoice);
+      openaiVoice = geminiDef?.gender === 'Female' ? 'nova' : 'alloy';
+    }
+
+    result[speaker] = openaiVoice;
+    usedVoices.add(openaiVoice);
+  }
+  return result;
+}
+
 export function assignOpenAIVoices(speakers: string[]): SpeakerVoiceMapping {
   const femaleVoices = OPENAI_VOICES.filter(v => v.gender === 'Female');
   const maleVoices = OPENAI_VOICES.filter(v => v.gender === 'Male');
@@ -218,6 +267,53 @@ export function assignOpenAIVoices(speakers: string[]): SpeakerVoiceMapping {
         mapping[speaker] = femaleVoices[femaleIdx % femaleVoices.length].name;
         femaleIdx++;
       }
+    }
+  }
+  return mapping;
+}
+
+/**
+ * Resolve gender for a name — uses name lists first, falls back to LLM for unknowns.
+ * Always returns Male or Female (never Neutral).
+ */
+export async function resolveGender(name: string): Promise<'Male' | 'Female'> {
+  const quick = guessGender(name);
+  if (quick !== 'Neutral') return quick;
+
+  try {
+    const response = await callOpenAI(
+      'gpt-4o-mini',
+      'Given a character name, respond with exactly one word: Male or Female.',
+      name
+    );
+    return response.trim() === 'Female' ? 'Female' : 'Male';
+  } catch {
+    return 'Male'; // safe fallback on API error
+  }
+}
+
+/**
+ * Async version of assignOpenAIVoices — resolves unknown genders via LLM.
+ * Use when no prior Gemini mapping is available.
+ */
+export async function assignOpenAIVoicesAsync(
+  speakers: string[]
+): Promise<SpeakerVoiceMapping> {
+  const femaleVoices = OPENAI_VOICES.filter(v => v.gender === 'Female');
+  const maleVoices = OPENAI_VOICES.filter(v => v.gender === 'Male');
+  let femaleIdx = 0;
+  let maleIdx = 0;
+
+  const genders = await Promise.all(speakers.map(s => resolveGender(s)));
+
+  const mapping: SpeakerVoiceMapping = {};
+  for (let i = 0; i < speakers.length; i++) {
+    if (genders[i] === 'Female') {
+      mapping[speakers[i]] = femaleVoices[femaleIdx % femaleVoices.length].name;
+      femaleIdx++;
+    } else {
+      mapping[speakers[i]] = maleVoices[maleIdx % maleVoices.length].name;
+      maleIdx++;
     }
   }
   return mapping;

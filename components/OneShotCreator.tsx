@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import { CEFRLevel, ContentMode } from './Settings';
-import { EngineType, SavedAudio, SpeakerVoiceMapping } from '../types';
-import { parseDialogue, assignOpenAIVoices } from '../utils/parser';
+import { EngineType, SavedAudio, SpeakerVoiceMapping, GEMINI_VOICES } from '../types';
+import { parseDialogue, assignOpenAIVoices, mapGeminiToOpenAIVoices } from '../utils/parser';
 import { concatenateAudioBlobs } from '../hooks/useElevenLabsTTS';
 import { EFL_TOPICS, SpeakerCount, AudioFormat, getRandomTopic, getRandomFormat, getFormatsForSpeakerCount, getCompatibleTopic, isTopicCompatible, shuffleFormat, randomSpeakerCount, resolveSpeakerDefault } from '../utils/eflTopics';
 import { getRandomReadingTopic, getRandomReadingGenre, getCompatibleReadingTopic, shuffleReadingGenre } from '../utils/readingTopics';
@@ -1422,7 +1422,10 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
   }, [pasteContent, onComplete, isReading, user, updateTokenBalance]);
 
   // Generate audio with OpenAI TTS (fallback, multi-voice for dialogues)
-  const generateOpenAIAudio = async (transcript: string): Promise<Blob> => {
+  const generateOpenAIAudio = async (
+    transcript: string,
+    geminiMapping?: SpeakerVoiceMapping
+  ): Promise<Blob> => {
     const apiKey = (import.meta as any).env?.VITE_OPENAI_API_KEY;
     if (!apiKey || apiKey === 'PLACEHOLDER_API_KEY') {
       throw new Error('OpenAI API key not configured');
@@ -1432,23 +1435,34 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
 
     // Multi-speaker: generate each segment with a different voice
     if (analysis.isDialogue && analysis.segments.length > 1) {
-      const openaiMapping = assignOpenAIVoices(analysis.speakers);
+      // Use style-matched mapping from Gemini voices if available, otherwise guess from names
+      const openaiMapping = geminiMapping && Object.keys(geminiMapping).length > 0
+        ? mapGeminiToOpenAIVoices(geminiMapping)
+        : assignOpenAIVoices(analysis.speakers);
 
       const blobs: Blob[] = [];
       for (const segment of analysis.segments) {
         const voice = openaiMapping[segment.speaker] || 'alloy';
+        // Look up Gemini voice style for instructions
+        const geminiVoiceName = geminiMapping?.[segment.speaker];
+        const geminiDef = geminiVoiceName ? GEMINI_VOICES.find(v => v.name === geminiVoiceName) : null;
+        const instructions = geminiDef ? `Speak in a ${geminiDef.style.toLowerCase()} tone.` : undefined;
+
+        const body: Record<string, unknown> = {
+          model: 'gpt-4o-mini-tts',
+          input: segment.text,
+          voice,
+          response_format: 'mp3',
+        };
+        if (instructions) body.instructions = instructions;
+
         const response = await fetch('https://api.openai.com/v1/audio/speech', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${apiKey}`,
           },
-          body: JSON.stringify({
-            model: 'tts-1',
-            input: segment.text,
-            voice,
-            response_format: 'mp3',
-          }),
+          body: JSON.stringify(body),
         });
         if (!response.ok) {
           const error = await response.json().catch(() => ({}));
@@ -1468,7 +1482,7 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'tts-1',
+        model: 'gpt-4o-mini-tts',
         input: transcript,
         voice: 'alloy',
         response_format: 'mp3',
@@ -1593,7 +1607,7 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
     setErrorMsg('');
 
     try {
-      const audioBlob = await generateOpenAIAudio(pendingPayload.transcript);
+      const audioBlob = await generateOpenAIAudio(pendingPayload.transcript, pendingSpeakerMapping);
       await continueWithAudio(audioBlob, EngineType.OPENAI);
     } catch (err) {
       console.error('[OneShot] OpenAI TTS also failed:', err);

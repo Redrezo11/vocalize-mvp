@@ -54,4 +54,5 @@ export const OPERATION_COSTS = {
   per_word_audio: 1,       // per batch generation, not per word
   classroom_narration: 1,  // per narration segment (pre-listening or plenary)
   json_repair: 1,          // LLM-based JSON repair fallback
+  gender_resolution: 1,    // LLM-based gender classification for unknown names
 } as const;

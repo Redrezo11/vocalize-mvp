@@ -100,8 +100,7 @@ export const OPENAI_VOICES = [
   { name: 'onyx', gender: 'Male', style: 'Authoritative' },
   { name: 'ash', gender: 'Male', style: 'Clear' },
   { name: 'verse', gender: 'Male', style: 'Versatile' },
-  // Neutral
-  { name: 'alloy', gender: 'Neutral', style: 'Balanced' },
+  { name: 'alloy', gender: 'Male', style: 'Balanced' },
 ];
 
 // Saved Audio types for CRUD operations

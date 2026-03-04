@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { CEFRLevel, ContentMode } from './Settings';
-import { EngineType, SavedAudio, ListeningTest, SpeakerVoiceMapping } from '../types';
-import { parseDialogue, assignOpenAIVoices } from '../utils/parser';
+import { EngineType, SavedAudio, ListeningTest, SpeakerVoiceMapping, GEMINI_VOICES } from '../types';
+import { parseDialogue, assignOpenAIVoices, mapGeminiToOpenAIVoices } from '../utils/parser';
 import { concatenateAudioBlobs } from '../hooks/useElevenLabsTTS';
 import { buildDialoguePrompt, buildPassagePrompt, buildTestContentPrompt, validatePayload, OneShotPayload } from './OneShotCreator';
 import { EFL_TOPICS, SpeakerCount, AudioFormat, getRandomTopic, getRandomFormat, getCompatibleTopic, shuffleFormat, randomSpeakerCount } from '../utils/eflTopics';
@@ -434,7 +434,10 @@ export const JamButton: React.FC<JamButtonProps> = ({
   };
 
   // Generate audio with OpenAI TTS (returns base64, multi-voice for dialogues)
-  const generateOpenAIAudio = async (transcript: string): Promise<string> => {
+  const generateOpenAIAudio = async (
+    transcript: string,
+    geminiMapping?: SpeakerVoiceMapping
+  ): Promise<string> => {
     const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
     if (!apiKey || apiKey === 'PLACEHOLDER_API_KEY') {
       throw new Error('OpenAI API key not configured');
@@ -444,23 +447,34 @@ export const JamButton: React.FC<JamButtonProps> = ({
 
     // Multi-speaker: generate each segment with a different voice
     if (analysis.isDialogue && analysis.segments.length > 1) {
-      const openaiMapping = assignOpenAIVoices(analysis.speakers);
+      // Use style-matched mapping from Gemini voices if available, otherwise guess from names
+      const openaiMapping = geminiMapping && Object.keys(geminiMapping).length > 0
+        ? mapGeminiToOpenAIVoices(geminiMapping)
+        : assignOpenAIVoices(analysis.speakers);
 
       const blobs: Blob[] = [];
       for (const segment of analysis.segments) {
         const voice = openaiMapping[segment.speaker] || 'alloy';
+        // Look up Gemini voice style for instructions
+        const geminiVoiceName = geminiMapping?.[segment.speaker];
+        const geminiDef = geminiVoiceName ? GEMINI_VOICES.find(v => v.name === geminiVoiceName) : null;
+        const instructions = geminiDef ? `Speak in a ${geminiDef.style.toLowerCase()} tone.` : undefined;
+
+        const body: Record<string, unknown> = {
+          model: 'gpt-4o-mini-tts',
+          input: segment.text,
+          voice,
+          response_format: 'mp3',
+        };
+        if (instructions) body.instructions = instructions;
+
         const response = await fetch('https://api.openai.com/v1/audio/speech', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${apiKey}`,
           },
-          body: JSON.stringify({
-            model: 'tts-1',
-            input: segment.text,
-            voice,
-            response_format: 'mp3',
-          }),
+          body: JSON.stringify(body),
         });
         if (!response.ok) {
           const error = await response.json().catch(() => ({}));
@@ -481,7 +495,7 @@ export const JamButton: React.FC<JamButtonProps> = ({
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'tts-1',
+        model: 'gpt-4o-mini-tts',
         input: transcript,
         voice: 'alloy',
         response_format: 'mp3',
@@ -621,7 +635,7 @@ export const JamButton: React.FC<JamButtonProps> = ({
     setErrorMsg('');
 
     try {
-      const audioBase64 = await generateOpenAIAudio(pendingPayload.transcript);
+      const audioBase64 = await generateOpenAIAudio(pendingPayload.transcript, pendingSpeakerMapping);
       await saveEntryAndTest(
         pendingPayload,
         audioBase64,

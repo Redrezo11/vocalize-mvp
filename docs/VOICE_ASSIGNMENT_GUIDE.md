@@ -95,11 +95,11 @@ OpenAI TTS offers 11 voices via the `tts-1` and `tts-1-hd` models. All voices ar
 | **ash** | Clear | Precise content, professional | Instructor, technical narrator, presenter |
 | **verse** | Versatile | Dynamic content, variety | Talk show host, entertainer, podcaster |
 
-### Neutral Voice (1 voice)
+### Additional Male Voice
 
 | Voice Name | Style | Best For | Character Archetypes |
 |------------|-------|----------|---------------------|
-| **alloy** | Balanced | General purpose, default fallback | Narrator, any neutral character |
+| **alloy** | Balanced | General purpose, male fallback | Narrator, everyman, default male character |
 
 ### OpenAI Voice Quick Reference
 
@@ -113,14 +113,14 @@ Young/Energetic        → nova (F), verse (M)
 Calm/Meditative        → shimmer (F), fable (M)
 News/Formal            → sage (F), echo (M)
 Dramatic/Expressive    → ballad (F), echo (M)
-General Purpose        → alloy (Neutral)
+General Purpose        → alloy (M)
 ```
 
 ### OpenAI TTS Notes
 
 - **No accent selection**: All voices use neutral American English
-- **No style prompting**: Unlike Gemini, you cannot modify voice delivery with text instructions
-- **Model variants**: `tts-1` (faster, lower quality) and `tts-1-hd` (slower, higher quality)
+- **Style prompting**: With `gpt-4o-mini-tts`, you can use the `instructions` parameter to control voice delivery (e.g., "Speak in a firm tone."). Not available on `tts-1`/`tts-1-hd`.
+- **Model variants**: `tts-1` (faster, lower quality), `tts-1-hd` (slower, higher quality), `gpt-4o-mini-tts` (best quality, supports all 11 voices + style instructions)
 - **Auto-assignment**: DialogueForge uses gender inference (`guessGender()`) to automatically assign voices — female speakers get female voices (nova, shimmer, coral, sage, ballad), male speakers get male voices (echo, fable, onyx, ash, verse), cycling through to ensure uniqueness
 
 ---
@@ -329,9 +329,9 @@ START: Character/Narrator Analysis
             │
      ┌──────┼──────┐
      ▼      ▼      ▼
-  FEMALE  MALE   NEUTRAL/UNKNOWN
-     │      │      │
-     │      │      └──► alloy (balanced, default)
+  FEMALE  MALE
+     │      │
+     │      │   (unknown gender → LLM resolves, then routes to Male/Female)
      │      │
      ▼      ▼
 ┌─────────────────────────────┐
@@ -642,10 +642,9 @@ The user will specify one of the following:
 
 ### For OpenAI TTS (All 11 voices available):
 Female: nova (Bright), shimmer (Soft), coral (Warm), sage (Calm), ballad (Melodic)
-Male:   echo (Deep), fable (Warm), onyx (Authoritative), ash (Clear), verse (Versatile)
-Neutral: alloy (Balanced)
+Male:   echo (Deep), fable (Warm), onyx (Authoritative), ash (Clear), verse (Versatile), alloy (Balanced)
 
-> Note: OpenAI TTS voices have neutral American English accent. No accent or style customization.
+> Note: OpenAI TTS voices have neutral American English accent. Style prompting available with `gpt-4o-mini-tts` model via `instructions` parameter.
 > DialogueForge auto-assigns OpenAI voices by speaker gender — no manual assignment needed.
 
 ### For Gemini TTS (All voices available):
@@ -882,8 +881,8 @@ Before finalizing voice assignments, verify:
 **OpenAI TTS-specific checks:**
 - [ ] Voice names are lowercase (nova, echo, alloy — not Nova, Echo, Alloy)
 - [ ] Female speakers assigned female voices (nova, shimmer, coral, sage, ballad)
-- [ ] Male speakers assigned male voices (echo, fable, onyx, ash, verse)
-- [ ] No more than 5 speakers per gender (5 unique female + 5 unique male voices available)
+- [ ] Male speakers assigned male voices (echo, fable, onyx, ash, verse, alloy)
+- [ ] No more than 5 female speakers or 6 male speakers (5 unique female + 6 unique male voices available)
 
 **ElevenLabs-specific checks:**
 - [ ] Accents match character nationalities/backgrounds when specified
