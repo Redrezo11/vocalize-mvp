@@ -1748,7 +1748,6 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
               <span className="cursor-pointer hover:text-indigo-300 transition-colors" onClick={() => setFullscreenSlide('plenary')}><kbd className="px-2 py-1 rounded bg-slate-700">T</kbd> Plenary</span>
             )}
             <span className="cursor-pointer hover:text-indigo-300 transition-colors" onClick={() => selectedTest && generateQRCode(selectedTest)}><kbd className="px-2 py-1 rounded bg-slate-700">Q</kbd> QR Code</span>
-            <span className="cursor-pointer hover:text-indigo-300 transition-colors" onClick={() => { if (isPlaying && lexisAudioRef.current) { lexisAudioRef.current.pause(); } setIsPlaying(false); setSelectedTest(null); setSelectedAudio(null); setView('list'); }}><kbd className="px-2 py-1 rounded bg-slate-700">Esc</kbd> Exit</span>
           </div>
         )}
 
