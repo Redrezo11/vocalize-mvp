@@ -592,39 +592,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                     )}
                   </div>
 
-                  {/* By operation */}
-                  <div>
-                    <h3 className="text-sm font-semibold text-slate-900 mb-2">By Operation</h3>
-                    {usageData.byOperation.length === 0 ? (
-                      <p className="text-sm text-slate-500 text-center py-4">No data</p>
-                    ) : (
-                      <div className="grid grid-cols-2 gap-2">
-                        {usageData.byOperation.map(op => (
-                          <div key={op._id} className="px-3 py-2 rounded-lg border border-slate-200 bg-slate-50">
-                            <div className="text-xs font-medium text-slate-700">{op._id}</div>
-                            <div className="text-sm font-bold text-slate-900">{op.total_tokens} tokens <span className="text-xs font-normal text-slate-500">({op.count} calls)</span></div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* By provider */}
-                  <div>
-                    <h3 className="text-sm font-semibold text-slate-900 mb-2">By Provider / Model</h3>
-                    {usageData.byProvider.length === 0 ? (
-                      <p className="text-sm text-slate-500 text-center py-4">No data</p>
-                    ) : (
-                      <div className="grid grid-cols-2 gap-2">
-                        {usageData.byProvider.map((p, i) => (
-                          <div key={i} className="px-3 py-2 rounded-lg border border-slate-200 bg-slate-50">
-                            <div className="text-xs font-medium text-slate-700">{p._id.provider || 'unknown'} {p._id.model ? `/ ${p._id.model}` : ''}</div>
-                            <div className="text-sm font-bold text-slate-900">{p.total_tokens} tokens <span className="text-xs font-normal text-slate-500">({p.count} calls)</span></div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
                 </>
               ) : null}
             </div>
