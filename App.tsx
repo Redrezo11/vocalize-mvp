@@ -150,17 +150,6 @@ const App: React.FC = () => {
     return filtered;
   }, [allTests, settingsHook.settings.appMode]);
 
-  // Filter content by ownership for teachers (admin sees everything)
-  const userFilteredTests = useMemo(() => {
-    if (user?.role === 'admin') return modeFilteredTests;
-    return modeFilteredTests.filter(t => t.createdBy?.username === user?.username);
-  }, [modeFilteredTests, user]);
-
-  const userFilteredAudios = useMemo(() => {
-    if (user?.role === 'admin') return audioStorage.savedAudios;
-    return audioStorage.savedAudios.filter(a => a.createdBy?.username === user?.username);
-  }, [audioStorage.savedAudios, user]);
-
   // Analysis State
   const analysis = useMemo(() => parseDialogue(text), [text]);
   const [speakerMapping, setSpeakerMapping] = useState<SpeakerVoiceMapping>({});
@@ -175,6 +164,17 @@ const App: React.FC = () => {
   const geminiTTS = useGeminiTTS();
   const elevenTTS = useElevenLabsTTS();
   const audioStorage = useMongoStorage();
+
+  // Filter content by ownership for teachers (admin sees everything)
+  const userFilteredTests = useMemo(() => {
+    if (user?.role === 'admin') return modeFilteredTests;
+    return modeFilteredTests.filter(t => t.createdBy?.username === user?.username);
+  }, [modeFilteredTests, user]);
+
+  const userFilteredAudios = useMemo(() => {
+    if (user?.role === 'admin') return audioStorage.savedAudios;
+    return audioStorage.savedAudios.filter(a => a.createdBy?.username === user?.username);
+  }, [audioStorage.savedAudios, user]);
 
   // Sort ElevenLabs voices by accent (American first, then British, then others alphabetically)
   const sortedElevenVoices = useMemo(() => {
