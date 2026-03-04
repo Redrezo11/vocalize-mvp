@@ -586,6 +586,9 @@ export const JamButton: React.FC<JamButtonProps> = ({
         classroomActivity: payload.classroomActivity || undefined,
         transferQuestion: payload.transferQuestion || undefined,
         difficulty: payload.difficulty,
+        bonusQuestions: payload.bonusQuestions && payload.bonusQuestions.length > 0
+          ? payload.bonusQuestions.map((q, i) => ({ ...q, id: `pregen-${i}` }))
+          : undefined,
       }),
     });
 
@@ -609,8 +612,10 @@ export const JamButton: React.FC<JamButtonProps> = ({
       updatedAt: testData.updated_at,
     };
 
-    // Fire-and-forget: pre-generate bonus questions
-    generateBonusForTest(savedTest.id, payload.transcript, payload.difficulty, false, payload.questions.map(q => q.questionText), 'gpt-5-mini').catch(console.error);
+    // Fire-and-forget: pre-generate bonus questions only if LLM didn't include them
+    if (!payload.bonusQuestions || payload.bonusQuestions.length === 0) {
+      generateBonusForTest(savedTest.id, payload.transcript, payload.difficulty, false, payload.questions.map(q => q.questionText), 'gpt-5-mini').catch(console.error);
+    }
 
     // Report token usage (fire-and-forget, don't block completion)
     const tokenCost = getGenerationCost({
@@ -823,6 +828,7 @@ export const JamButton: React.FC<JamButtonProps> = ({
         preview: testResult.preview || [],
         classroomActivity: testResult.classroomActivity || undefined,
         transferQuestion: testResult.transferQuestion || undefined,
+        bonusQuestions: testResult.bonusQuestions || [],
       }));
 
       setGeneratingLabel('');
@@ -851,6 +857,9 @@ export const JamButton: React.FC<JamButtonProps> = ({
           })) || [],
           classroomActivity: mergedPayload.classroomActivity || undefined,
           transferQuestion: mergedPayload.transferQuestion || undefined,
+          bonusQuestions: mergedPayload.bonusQuestions && mergedPayload.bonusQuestions.length > 0
+            ? mergedPayload.bonusQuestions.map((q, i) => ({ ...q, id: `pregen-${i}` }))
+            : undefined,
         };
 
         const testResponse = await fetch(`${API_BASE}/tests`, {
@@ -878,8 +887,10 @@ export const JamButton: React.FC<JamButtonProps> = ({
           updatedAt: testDataResult.updated_at,
         };
 
-        // Fire-and-forget: pre-generate bonus questions
-        generateBonusForTest(savedTest.id, mergedPayload.transcript, mergedPayload.difficulty, true, mergedPayload.questions.map(q => q.questionText), 'gpt-5-mini').catch(console.error);
+        // Fire-and-forget: pre-generate bonus questions only if LLM didn't include them
+        if (!mergedPayload.bonusQuestions || mergedPayload.bonusQuestions.length === 0) {
+          generateBonusForTest(savedTest.id, mergedPayload.transcript, mergedPayload.difficulty, true, mergedPayload.questions.map(q => q.questionText), 'gpt-5-mini').catch(console.error);
+        }
 
         // Report token usage for reading generation
         reportTokenUsage('jam_generation', tokenCost, {

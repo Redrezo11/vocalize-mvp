@@ -103,21 +103,36 @@ ${customPrompt ? `ADDITIONAL INSTRUCTIONS:\n${customPrompt}\n\n` : ''}IMPORTANT:
   if ((testType === 'listening-comprehension' || testType === 'reading-comprehension')) {
     return `${baseInstructions}
 
-Generate ${questionCount} multiple choice questions. Each question should test understanding of the content.
+Generate ${questionCount} multiple choice questions, plus 10 additional bonus questions for extra student practice.
 
 JSON FORMAT (return exactly this structure):
-[
-  {
-    "questionText": "Your question here?",
-    "options": ["Option A", "Option B", "Option C", "Option D"],
-    "correctAnswer": "Option A"${explanationFields}
-  }
-]
+{
+  "questions": [
+    {
+      "questionText": "Your question here?",
+      "options": ["Option A", "Option B", "Option C", "Option D"],
+      "correctAnswer": "Option A"${explanationFields}
+    }
+  ],
+  "bonusQuestions": [
+    {
+      "questionText": "Bonus question here?",
+      "options": ["Option A", "Option B", "Option C", "Option D"],
+      "correctAnswer": "Option A",
+      "explanation": "English explanation of why this is correct",
+      "explanationArabic": "شرح بالعربية"
+    }
+  ]
+}
 
 RULES:
 - questionText: Clear question about the content
 - options: Exactly 4 options (A, B, C, D)
-- correctAnswer: Must match one of the options exactly${explanationRule}`;
+- correctAnswer: Must match one of the options exactly${explanationRule}
+- Generate exactly ${questionCount} main questions in "questions"
+- Generate exactly 10 bonus questions in "bonusQuestions" — these must NOT repeat any main questions
+- Bonus questions should test varied skills: main ideas, specific details, inferences, vocabulary in context
+- Bonus questions must always include "explanation" (English) and "explanationArabic" (Arabic)`;
   } else if (testType === 'fill-in-blank') {
     return `${baseInstructions}
 
@@ -310,6 +325,7 @@ export const TestBuilder: React.FC<TestBuilderProps> = ({ audio, readingPassage,
   const [testType, setTestType] = useState<TestType>(existingTest?.type || labels.testType);
   const [testTitle, setTestTitle] = useState(existingTest?.title || generateDefaultTitle(contentTitle, defaultDifficulty));
   const [questions, setQuestions] = useState<TestQuestion[]>(existingTest?.questions || []);
+  const [bonusQuestions, setBonusQuestions] = useState<TestQuestion[]>(existingTest?.bonusQuestions || []);
   const [isGenerating, setIsGenerating] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [showPasteModal, setShowPasteModal] = useState(false);
@@ -842,18 +858,42 @@ JSON FORMAT (return exactly this structure):
       const data = await response.json();
       const messageOutput = data.output?.find((o: { type: string }) => o.type === 'message');
       const text = messageOutput?.content?.[0]?.text || '';
-      const jsonMatch = text.match(/\[[\s\S]*\]/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]) as Partial<TestQuestion>[];
-        const newQuestions: TestQuestion[] = parsed.map(q => ({
+      // Try object format first (new: { questions, bonusQuestions }), then legacy array format
+      const objectMatch = text.match(/\{[\s\S]*\}/);
+      const arrayMatch = text.match(/\[[\s\S]*\]/);
+      let questionsArr: Partial<TestQuestion>[] | null = null;
+      let bonusArr: Partial<TestQuestion>[] | null = null;
+
+      if (objectMatch) {
+        try {
+          const parsed = JSON.parse(objectMatch[0]);
+          if (parsed.questions && Array.isArray(parsed.questions)) {
+            questionsArr = parsed.questions;
+            bonusArr = parsed.bonusQuestions || null;
+          } else if (Array.isArray(parsed)) {
+            questionsArr = parsed;
+          }
+        } catch {
+          // Fall through to array match
+        }
+      }
+      if (!questionsArr && arrayMatch) {
+        try { questionsArr = JSON.parse(arrayMatch[0]); } catch { /* ignore */ }
+      }
+
+      if (questionsArr && questionsArr.length > 0) {
+        const mapQuestion = (q: Partial<TestQuestion>) => ({
           id: generateId(),
           questionText: q.questionText || '',
           options: (testType === 'listening-comprehension' || testType === 'reading-comprehension') ? q.options : undefined,
           correctAnswer: q.correctAnswer || '',
           explanation: q.explanation || undefined,
           explanationArabic: q.explanationArabic || undefined,
-        }));
-        setQuestions(newQuestions);
+        });
+        setQuestions(questionsArr.map(mapQuestion));
+        if (bonusArr && bonusArr.length > 0) {
+          setBonusQuestions(bonusArr.map(mapQuestion));
+        }
         setIsDirty(true);
       } else {
         generateSimpleQuestions();
@@ -929,6 +969,7 @@ JSON FORMAT (return exactly this structure):
       title: testTitle,
       type: testType,
       questions,
+      bonusQuestions: bonusQuestions.length > 0 ? bonusQuestions : undefined,
       lexis: lexis.length > 0 ? lexis : undefined,
       preview: preview.length > 0 ? preview : undefined,
       difficulty: difficultyLevel,

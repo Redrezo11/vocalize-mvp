@@ -231,6 +231,13 @@ export interface OneShotPayload {
     discussionPrompt: { en: string; ar: string };
   };
   transferQuestion?: { en: string; ar: string };
+  bonusQuestions?: Array<{
+    questionText: string;
+    options: string[];
+    correctAnswer: string;
+    explanation?: string;
+    explanationArabic?: string;
+  }>;
 }
 
 // Exported for use by JamButton
@@ -257,6 +264,7 @@ export function validatePayload(jsonText: string): OneShotPayload {
   if (!parsed.lexis) parsed.lexis = [];
   if (!parsed.preview) parsed.preview = [];
   if (!parsed.classroomActivity) parsed.classroomActivity = undefined;
+  if (!parsed.bonusQuestions || !Array.isArray(parsed.bonusQuestions)) parsed.bonusQuestions = [];
 
   return parsed as OneShotPayload;
 }
@@ -383,7 +391,16 @@ Return a SINGLE JSON object. No markdown fences, no explanation — ONLY valid J
   "transferQuestion": {
     "en": "English transfer question",
     "ar": "سؤال النقل بالعربية"
-  }
+  },
+  "bonusQuestions": [
+    {
+      "questionText": "Additional comprehension question?",
+      "options": ["Option A", "Option B", "Option C", "Option D"],
+      "correctAnswer": "Option A",
+      "explanation": "English explanation",
+      "explanationArabic": "شرح بالعربية"
+    }
+  ]
 }
 
 ## ${speakerCount === 1 ? 'Monologue' : 'Dialogue'} Guidelines
@@ -401,6 +418,7 @@ Return a SINGLE JSON object. No markdown fences, no explanation — ONLY valid J
 - Test comprehension: main ideas, specific details, speaker attitudes, and inferences
 - Include explanations in English and Arabic for wrong answers
 - Quantity calibrated for ${targetDuration}-minute test at ${difficulty} level
+- Also generate exactly 10 bonus questions in "bonusQuestions" for extra student practice. Same format with explanations. Do NOT repeat any main questions. Test varied skills: main ideas, details, inferences, vocabulary in context.
 
 ## Vocabulary Guidelines
 - Select ${durationInfo.lexisCount} key vocabulary items from the dialogue
@@ -670,6 +688,7 @@ ${dialogue.transcript}
   - Inferences and implied meaning
 - Include explanations in English and Arabic for why the correct answer is right
 - Questions should require actually listening to/reading the dialogue to answer (not guessable)
+- Also generate exactly 10 bonus questions in "bonusQuestions" for extra student practice. Same format with explanations. Do NOT repeat any main questions. Test varied skills.
 
 ## Vocabulary Guidelines
 - Select ${durationInfo.lexisCount} key vocabulary items FROM the dialogue above
@@ -784,7 +803,16 @@ Return a SINGLE JSON object with ONLY these fields. No markdown fences, no expla
   "transferQuestion": {
     "en": "English transfer question",
     "ar": "سؤال النقل بالعربية"
-  }
+  },
+  "bonusQuestions": [
+    {
+      "questionText": "Additional comprehension question?",
+      "options": ["Option A", "Option B", "Option C", "Option D"],
+      "correctAnswer": "Option A",
+      "explanation": "English explanation",
+      "explanationArabic": "شرح بالعربية"
+    }
+  ]
 }
 
 Now generate the test content as a single JSON object:`;
@@ -890,7 +918,16 @@ Return a SINGLE JSON object. No markdown fences, no explanation — ONLY valid J
   "transferQuestion": {
     "en": "English transfer question",
     "ar": "سؤال النقل بالعربية"
-  }
+  },
+  "bonusQuestions": [
+    {
+      "questionText": "Additional comprehension question?",
+      "options": ["Option A", "Option B", "Option C", "Option D"],
+      "correctAnswer": "Option A",
+      "explanation": "English explanation",
+      "explanationArabic": "شرح بالعربية"
+    }
+  ]
 }
 
 ## Passage Guidelines
@@ -907,6 +944,7 @@ Return a SINGLE JSON object. No markdown fences, no explanation — ONLY valid J
 - Test comprehension: main ideas, specific details, writer's purpose, and inferences
 - Include explanations in English and Arabic
 - Quantity calibrated for ${targetDuration}-minute test at ${difficulty} level
+- Also generate exactly 10 bonus questions in "bonusQuestions" for extra student practice. Same format with explanations. Do NOT repeat any main questions. Test varied skills.
 
 ## Vocabulary Guidelines
 - Select ${durationInfo.lexisCount} key vocabulary items from the passage
@@ -1180,6 +1218,9 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
             : undefined,
           classroomActivity: payload.classroomActivity || undefined,
           transferQuestion: payload.transferQuestion || undefined,
+          bonusQuestions: payload.bonusQuestions && payload.bonusQuestions.length > 0
+            ? payload.bonusQuestions.map(q => ({ ...q, id: generateId() }))
+            : undefined,
         };
 
         const response = await fetch(`${API_BASE}/tests`, {
@@ -1191,8 +1232,10 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
         if (!response.ok) throw new Error('Failed to create test');
         const savedTest = await response.json();
 
-        // Fire-and-forget: pre-generate bonus questions
-        generateBonusForTest(savedTest._id || savedTest.id, payload.transcript, payload.difficulty, true, payload.questions.map(q => q.questionText), 'gpt-5-mini').catch(console.error);
+        // Fire-and-forget: pre-generate bonus questions (fallback if LLM didn't include them)
+        if (!payload.bonusQuestions || payload.bonusQuestions.length === 0) {
+          generateBonusForTest(savedTest._id || savedTest.id, payload.transcript, payload.difficulty, true, payload.questions.map(q => q.questionText), 'gpt-5-mini').catch(console.error);
+        }
 
         // Report token usage
         reportTokenUsage('oneshot_generation', OPERATION_COSTS.oneshot_reading, {
@@ -1390,6 +1433,9 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
           : undefined,
         classroomActivity: payload.classroomActivity || undefined,
         transferQuestion: payload.transferQuestion || undefined,
+        bonusQuestions: payload.bonusQuestions && payload.bonusQuestions.length > 0
+          ? payload.bonusQuestions.map(q => ({ ...q, id: generateId() }))
+          : undefined,
       };
 
       const response = await fetch(`${API_BASE}/tests`, {
@@ -1401,8 +1447,10 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
       if (!response.ok) throw new Error('Failed to create test');
       const savedTest = await response.json();
 
-      // Fire-and-forget: pre-generate bonus questions
-      generateBonusForTest(savedTest._id || savedTest.id, payload.transcript, payload.difficulty, false, payload.questions.map(q => q.questionText), 'gpt-5-mini').catch(console.error);
+      // Fire-and-forget: pre-generate bonus questions (fallback if LLM didn't include them)
+      if (!payload.bonusQuestions || payload.bonusQuestions.length === 0) {
+        generateBonusForTest(savedTest._id || savedTest.id, payload.transcript, payload.difficulty, false, payload.questions.map(q => q.questionText), 'gpt-5-mini').catch(console.error);
+      }
 
       // Report token usage
       reportTokenUsage('oneshot_generation', OPERATION_COSTS.oneshot_listening, {
@@ -1583,6 +1631,9 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
           : undefined,
         classroomActivity: pendingPayload.classroomActivity || undefined,
         transferQuestion: pendingPayload.transferQuestion || undefined,
+        bonusQuestions: pendingPayload.bonusQuestions && pendingPayload.bonusQuestions.length > 0
+          ? pendingPayload.bonusQuestions.map((q, i) => ({ ...q, id: `pregen-${i}` }))
+          : undefined,
       };
 
       const response = await fetch(`${API_BASE}/tests`, {
@@ -1595,8 +1646,8 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
       const savedTest = await response.json();
       console.log('[OneShot continueWithAudio] savedTest._id:', savedTest?._id, '| savedTest.id:', savedTest?.id);
 
-      // Fire-and-forget: pre-generate bonus questions
-      if (pendingPayload) {
+      // Fire-and-forget: pre-generate bonus questions only if LLM didn't include them
+      if (pendingPayload && (!pendingPayload.bonusQuestions || pendingPayload.bonusQuestions.length === 0)) {
         generateBonusForTest(savedTest._id || savedTest.id, pendingPayload.transcript, pendingPayload.difficulty, false, pendingPayload.questions.map(q => q.questionText), 'gpt-5-mini').catch(console.error);
       }
 

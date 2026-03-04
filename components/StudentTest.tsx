@@ -157,7 +157,8 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
   const [bonusScores, setBonusScores] = useState<{ score: number; correct: number; total: number }[]>([]);
   const [isGeneratingBonus, setIsGeneratingBonus] = useState(false);
   const [bonusError, setBonusError] = useState<string | null>(null);
-  const bonusPoolIndex = useRef(0); // track consumed pre-generated bonus questions
+  // SessionStorage key for tracking seen bonus question IDs per student per test
+  const getSeenBonusKey = (id: string) => `bonus_seen_${id}`;
 
   // Single state machine for test phase: match → gapfill → preview → questions
   const [testPhase, setTestPhase] = useState<TestPhase>(
@@ -290,12 +291,36 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
     setShowDiscussion(false);
   };
 
-  // Bonus practice: serve from pre-generated pool first, fall back to live API
+  // Bonus practice: fetch latest pool from DB, track seen per-student in sessionStorage, append live-generated to DB
   const handleGenerateBonus = useCallback(async (count: 5 | 10) => {
     setBonusError(null);
 
-    const pool = test.bonusQuestions || [];
-    const available = pool.slice(bonusPoolIndex.current, bonusPoolIndex.current + count);
+    // Read seen question IDs from sessionStorage
+    const seenKey = getSeenBonusKey(test.id);
+    const seenIds: string[] = JSON.parse(sessionStorage.getItem(seenKey) || '[]');
+
+    // Helper to mark question IDs as seen
+    const markSeen = (ids: string[]) => {
+      const updated = [...seenIds, ...ids];
+      sessionStorage.setItem(seenKey, JSON.stringify(updated));
+    };
+
+    // Fetch latest pool from DB
+    let pool: TestQuestion[] = [];
+    try {
+      const poolRes = await fetch(`/api/tests/${test.id}/bonus-pool`);
+      if (poolRes.ok) {
+        const poolData = await poolRes.json();
+        pool = poolData.bonusQuestions || [];
+      }
+    } catch {
+      // If fetch fails, continue with empty pool
+    }
+
+    // Filter pool to unseen questions
+    const seenSet = new Set(seenIds);
+    const unseen = pool.filter(q => !seenSet.has(q.id));
+    const available = unseen.slice(0, count);
     const remaining = count - available.length;
 
     // Helper to generate questions live via API
@@ -324,18 +349,28 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
       const parsed = JSON.parse(jsonMatch[0]);
       return (parsed.questions || []).map((q: any, i: number) => ({
         ...q,
-        id: `bonus-${bonusRounds.length}-${available.length + i}`,
+        id: `live-bonus-${Date.now()}-${i}`,
       }));
     };
 
+    // Helper to append live-generated questions to DB pool (fire-and-forget)
+    const appendToPool = (questions: TestQuestion[]) => {
+      fetch(`/api/tests/${test.id}/bonus-questions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ questions }),
+      }).catch(err => console.error('[Bonus] Failed to append to pool:', err));
+    };
+
     // Case 1: Enough in pool — serve instantly
-    if (available.length > 0 && remaining <= 0) {
-      const pregenQs = available.map((q, i) => ({
+    if (available.length >= count) {
+      const served = available.slice(0, count);
+      const servedQs = served.map((q, i) => ({
         ...q,
-        id: `bonus-${bonusRounds.length}-${i}`,
+        id: q.id || `bonus-${bonusRounds.length}-${i}`,
       }));
-      bonusPoolIndex.current += available.length;
-      setBonusRounds(prev => [...prev, pregenQs]);
+      markSeen(served.map(q => q.id));
+      setBonusRounds(prev => [...prev, servedQs]);
       return;
     }
 
@@ -343,14 +378,19 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
     if (available.length > 0 && remaining > 0) {
       const pregenQs = available.map((q, i) => ({
         ...q,
-        id: `bonus-${bonusRounds.length}-${i}`,
+        id: q.id || `bonus-${bonusRounds.length}-${i}`,
       }));
-      bonusPoolIndex.current += available.length;
+      markSeen(available.map(q => q.id));
 
       setIsGeneratingBonus(true);
       try {
         const liveQs = await generateLive(remaining);
         if (liveQs.length === 0 && pregenQs.length === 0) throw new Error('No questions generated');
+        // Append live questions to DB pool so other students benefit
+        if (liveQs.length > 0) {
+          appendToPool(liveQs);
+          markSeen(liveQs.map(q => q.id));
+        }
         setBonusRounds(prev => [...prev, [...pregenQs, ...liveQs]]);
       } catch (err) {
         // Still serve pool questions even if API fails
@@ -363,11 +403,14 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
       return;
     }
 
-    // Case 3: Pool empty — full API call (original behavior)
+    // Case 3: Pool exhausted for this student — full live API call
     setIsGeneratingBonus(true);
     try {
       const liveQs = await generateLive(count);
       if (liveQs.length === 0) throw new Error('No questions generated');
+      // Append to DB pool so other students benefit
+      appendToPool(liveQs);
+      markSeen(liveQs.map(q => q.id));
       setBonusRounds(prev => [...prev, liveQs]);
     } catch (err) {
       console.error('[Bonus] Generate error:', err);

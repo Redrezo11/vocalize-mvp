@@ -1256,6 +1256,42 @@ app.put('/api/tests/:id', authenticate, async (req, res) => {
   }
 });
 
+// Get bonus questions pool for a test (lightweight, no auth required for students)
+app.get('/api/tests/:id/bonus-pool', async (req, res) => {
+  try {
+    const test = await ListeningTest.findById(req.params.id).select('bonus_questions');
+    if (!test) {
+      return res.status(404).json({ error: 'Test not found' });
+    }
+    res.json({ bonusQuestions: test.bonus_questions || [] });
+  } catch (error) {
+    console.error('[GET /api/tests/:id/bonus-pool] Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Append bonus questions to test pool (append-only, no auth required for student generation)
+app.post('/api/tests/:id/bonus-questions', async (req, res) => {
+  try {
+    const { questions } = req.body;
+    if (!questions || !Array.isArray(questions) || questions.length === 0) {
+      return res.status(400).json({ error: 'questions array is required' });
+    }
+    const test = await ListeningTest.findByIdAndUpdate(
+      req.params.id,
+      { $push: { bonus_questions: { $each: questions } } },
+      { new: true, select: 'bonus_questions' }
+    );
+    if (!test) {
+      return res.status(404).json({ error: 'Test not found' });
+    }
+    res.json({ poolSize: test.bonus_questions.length });
+  } catch (error) {
+    console.error('[POST /api/tests/:id/bonus-questions] Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Delete test
 app.delete('/api/tests/:id', authenticate, async (req, res) => {
   console.log('[DELETE /api/tests/:id] Requested ID:', req.params.id, '| type:', typeof req.params.id, '| length:', req.params.id?.length);
