@@ -3,7 +3,7 @@ import { SavedAudio, ListeningTest, LexisAudio } from '../types';
 import { ArrowLeftIcon, PlayIcon, PauseIcon, RefreshIcon, ChevronRightIcon } from './Icons';
 import { ClassroomTheme } from './Settings';
 import QRCode from 'qrcode';
-import { generateLexisAudio, generateAllWordAudios, LexisTTSEngine } from '../utils/lexisTTS';
+import { generateLexisAudio } from '../utils/lexisTTS';
 import { fullTestCache } from '../utils/testCache';
 import { useAppMode } from '../contexts/AppModeContext';
 import { modeLabel, isTestTypeForMode } from '../utils/modeLabels';
@@ -216,17 +216,10 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
   const [isGeneratingLexisAudio, setIsGeneratingLexisAudio] = useState(false);
   const [lexisAudioError, setLexisAudioError] = useState<string | null>(null);
   const [isPlayingLexisAudio, setIsPlayingLexisAudio] = useState(false);
-  const [lexisTTSEngine, setLexisTTSEngine] = useState<LexisTTSEngine>('openai');
   const [narrationModel, setNarrationModel] = useState<'tts-1' | 'gpt-4o-mini-tts'>('gpt-4o-mini-tts');
   const [showTTSSettings, setShowTTSSettings] = useState(false);
   const lexisAudioRef = useRef<HTMLAudioElement>(null);
 
-  // Slideshow state for Focus Mode
-  const [slideshowActive, setSlideshowActive] = useState(false);
-  const [isPlayingWordAudio, setIsPlayingWordAudio] = useState(false);
-  const [isGeneratingWordAudios, setIsGeneratingWordAudios] = useState(false);
-  const [wordAudioProgress, setWordAudioProgress] = useState({ current: 0, total: 0, word: '' });
-  const wordAudioRef = useRef<HTMLAudioElement>(null);
 
   // Loading state for Present button (on-demand full test fetch)
   const [loadingTestId, setLoadingTestId] = useState<string | null>(null);
@@ -246,7 +239,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
 
   // Token confirmation for narration
   const [pendingNarration, setPendingNarration] = useState<{ type: 'preListening' | 'plenary'; language: 'en' | 'ar' } | null>(null);
-  const [pendingLexisAction, setPendingLexisAction] = useState<'batch' | 'perWord' | null>(null);
+  const [pendingLexisAudio, setPendingLexisAudio] = useState(false);
 
   // Word pronunciation pre-loading state
   const [preloadProgress, setPreloadProgress] = useState<{ done: number; total: number } | null>(null);
@@ -264,7 +257,6 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
 
   // Unified fullscreen slide deck: null = not in fullscreen, string = which slide
   const [fullscreenSlide, setFullscreenSlide] = useState<string | null>(null);
-  const [playingWordId, setPlayingWordId] = useState<string | null>(null);
 
   // Compute available fullscreen slides from test data
   const fullscreenSlides = useMemo(() => {
@@ -376,7 +368,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
     setLexisAudioError(null);
 
     try {
-      const result = await generateLexisAudio(selectedTest.lexis, lexisTTSEngine);
+      const result = await generateLexisAudio(selectedTest.lexis);
 
       if (result.success && result.audio) {
         // Update the test with the generated audio
@@ -397,8 +389,8 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
 
         // Report token usage
         reportTokenUsage('lexis_audio_batch', tokenCost, {
-          provider: lexisTTSEngine === 'openai' ? 'openai' : 'gemini',
-          model: lexisTTSEngine === 'openai' ? 'tts-1' : 'gemini-2.5-flash-preview-tts',
+          provider: 'openai',
+          model: 'gpt-4o-mini-tts',
           metadata: { wordCount: selectedTest.lexis.length },
         }).then(res => {
           if (res.token_balance !== undefined) updateTokenBalance(res.token_balance);
@@ -445,194 +437,6 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
       audioEl.removeEventListener('ended', handleEnded);
     };
   }, [selectedTest?.lexisAudio]);
-
-  // Per-word audio generation handler
-  const handleGenerateWordAudios = async () => {
-    if (!selectedTest?.lexis || selectedTest.lexis.length === 0) return;
-
-    // Token pre-check
-    const tokenCost = OPERATION_COSTS.per_word_audio;
-    if (!hasEnoughTokens(user, tokenCost)) {
-      setLexisAudioError(`Insufficient tokens (need ${tokenCost}, have ${user?.tokenBalance ?? 0}). Contact your admin for more.`);
-      return;
-    }
-
-    setIsGeneratingWordAudios(true);
-    setLexisAudioError(null);
-
-    try {
-      const result = await generateAllWordAudios(
-        selectedTest.lexis,
-        lexisTTSEngine,
-        (current, total, word) => {
-          setWordAudioProgress({ current, total, word });
-        }
-      );
-
-      if (result.success && result.wordAudios) {
-        // Update the test with the generated word audios
-        const updatedTest: ListeningTest = {
-          ...selectedTest,
-          lexisAudio: {
-            ...(selectedTest.lexisAudio || {
-              url: '',
-              generatedAt: new Date().toISOString(),
-              engine: lexisTTSEngine
-            }),
-            wordAudios: result.wordAudios
-          }
-        };
-        setSelectedTest(updatedTest);
-
-        // Save to database and update cache
-        if (onUpdateTest) {
-          onUpdateTest(updatedTest);
-        }
-        fullTestCache.set(updatedTest.id, updatedTest);
-
-        // Close modal on success
-        setShowLexisAudioConfirm(false);
-
-        // Report token usage
-        reportTokenUsage('per_word_audio', tokenCost, {
-          provider: lexisTTSEngine === 'openai' ? 'openai' : 'gemini',
-          model: lexisTTSEngine === 'openai' ? 'tts-1' : 'gemini-2.5-flash-preview-tts',
-          metadata: { wordCount: selectedTest.lexis.length },
-        }).then(res => {
-          if (res.token_balance !== undefined) updateTokenBalance(res.token_balance);
-        }).catch(console.error);
-
-        if (result.failedWords && result.failedWords.length > 0) {
-          console.warn('[ClassroomMode] Some words failed to generate:', result.failedWords);
-        }
-      } else {
-        setLexisAudioError(result.error || 'Failed to generate word audios');
-      }
-    } catch (error) {
-      console.error('[ClassroomMode] Word audio generation error:', error);
-      setLexisAudioError('An unexpected error occurred');
-    } finally {
-      setIsGeneratingWordAudios(false);
-      setWordAudioProgress({ current: 0, total: 0, word: '' });
-    }
-  };
-
-  // Word audio element event handlers
-  useEffect(() => {
-    const audioEl = wordAudioRef.current;
-    if (!audioEl) return;
-
-    const handlePlay = () => setIsPlayingWordAudio(true);
-    const handlePause = () => setIsPlayingWordAudio(false);
-    const handleEnded = () => {
-      setIsPlayingWordAudio(false);
-      // Auto-advance to next word when slideshow is active
-      if (slideshowActive && selectedTest?.lexis) {
-        const nextIndex = focusedLexisIndex < selectedTest.lexis.length - 1
-          ? focusedLexisIndex + 1
-          : 0;
-
-        // Small delay before advancing
-        setTimeout(() => {
-          setFocusedLexisIndex(nextIndex);
-          // If we looped back to start, stop slideshow
-          if (nextIndex === 0) {
-            setSlideshowActive(false);
-          }
-        }, 500);
-      }
-    };
-
-    audioEl.addEventListener('play', handlePlay);
-    audioEl.addEventListener('pause', handlePause);
-    audioEl.addEventListener('ended', handleEnded);
-
-    return () => {
-      audioEl.removeEventListener('play', handlePlay);
-      audioEl.removeEventListener('pause', handlePause);
-      audioEl.removeEventListener('ended', handleEnded);
-    };
-  }, [selectedTest?.lexisAudio?.wordAudios, slideshowActive, focusedLexisIndex, selectedTest?.lexis]);
-
-  // Play word audio when focused word changes during slideshow
-  useEffect(() => {
-    if (!slideshowActive || !selectedTest?.lexis || !selectedTest.lexisAudio?.wordAudios) return;
-
-    const currentWord = selectedTest.lexis[focusedLexisIndex];
-    const wordAudio = selectedTest.lexisAudio.wordAudios[currentWord.id];
-
-    if (wordAudio && wordAudioRef.current) {
-      wordAudioRef.current.src = wordAudio.url;
-      wordAudioRef.current.play().catch(err => {
-        console.error('[ClassroomMode] Failed to play word audio:', err);
-      });
-    }
-  }, [focusedLexisIndex, slideshowActive, selectedTest?.lexis, selectedTest?.lexisAudio?.wordAudios]);
-
-  // Start/stop slideshow
-  const handleToggleSlideshow = () => {
-    if (!selectedTest?.lexisAudio?.wordAudios) {
-      // No word audios generated yet
-      return;
-    }
-
-    if (slideshowActive) {
-      // Stop slideshow
-      setSlideshowActive(false);
-      if (wordAudioRef.current) {
-        wordAudioRef.current.pause();
-      }
-    } else {
-      // Start slideshow from current word
-      setSlideshowActive(true);
-      // Play current word audio
-      const currentWord = selectedTest.lexis?.[focusedLexisIndex];
-      const wordAudio = currentWord ? selectedTest.lexisAudio.wordAudios[currentWord.id] : null;
-
-      if (wordAudio && wordAudioRef.current) {
-        wordAudioRef.current.src = wordAudio.url;
-        wordAudioRef.current.play().catch(err => {
-          console.error('[ClassroomMode] Failed to start slideshow:', err);
-        });
-      }
-    }
-  };
-
-  // Play single word audio (manual play button)
-  const handlePlayWordAudio = () => {
-    if (!selectedTest?.lexis || !selectedTest.lexisAudio?.wordAudios) return;
-
-    const currentWord = selectedTest.lexis[focusedLexisIndex];
-    const wordAudio = selectedTest.lexisAudio.wordAudios[currentWord.id];
-
-    if (wordAudio && wordAudioRef.current) {
-      if (isPlayingWordAudio) {
-        wordAudioRef.current.pause();
-      } else {
-        wordAudioRef.current.src = wordAudio.url;
-        wordAudioRef.current.play().catch(err => {
-          console.error('[ClassroomMode] Failed to play word audio:', err);
-        });
-      }
-    }
-  };
-
-  // Play individual word audio in fullscreen vocab grid
-  const handleFullscreenWordPlay = (wordId: string) => {
-    const wordAudio = selectedTest?.lexisAudio?.wordAudios?.[wordId];
-    if (wordAudio && wordAudioRef.current) {
-      if (playingWordId === wordId) {
-        wordAudioRef.current.pause();
-        setPlayingWordId(null);
-      } else {
-        wordAudioRef.current.src = wordAudio.url;
-        wordAudioRef.current.play().catch(err => {
-          console.error('[ClassroomMode] Failed to play word audio:', err);
-        });
-        setPlayingWordId(wordId);
-      }
-    }
-  };
 
   // Generate QR code for student access
   const generateQRCode = async (test: ListeningTest) => {
@@ -685,7 +489,6 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
     setShowPreListeningArabic(false);
     setIsPlayingPreListeningAudio(false);
     setFullscreenSlide(null);
-    setPlayingWordId(null);
     setContentTab('passage');
     setPassageFontSize(1.25);
     setCurrentTime(0);
@@ -1036,7 +839,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
       // Escape exits fullscreen → back to presentation toolbar
       if (e.key === 'Escape' && isFullscreen) {
         setFullscreenSlide(null);
-        setSlideshowActive(false);
+
         return;
       }
 
@@ -1046,7 +849,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
           if (fullscreenSlide === 'plenary') {
             setFullscreenSlide(null);
           } else {
-            setSlideshowActive(false);
+    
             setFullscreenSlide('plenary');
           }
         }
@@ -1058,11 +861,11 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
       switch (e.key) {
         case ' ':
           e.preventDefault();
-          // In fullscreen vocabulary slide, Space plays current word
-          if (isFullscreen && fullscreenSlide === 'vocabulary' && selectedTest?.lexisAudio?.wordAudios) {
-            handlePlayWordAudio();
-          } else if (lexisViewMode === 'focus' && selectedTest?.lexisAudio?.wordAudios) {
-            handlePlayWordAudio();
+          // In vocabulary context, Space plays/pauses full batch lexis audio
+          if ((isFullscreen && fullscreenSlide === 'vocabulary') || lexisViewMode === 'focus' || lexisViewMode === 'overview') {
+            if (selectedTest?.lexisAudio?.url) {
+              handlePlayLexisAudio();
+            }
           } else if (appMode === 'listening' && selectedAudio) {
             handlePlayPause();
           }
@@ -1080,7 +883,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
             if (fullscreenSlide === 'preListening') {
               setFullscreenSlide(null);
             } else {
-              setSlideshowActive(false);
+      
               setFullscreenSlide('preListening');
             }
           }
@@ -1091,7 +894,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
           if (isFullscreen) {
             // Exit fullscreen
             setFullscreenSlide(null);
-            setSlideshowActive(false);
+    
           } else {
             // Enter fullscreen — start on vocabulary or first available
             const startSlide = fullscreenSlides.includes('vocabulary') ? 'vocabulary' : fullscreenSlides[0];
@@ -1107,30 +910,28 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
             setFullscreenSlide(null);
             setLexisViewMode('overview');
             setFocusedLexisIndex(0);
-            setSlideshowActive(false);
+    
           } else if (lexisViewMode === 'overview') {
             setLexisViewMode('focus');
             setFocusedLexisIndex(0);
-            setSlideshowActive(false);
+    
           } else {
             setLexisViewMode('overview');
             setFocusedLexisIndex(0);
-            setSlideshowActive(false);
+    
           }
           break;
         case 's':
         case 'S':
-          // Toggle slideshow in focus mode or fullscreen vocabulary slide
-          if ((lexisViewMode === 'focus' || (isFullscreen && fullscreenSlide === 'vocabulary')) && selectedTest?.lexisAudio?.wordAudios) {
+          // Play/pause full batch lexis audio, or open generation modal
+          if ((isFullscreen && fullscreenSlide === 'vocabulary') || lexisViewMode === 'focus' || lexisViewMode === 'overview') {
             e.preventDefault();
-            handleToggleSlideshow();
-          }
-          break;
-        case 'p':
-        case 'P':
-          if (lexisViewMode === 'focus' && selectedTest?.lexisAudio?.wordAudios) {
-            e.preventDefault();
-            handlePlayWordAudio();
+            if (showLexisAudioConfirm || isGeneratingLexisAudio) break; // Guard
+            if (selectedTest?.lexisAudio?.url) {
+              handlePlayLexisAudio();
+            } else if (selectedTest?.lexis?.length) {
+              setShowLexisAudioConfirm(true);
+            }
           }
           break;
         case 'ArrowLeft':
@@ -1138,10 +939,10 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
           if (isFullscreen) {
             // Navigate to previous slide
             if (currentSlideIndex > 0) {
-              setSlideshowActive(false);
+      
               setFullscreenSlide(fullscreenSlides[currentSlideIndex - 1]);
             }
-          } else if (lexisViewMode === 'focus' && selectedTest?.lexis && !slideshowActive) {
+          } else if (lexisViewMode === 'focus' && selectedTest?.lexis) {
             setFocusedLexisIndex(prev => prev > 0 ? prev - 1 : selectedTest.lexis!.length - 1);
           }
           break;
@@ -1150,10 +951,9 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
           if (isFullscreen) {
             // Navigate to next slide
             if (currentSlideIndex < fullscreenSlides.length - 1) {
-              setSlideshowActive(false);
               setFullscreenSlide(fullscreenSlides[currentSlideIndex + 1]);
             }
-          } else if (lexisViewMode === 'focus' && selectedTest?.lexis && !slideshowActive) {
+          } else if (lexisViewMode === 'focus' && selectedTest?.lexis) {
             setFocusedLexisIndex(prev => prev < selectedTest.lexis!.length - 1 ? prev + 1 : 0);
           }
           break;
@@ -1172,7 +972,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [view, isPlaying, showQRModal, selectedTest, selectedAudio, lexisViewMode, slideshowActive, isFullscreen, fullscreenSlide, fullscreenSlides, currentSlideIndex, showAudioWidget]);
+  }, [view, isPlaying, showQRModal, selectedTest, selectedAudio, lexisViewMode, isFullscreen, fullscreenSlide, fullscreenSlides, currentSlideIndex, showAudioWidget, isGeneratingLexisAudio, showLexisAudioConfirm]);
 
   // Get test type label
   const getTestTypeLabel = (type: string): string => {
@@ -1547,7 +1347,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
               {selectedTest.lexis && selectedTest.lexis.length > 0 && (
                 <button
                   onClick={() => setShowLexisAudioConfirm(true)}
-                  disabled={isGeneratingLexisAudio || isGeneratingWordAudios}
+                  disabled={isGeneratingLexisAudio}
                   className={`flex items-center gap-2 h-[34px] px-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                     selectedTest.lexisAudio
                       ? 'bg-emerald-600 text-white hover:bg-emerald-500'
@@ -1555,13 +1355,13 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                   }`}
                   title="Manage vocabulary audio"
                 >
-                  {(isGeneratingLexisAudio || isGeneratingWordAudios) ? (
+                  {isGeneratingLexisAudio ? (
                     <SpinnerIcon className="w-4 h-4" />
                   ) : (
                     <SpeakerIcon className="w-4 h-4" />
                   )}
                   <span className="text-sm">
-                    {isGeneratingLexisAudio || isGeneratingWordAudios ? 'Generating' : 'Vocab'}
+                    {isGeneratingLexisAudio ? 'Generating' : 'Vocab'}
                   </span>
                   {selectedTest.lexisAudio && (
                     <span className="w-2 h-2 bg-green-400 rounded-full" title="Audio generated" />
@@ -1853,18 +1653,8 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
             </button>
 
             <div className={`flex-1 max-w-4xl mx-8 p-12 rounded-3xl border-2 text-center relative ${
-              slideshowActive
-                ? isDark ? 'bg-slate-800 border-green-500 ring-2 ring-green-500/50' : 'bg-slate-50 border-green-500 ring-2 ring-green-500/50'
-                : isDark ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'
+              isDark ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'
             }`}>
-              {/* Slideshow indicator */}
-              {slideshowActive && (
-                <div className="absolute top-4 right-4 flex items-center gap-2 px-3 py-1.5 bg-green-500 text-white rounded-full text-sm font-medium">
-                  <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
-                  Slideshow
-                </div>
-              )}
-
               <div className="flex items-center justify-center gap-4 mb-6">
                 <span className={`w-16 h-16 rounded-full flex items-center justify-center font-bold text-2xl ${isDark ? 'bg-indigo-600 text-white' : 'bg-slate-900 text-white'}`}>
                   {focusedLexisIndex + 1}
@@ -1889,67 +1679,18 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                 </p>
               )}
 
-              {/* Audio Controls */}
-              {selectedTest.lexisAudio?.wordAudios && (
+              {/* Play Full Lexis Audio */}
+              {selectedTest.lexisAudio?.url && (
                 <div className="flex items-center justify-center gap-4 mt-8 pt-8 border-t border-slate-300/50">
-                  {/* Play Word Audio Button */}
                   <button
-                    onClick={handlePlayWordAudio}
-                    disabled={!selectedTest.lexisAudio.wordAudios[selectedTest.lexis[focusedLexisIndex].id]}
+                    onClick={handlePlayLexisAudio}
                     className={`flex items-center gap-2 px-6 py-3 rounded-xl font-medium transition-all ${
-                      isPlayingWordAudio
+                      isPlayingLexisAudio
                         ? 'bg-amber-500 text-white'
-                        : isDark
-                          ? 'bg-indigo-600 hover:bg-indigo-500 text-white'
-                          : 'bg-indigo-600 hover:bg-indigo-500 text-white'
-                    } disabled:opacity-50 disabled:cursor-not-allowed`}
-                  >
-                    {isPlayingWordAudio ? (
-                      <>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                          <rect x="6" y="4" width="4" height="16" />
-                          <rect x="14" y="4" width="4" height="16" />
-                        </svg>
-                        Playing
-                      </>
-                    ) : (
-                      <>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <polygon points="5 3 19 12 5 21 5 3" />
-                        </svg>
-                        Play Word
-                      </>
-                    )}
-                  </button>
-
-                  {/* Slideshow Button */}
-                  <button
-                    onClick={handleToggleSlideshow}
-                    className={`flex items-center gap-2 px-6 py-3 rounded-xl font-medium transition-all ${
-                      slideshowActive
-                        ? 'bg-green-500 hover:bg-green-600 text-white'
-                        : isDark
-                          ? 'bg-slate-700 hover:bg-slate-600 text-white'
-                          : 'bg-slate-200 hover:bg-slate-300 text-slate-800'
+                        : 'bg-indigo-600 hover:bg-indigo-500 text-white'
                     }`}
                   >
-                    {slideshowActive ? (
-                      <>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                          <rect x="6" y="4" width="4" height="16" />
-                          <rect x="14" y="4" width="4" height="16" />
-                        </svg>
-                        Stop Slideshow
-                      </>
-                    ) : (
-                      <>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <polygon points="5 3 19 12 5 21 5 3" />
-                          <line x1="19" y1="5" x2="19" y2="19" />
-                        </svg>
-                        Start Slideshow
-                      </>
-                    )}
+                    {isPlayingLexisAudio ? 'Pause Audio' : 'Play Audio'}
                   </button>
                 </div>
               )}
@@ -1975,24 +1716,15 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
               <>
                 <span>
                   <kbd className="px-2 py-1 rounded bg-slate-700">Space</kbd>
-                  {' '}{lexisViewMode === 'focus' && selectedTest?.lexisAudio?.wordAudios ? 'Play Word' : 'Play/Pause'}
+                  {' '}Play/Pause
                 </span>
-                {!(lexisViewMode === 'focus' && selectedTest?.lexisAudio?.wordAudios) && (
-                  <span><kbd className="px-2 py-1 rounded bg-slate-700">R</kbd> Restart</span>
-                )}
+                <span><kbd className="px-2 py-1 rounded bg-slate-700">R</kbd> Restart</span>
               </>
             )}
-            {/* Word audio controls - shown when no main audio but has word audios */}
-            {!selectedAudio && lexisViewMode === 'focus' && selectedTest?.lexisAudio?.wordAudios && (
-              <span>
-                <kbd className="px-2 py-1 rounded bg-slate-700">Space</kbd>
-                {' '}Play Word
-              </span>
-            )}
             <span><kbd className="px-2 py-1 rounded bg-slate-700">V</kbd> {lexisViewMode === 'overview' ? 'Focus' : 'Overview'}</span>
-            {lexisViewMode === 'focus' && !slideshowActive && <span><kbd className="px-2 py-1 rounded bg-slate-700">←→</kbd> Navigate</span>}
-            {lexisViewMode === 'focus' && selectedTest?.lexisAudio?.wordAudios && (
-              <span><kbd className={`px-2 py-1 rounded ${slideshowActive ? 'bg-green-600' : 'bg-slate-700'}`}>S</kbd> {slideshowActive ? 'Stop' : 'Slideshow'}</span>
+            {lexisViewMode === 'focus' && <span><kbd className="px-2 py-1 rounded bg-slate-700">←→</kbd> Navigate</span>}
+            {selectedTest?.lexis?.length && (
+              <span><kbd className={`px-2 py-1 rounded ${isPlayingLexisAudio ? 'bg-green-600' : 'bg-slate-700'}`}>S</kbd> {selectedTest?.lexisAudio?.url ? (isPlayingLexisAudio ? 'Pause' : 'Play Audio') : 'Generate Audio'}</span>
             )}
             {fullscreenSlides.length > 0 && (
               <span><kbd className="px-2 py-1 rounded bg-slate-700">F</kbd> Fullscreen</span>
@@ -2165,8 +1897,18 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                 <div className="h-full flex flex-col">
                   <div className="text-center pt-6 pb-4 flex-shrink-0">
                     <h2 className="text-2xl font-semibold text-slate-400 tracking-wide uppercase">
-                      📖 Vocabulary
+                      Vocabulary
                     </h2>
+                    {selectedTest.lexisAudio?.url && (
+                      <button
+                        onClick={handlePlayLexisAudio}
+                        className={`mt-2 inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                          isPlayingLexisAudio ? 'bg-amber-500 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                        }`}
+                      >
+                        {isPlayingLexisAudio ? 'Pause Audio' : 'Play Audio'}
+                      </button>
+                    )}
                   </div>
                   <div className="flex-1 overflow-hidden pb-16">
                     {(() => {
@@ -2179,42 +1921,16 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                       const termSize = count <= 8 ? 'text-3xl' : count <= 14 ? 'text-2xl' : 'text-xl';
                       const arabicSize = count <= 8 ? 'text-2xl' : count <= 14 ? 'text-xl' : 'text-lg';
                       const posSize = count <= 8 ? 'text-base' : 'text-sm';
-                      const iconSize = count <= 8 ? 'text-2xl' : 'text-xl';
                       const termWidth = useTwoCols ? 'w-48' : 'w-64';
                       const posWidth = useTwoCols ? 'w-24' : 'w-32';
 
                       const renderColumn = (columnItems: typeof items) => (
                         <div className="flex-1" style={{ display: 'grid', gridTemplateRows: `repeat(${columnItems.length}, 1fr)` }}>
-                          {columnItems.map((item) => {
-                            const globalIdx = items.indexOf(item);
-                            const isActive = (slideshowActive && globalIdx === focusedLexisIndex)
-                                           || playingWordId === item.id;
-                            const hasAudio = !!selectedTest.lexisAudio?.wordAudios?.[item.id];
-                            return (
+                          {columnItems.map((item) => (
                               <div
                                 key={item.id}
-                                className={`flex items-center gap-5 px-6 rounded-lg transition-all ${
-                                  isActive ? 'bg-indigo-950/30' : ''
-                                }`}
+                                className="flex items-center gap-5 px-6 rounded-lg"
                               >
-                                {hasAudio ? (
-                                  <button
-                                    onClick={() => {
-                                      if (slideshowActive) {
-                                        setSlideshowActive(false);
-                                        if (wordAudioRef.current) wordAudioRef.current.pause();
-                                      }
-                                      handleFullscreenWordPlay(item.id);
-                                    }}
-                                    className={`${iconSize} w-10 flex-shrink-0 transition-colors ${
-                                      isActive ? 'text-indigo-400 animate-pulse' : 'text-slate-600 hover:text-slate-400'
-                                    }`}
-                                  >
-                                    {isActive ? '🔊' : '🔈'}
-                                  </button>
-                                ) : (
-                                  <span className={`${iconSize} w-10 flex-shrink-0 text-slate-800`}>🔇</span>
-                                )}
                                 <span className={`${termSize} ${termWidth} font-bold text-white flex-shrink-0`}>{item.term}</span>
                                 {item.partOfSpeech ? (
                                   <span className={`${posSize} ${posWidth} flex-shrink-0 text-indigo-300`}>
@@ -2229,8 +1945,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                                   </span>
                                 )}
                               </div>
-                            );
-                          })}
+                          ))}
                         </div>
                       );
 
@@ -2482,20 +2197,20 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
               const footerControls = (
                 <>
                   {currentSlideIndex > 0 && (
-                    <span className="cursor-pointer hover:text-indigo-300 transition-colors" onClick={() => { setSlideshowActive(false); setFullscreenSlide(fullscreenSlides[currentSlideIndex - 1]); }}>
+                    <span className="cursor-pointer hover:text-indigo-300 transition-colors" onClick={() => { setFullscreenSlide(fullscreenSlides[currentSlideIndex - 1]); }}>
                       <kbd className="px-2 py-1 rounded bg-slate-700">←</kbd> Prev
                     </span>
                   )}
                   <span className="text-slate-400">{currentSlideIndex + 1} / {fullscreenSlides.length}</span>
                   {currentSlideIndex < fullscreenSlides.length - 1 && (
-                    <span className="cursor-pointer hover:text-indigo-300 transition-colors" onClick={() => { setSlideshowActive(false); setFullscreenSlide(fullscreenSlides[currentSlideIndex + 1]); }}>
+                    <span className="cursor-pointer hover:text-indigo-300 transition-colors" onClick={() => { setFullscreenSlide(fullscreenSlides[currentSlideIndex + 1]); }}>
                       Next <kbd className="px-2 py-1 rounded bg-slate-700">→</kbd>
                     </span>
                   )}
-                  {fullscreenSlide === 'vocabulary' && selectedTest.lexisAudio?.wordAudios && (
+                  {fullscreenSlide === 'vocabulary' && selectedTest?.lexis?.length && (
                     <span>
-                      <kbd className={`px-2 py-1 rounded ${slideshowActive ? 'bg-green-600' : 'bg-slate-700'}`}>S</kbd>
-                      {' '}{slideshowActive ? 'Stop' : 'Play All'}
+                      <kbd className={`px-2 py-1 rounded ${isPlayingLexisAudio ? 'bg-green-600' : 'bg-slate-700'}`}>S</kbd>
+                      {' '}{selectedTest?.lexisAudio?.url ? (isPlayingLexisAudio ? 'Pause' : 'Play Audio') : 'Generate Audio'}
                     </span>
                   )}
                   {selectedAudio && (
@@ -2632,7 +2347,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                 </div>
               </div>
 
-              {/* Existing Audio Status - shown when audio exists */}
+              {/* Existing Audio Status */}
               {selectedTest?.lexisAudio ? (
                 <div className="space-y-4">
                   <div className={`p-4 rounded-xl border ${isDark ? 'bg-slate-700/50 border-slate-600' : 'bg-slate-50 border-slate-200'}`}>
@@ -2642,30 +2357,19 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                         {selectedTest.lexisAudio.engine}
                       </span>
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                      {selectedTest.lexisAudio.url && (
-                        <button
-                          onClick={handlePlayLexisAudio}
-                          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                            isPlayingLexisAudio
-                              ? 'bg-green-600 text-white'
-                              : 'bg-emerald-600 text-white hover:bg-emerald-500'
-                          }`}
-                        >
-                          {isPlayingLexisAudio ? <PauseIcon className="w-4 h-4" /> : <PlayIcon className="w-4 h-4" />}
-                          {isPlayingLexisAudio ? 'Pause' : 'Play Full Audio'}
-                        </button>
-                      )}
-                      {selectedTest.lexisAudio.wordAudios && (
-                        <span className="flex items-center gap-1 px-3 py-2 bg-green-100 text-green-700 rounded-lg text-sm">
-                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                            <polyline points="22 4 12 14.01 9 11.01" />
-                          </svg>
-                          Per-word audio ready
-                        </span>
-                      )}
-                    </div>
+                    {selectedTest.lexisAudio.url && (
+                      <button
+                        onClick={handlePlayLexisAudio}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                          isPlayingLexisAudio
+                            ? 'bg-green-600 text-white'
+                            : 'bg-emerald-600 text-white hover:bg-emerald-500'
+                        }`}
+                      >
+                        {isPlayingLexisAudio ? <PauseIcon className="w-4 h-4" /> : <PlayIcon className="w-4 h-4" />}
+                        {isPlayingLexisAudio ? 'Pause' : 'Play Audio'}
+                      </button>
+                    )}
                   </div>
 
                   <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
@@ -2675,7 +2379,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                   <div className="flex flex-col gap-3">
                     <button
                       onClick={() => {
-                        if (confirm('Delete all vocabulary audio? This cannot be undone.')) {
+                        if (confirm('Delete vocabulary audio? This cannot be undone.')) {
                           const updatedTest: ListeningTest = {
                             ...selectedTest,
                             lexisAudio: undefined
@@ -2687,10 +2391,6 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                       }}
                       className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-600 text-white hover:bg-red-700 rounded-xl font-medium transition-colors"
                     >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="3 6 5 6 21 6" />
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                      </svg>
                       Delete Audio
                     </button>
 
@@ -2704,7 +2404,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                 </div>
               ) : (
                 <>
-                  {/* Generation UI - shown when no audio exists */}
+                  {/* Generation UI */}
                   <p className={`mb-4 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
                     Generate audio teaching the vocabulary words to students:
                   </p>
@@ -2715,61 +2415,9 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                     <li>- Pauses for comprehension</li>
                   </ul>
 
-                  {/* TTS Engine Selector */}
-                  <div className="mb-6">
-                    <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                      Voice Engine
-                    </label>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => setLexisTTSEngine('gemini')}
-                        disabled={isGeneratingLexisAudio}
-                        className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
-                          lexisTTSEngine === 'gemini'
-                            ? 'bg-blue-600 text-white'
-                            : isDark
-                              ? 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                        } disabled:opacity-50`}
-                      >
-                        Gemini
-                      </button>
-                      <button
-                        onClick={() => setLexisTTSEngine('openai')}
-                        disabled={isGeneratingLexisAudio}
-                        className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
-                          lexisTTSEngine === 'openai'
-                            ? 'bg-blue-600 text-white'
-                            : isDark
-                              ? 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                        } disabled:opacity-50`}
-                      >
-                        GPT-4o mini
-                      </button>
-                    </div>
-                  </div>
-
                   {lexisAudioError && (
                     <div className="mb-4 p-3 bg-red-100 border border-red-200 rounded-lg text-red-700 text-sm">
                       {lexisAudioError}
-                    </div>
-                  )}
-
-                  {/* Progress indicator for per-word generation */}
-                  {isGeneratingWordAudios && wordAudioProgress.total > 0 && (
-                    <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm text-blue-700 font-medium">Generating word audios...</span>
-                        <span className="text-sm text-blue-600">{wordAudioProgress.current} / {wordAudioProgress.total}</span>
-                      </div>
-                      <div className="w-full bg-blue-200 rounded-full h-2">
-                        <div
-                          className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                          style={{ width: `${(wordAudioProgress.current / wordAudioProgress.total) * 100}%` }}
-                        />
-                      </div>
-                      <p className="text-xs text-blue-600 mt-1">Current: {wordAudioProgress.word}</p>
                     </div>
                   )}
 
@@ -2777,12 +2425,8 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                   {user && (
                     <div className={`mb-4 p-3 rounded-xl border ${isDark ? 'bg-slate-700/50 border-slate-600' : 'bg-emerald-50 border-emerald-200'}`}>
                       <div className="flex items-center justify-between text-sm">
-                        <span className={isDark ? 'text-slate-300' : 'text-slate-600'}>Full Audio cost</span>
+                        <span className={isDark ? 'text-slate-300' : 'text-slate-600'}>Cost</span>
                         <span className="font-semibold text-amber-600">{OPERATION_COSTS.lexis_audio_batch} tokens</span>
-                      </div>
-                      <div className="flex items-center justify-between text-sm mt-1">
-                        <span className={isDark ? 'text-slate-300' : 'text-slate-600'}>Per-word Audio cost</span>
-                        <span className="font-semibold text-amber-600">{OPERATION_COSTS.per_word_audio} token</span>
                       </div>
                       <div className={`flex items-center justify-between text-sm mt-2 pt-2 border-t ${isDark ? 'border-slate-600' : 'border-emerald-200'}`}>
                         <span className={isDark ? 'text-slate-300' : 'text-slate-600'}>{user.role === 'admin' ? 'Tokens used' : 'Your balance'}</span>
@@ -2792,16 +2436,15 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                   )}
 
                   <div className="flex flex-col gap-3">
-                    {/* Full Audio Button */}
                     <button
                       onClick={() => {
                         if (user) {
-                          setPendingLexisAction('batch');
+                          setPendingLexisAudio(true);
                         } else {
                           handleGenerateLexisAudio();
                         }
                       }}
-                      disabled={isGeneratingLexisAudio || isGeneratingWordAudios || (user?.role === 'teacher' && !hasEnoughTokens(user, OPERATION_COSTS.lexis_audio_batch))}
+                      disabled={isGeneratingLexisAudio || (user?.role === 'teacher' && !hasEnoughTokens(user, OPERATION_COSTS.lexis_audio_batch))}
                       className="w-full px-4 py-3 bg-amber-600 text-white rounded-xl font-medium hover:bg-amber-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
                       {isGeneratingLexisAudio ? (
@@ -2812,48 +2455,14 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                       ) : (
                         <>
                           <SpeakerIcon className="w-4 h-4" />
-                          Generate Full Audio
+                          Generate Audio
                         </>
                       )}
                     </button>
-
-                    {/* Per-Word Audio Button (for slideshow) - Always uses GPT-4o mini to avoid Gemini quota issues */}
-                    <button
-                      onClick={() => {
-                        if (user) {
-                          setPendingLexisAction('perWord');
-                        } else {
-                          // Force OpenAI for per-word generation (Gemini quota issues with many requests)
-                          setLexisTTSEngine('openai');
-                          handleGenerateWordAudios();
-                        }
-                      }}
-                      disabled={isGeneratingLexisAudio || isGeneratingWordAudios || (user?.role === 'teacher' && !hasEnoughTokens(user, OPERATION_COSTS.per_word_audio))}
-                      className="w-full px-4 py-3 bg-green-600 text-white rounded-xl font-medium hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                    >
-                      {isGeneratingWordAudios ? (
-                        <>
-                          <SpinnerIcon className="w-4 h-4" />
-                          Generating {wordAudioProgress.current}/{wordAudioProgress.total}...
-                        </>
-                      ) : (
-                        <>
-                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <polygon points="5 3 19 12 5 21 5 3" />
-                            <line x1="19" y1="5" x2="19" y2="19" />
-                          </svg>
-                          Generate Per-Word Audio (GPT-4o mini)
-                        </>
-                      )}
-                    </button>
-
-                    <p className={`text-xs text-center ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-                      Full Audio: single file &bull; Per-Word: individual files for slideshow (uses GPT-4o mini)
-                    </p>
 
                     <button
                       onClick={() => { setShowLexisAudioConfirm(false); setLexisAudioError(null); }}
-                      disabled={isGeneratingLexisAudio || isGeneratingWordAudios}
+                      disabled={isGeneratingLexisAudio}
                       className={`w-full px-4 py-3 rounded-xl font-medium transition-colors disabled:opacity-50 ${isDark ? 'bg-slate-700 text-slate-300 hover:bg-slate-600' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}
                     >
                       Cancel
@@ -2918,32 +2527,19 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
           />
         )}
 
-        {/* Word Audio Element (for per-word playback) */}
-        <audio
-          ref={wordAudioRef}
-          preload="metadata"
-          className="hidden"
-          onEnded={() => setPlayingWordId(null)}
-        />
-
         {/* Token Confirmation Dialog for lexis audio */}
         <TokenConfirmDialog
-          isOpen={!!pendingLexisAction}
-          tokenCost={pendingLexisAction === 'batch' ? OPERATION_COSTS.lexis_audio_batch : OPERATION_COSTS.per_word_audio}
+          isOpen={pendingLexisAudio}
+          tokenCost={OPERATION_COSTS.lexis_audio_batch}
           currentBalance={user?.tokenBalance ?? 0}
           isAdmin={user?.role === 'admin'}
-          operationLabel={pendingLexisAction === 'batch' ? 'Generate full lexis audio' : 'Generate per-word audio'}
+          operationLabel="Generate vocabulary audio"
           isDark={isDark}
           onConfirm={() => {
-            if (pendingLexisAction === 'batch') {
-              handleGenerateLexisAudio();
-            } else {
-              setLexisTTSEngine('openai');
-              handleGenerateWordAudios();
-            }
-            setPendingLexisAction(null);
+            handleGenerateLexisAudio();
+            setPendingLexisAudio(false);
           }}
-          onCancel={() => setPendingLexisAction(null)}
+          onCancel={() => setPendingLexisAudio(false)}
         />
 
         {/* Token Confirmation Dialog for narration */}

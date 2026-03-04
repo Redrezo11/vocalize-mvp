@@ -271,18 +271,6 @@ const processTestAudioUploads = async (testId, data) => {
     );
   }
 
-  // lexisAudio.wordAudios
-  if (data.lexisAudio?.wordAudios) {
-    for (const [wordId, wordAudio] of Object.entries(data.lexisAudio.wordAudios)) {
-      if (wordAudio.url?.startsWith('data:')) {
-        uploads.push(
-          uploadTestAudio(wordAudio.url, `word_audio_${testId}_${wordId}`)
-            .then(url => { if (url) wordAudio.url = url; })
-        );
-      }
-    }
-  }
-
   // classroomActivity.audioEn
   if (data.classroomActivity?.audioEn?.startsWith('data:')) {
     uploads.push(
@@ -881,6 +869,38 @@ app.post('/api/admin/migrate-token-usage', authenticate, requireAdmin, async (re
   }
 });
 
+// Cleanup per-word lexis audio: delete from Cloudinary + strip wordAudios from all tests (run once)
+app.post('/api/admin/cleanup-word-audios', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const tests = await ListeningTest.find({ 'lexisAudio.wordAudios': { $exists: true, $ne: null } });
+    let testsProcessed = 0;
+    let filesDeleted = 0;
+
+    for (const test of tests) {
+      const testId = test._id.toString();
+      const wordAudios = test.lexisAudio?.wordAudios;
+      if (!wordAudios) continue;
+
+      for (const wordId of Object.keys(wordAudios)) {
+        await deleteFromCloudinary(`vocalize-test-audio/word_audio_${testId}_${wordId}`);
+        filesDeleted++;
+      }
+
+      await ListeningTest.updateOne(
+        { _id: test._id },
+        { $unset: { 'lexisAudio.wordAudios': '' } }
+      );
+      testsProcessed++;
+    }
+
+    console.log(`[cleanup-word-audios] Processed ${testsProcessed} tests, deleted ${filesDeleted} files`);
+    res.json({ message: 'Word audio cleanup complete', testsProcessed, filesDeleted });
+  } catch (err) {
+    console.error('[cleanup-word-audios] Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // API Routes
 
 // Get all audio entries
@@ -1260,13 +1280,6 @@ app.delete('/api/tests/:id', authenticate, async (req, res) => {
       deleteFromCloudinary(`vocalize-test-audio/plenary_en_${testId}`),
       deleteFromCloudinary(`vocalize-test-audio/plenary_ar_${testId}`),
     ];
-    if (test.lexisAudio?.wordAudios) {
-      for (const wordId of Object.keys(test.lexisAudio.wordAudios)) {
-        deletions.push(
-          deleteFromCloudinary(`vocalize-test-audio/word_audio_${testId}_${wordId}`)
-        );
-      }
-    }
     Promise.all(deletions).catch(err =>
       console.error('[DELETE /api/tests] Cloudinary cleanup error:', err)
     );

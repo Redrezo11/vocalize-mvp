@@ -76,19 +76,6 @@ async function migrate() {
       );
     }
 
-    // lexisAudio.wordAudios
-    if (test.lexisAudio?.wordAudios) {
-      for (const [wordId, wordAudio] of Object.entries(test.lexisAudio.wordAudios)) {
-        if (wordAudio.url?.startsWith('data:')) {
-          fieldCount++;
-          uploads.push(
-            uploadTestAudio(wordAudio.url, `word_audio_${testId}_${wordId}`)
-              .then(url => { if (url) wordAudio.url = url; })
-          );
-        }
-      }
-    }
-
     // classroomActivity.audioEn
     if (test.classroomActivity?.audioEn?.startsWith('data:')) {
       fieldCount++;
