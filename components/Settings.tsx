@@ -7,12 +7,14 @@ export type ContentMode = 'standard' | 'halal' | 'elsd';
 export type ClassroomTheme = 'light' | 'dark';
 export type ContentModel = 'gpt-5-mini' | 'gpt-5.2';
 export type SpeakerCountDefault = 'random' | 1 | 2 | 3;
+export type ClassroomTestFilter = 'all' | 'mine';
 
 export interface AppSettings {
   appMode: AppMode;
   difficultyLevel: CEFRLevel;
   contentMode: ContentMode;
   classroomTheme: ClassroomTheme;
+  classroomTestFilter: ClassroomTestFilter;
   // JAM generation defaults
   targetDuration: number; // 5-30 minutes
   contentModel: ContentModel;
@@ -24,6 +26,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   difficultyLevel: 'B1',
   contentMode: 'standard',
   classroomTheme: 'light',
+  classroomTestFilter: 'all',
   // JAM generation defaults
   targetDuration: 10, // 10 minutes default
   contentModel: 'gpt-5-mini',
@@ -305,6 +308,40 @@ export const Settings: React.FC<SettingsProps> = ({
                 </div>
               </div>
 
+              {/* Classroom Test Filter - Desktop only */}
+              <div className="hidden lg:block lg:mt-6">
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Classroom Default View
+                </label>
+                <p className="text-xs text-slate-500 mb-4">
+                  Which tests to show by default in classroom mode
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div
+                    onClick={() => setLocalSettings({ ...localSettings, classroomTestFilter: 'all' })}
+                    className={`flex flex-col items-center gap-1 p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                      localSettings.classroomTestFilter === 'all'
+                        ? 'border-indigo-500 bg-indigo-50'
+                        : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span className="text-sm font-medium text-slate-900">All Tests</span>
+                    <span className="text-xs text-slate-500">From everyone</span>
+                  </div>
+                  <div
+                    onClick={() => setLocalSettings({ ...localSettings, classroomTestFilter: 'mine' })}
+                    className={`flex flex-col items-center gap-1 p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                      localSettings.classroomTestFilter === 'mine'
+                        ? 'border-indigo-500 bg-indigo-50'
+                        : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span className="text-sm font-medium text-slate-900">My Tests</span>
+                    <span className="text-xs text-slate-500">Only yours</span>
+                  </div>
+                </div>
+              </div>
+
               {/* JAM Generation Defaults - Desktop only */}
               <div className="hidden lg:block lg:mt-6">
                 <label className="block text-sm font-semibold text-slate-700 mb-2">
@@ -507,6 +544,43 @@ export const Settings: React.FC<SettingsProps> = ({
                   </div>
                   <span className="text-sm font-medium text-slate-900">Dark</span>
                   <span className="text-xs text-slate-500">Easy on the eyes</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Divider */}
+            <div className="border-t border-slate-200 my-5"></div>
+
+            {/* Classroom Default View - Mobile */}
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
+                Classroom Default View
+              </label>
+              <p className="text-xs text-slate-500 mb-4">
+                Which tests to show by default in classroom mode
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div
+                  onClick={() => setLocalSettings({ ...localSettings, classroomTestFilter: 'all' })}
+                  className={`flex flex-col items-center gap-1 p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                    localSettings.classroomTestFilter === 'all'
+                      ? 'border-indigo-500 bg-indigo-50'
+                      : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                  }`}
+                >
+                  <span className="text-sm font-medium text-slate-900">All Tests</span>
+                  <span className="text-xs text-slate-500">From everyone</span>
+                </div>
+                <div
+                  onClick={() => setLocalSettings({ ...localSettings, classroomTestFilter: 'mine' })}
+                  className={`flex flex-col items-center gap-1 p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                    localSettings.classroomTestFilter === 'mine'
+                      ? 'border-indigo-500 bg-indigo-50'
+                      : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                  }`}
+                >
+                  <span className="text-sm font-medium text-slate-900">My Tests</span>
+                  <span className="text-xs text-slate-500">Only yours</span>
                 </div>
               </div>
             </div>

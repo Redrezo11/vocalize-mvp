@@ -175,6 +175,8 @@ interface ClassroomModeProps {
   isLoadingTests?: boolean;  // Loading state for initial test fetch
   audioEntries: SavedAudio[];
   theme?: ClassroomTheme;
+  classroomTestFilter?: 'all' | 'mine';
+  currentUsername?: string;
   autoSelectTestId?: string | null;
   onAutoSelectHandled?: () => void;
   onExit: () => void;
@@ -186,7 +188,7 @@ interface ClassroomModeProps {
 
 type ClassroomView = 'select' | 'present';
 
-export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTests = false, audioEntries, theme = 'light', autoSelectTestId, onAutoSelectHandled, onExit, onPreviewStudent, onEditTest, onDeleteTest, onUpdateTest }) => {
+export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTests = false, audioEntries, theme = 'light', classroomTestFilter = 'all', currentUsername, autoSelectTestId, onAutoSelectHandled, onExit, onPreviewStudent, onEditTest, onDeleteTest, onUpdateTest }) => {
   const appMode = useAppMode();
   const labels = modeLabel(appMode);
   const { user, updateTokenBalance } = useAuth();
@@ -210,6 +212,15 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
   const [contentTab, setContentTab] = useState<'passage' | 'vocabulary'>('passage');
   const [passageFontSize, setPassageFontSize] = useState(1.25); // rem
   const audioRef = useRef<HTMLAudioElement>(null);
+
+  // Test filter state (All Tests / My Tests)
+  const [testFilter, setTestFilter] = useState<'all' | 'mine'>(classroomTestFilter);
+  const filteredTests = useMemo(() => {
+    if (testFilter === 'mine' && currentUsername) {
+      return tests.filter(t => t.createdBy?.username === currentUsername);
+    }
+    return tests;
+  }, [tests, testFilter, currentUsername]);
 
   // Lexis audio state
   const [showLexisAudioConfirm, setShowLexisAudioConfirm] = useState(false);
@@ -1112,9 +1123,33 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
         </div>
       ) : (
         <div className="max-w-4xl mx-auto">
-          <h2 className={`text-xl mb-6 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Select a test to present:</h2>
+          <div className="flex items-center justify-between mb-6">
+            <h2 className={`text-xl ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Select a test to present:</h2>
+            <div className={`flex rounded-lg overflow-hidden border ${isDark ? 'border-slate-600' : 'border-slate-300'}`}>
+              <button
+                onClick={() => setTestFilter('all')}
+                className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                  testFilter === 'all'
+                    ? isDark ? 'bg-indigo-600 text-white' : 'bg-indigo-600 text-white'
+                    : isDark ? 'bg-slate-700 text-slate-300 hover:bg-slate-600' : 'bg-white text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                All Tests
+              </button>
+              <button
+                onClick={() => setTestFilter('mine')}
+                className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                  testFilter === 'mine'
+                    ? isDark ? 'bg-indigo-600 text-white' : 'bg-indigo-600 text-white'
+                    : isDark ? 'bg-slate-700 text-slate-300 hover:bg-slate-600' : 'bg-white text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                My Tests
+              </button>
+            </div>
+          </div>
           <div className="space-y-4">
-            {tests.filter(t => isTestTypeForMode(t.type, appMode)).map(test => {
+            {filteredTests.filter(t => isTestTypeForMode(t.type, appMode)).map(test => {
               const audio = getAudioForTest(test);
               return (
                 <div

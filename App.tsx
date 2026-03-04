@@ -1870,10 +1870,12 @@ const App: React.FC = () => {
       <AppModeProvider mode={settingsHook.settings.appMode}>
         <Suspense fallback={<LoadingSpinner />}>
           <ClassroomMode
-          tests={userFilteredTests}
+          tests={modeFilteredTests}
           isLoadingTests={isLoadingTests}
           audioEntries={userFilteredAudios}
           theme={settingsHook.settings.classroomTheme}
+          classroomTestFilter={settingsHook.settings.classroomTestFilter}
+          currentUsername={user?.username}
           autoSelectTestId={autoSelectTestId}
           onAutoSelectHandled={() => setAutoSelectTestId(null)}
           onExit={() => setCurrentView('library')}
