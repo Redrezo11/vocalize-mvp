@@ -286,7 +286,7 @@ export async function resolveGender(name: string): Promise<'Male' | 'Female'> {
       'Given a character name, respond with exactly one word: Male or Female.',
       name
     );
-    return response.trim() === 'Female' ? 'Female' : 'Male';
+    return response.trim().toLowerCase() === 'female' ? 'Female' : 'Male';
   } catch {
     return 'Male'; // safe fallback on API error
   }

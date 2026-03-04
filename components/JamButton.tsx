@@ -452,11 +452,20 @@ export const JamButton: React.FC<JamButtonProps> = ({
         ? mapGeminiToOpenAIVoices(geminiMapping)
         : assignOpenAIVoices(analysis.speakers);
 
+      // Build case-insensitive lookups (LLM may use different casing in voiceAssignments vs dialogue)
+      const voiceLookup: Record<string, string> = {};
+      for (const [k, v] of Object.entries(openaiMapping)) voiceLookup[k.toLowerCase()] = v;
+      const geminiLookup: Record<string, string> = {};
+      if (geminiMapping) {
+        for (const [k, v] of Object.entries(geminiMapping)) geminiLookup[k.toLowerCase()] = v;
+      }
+
       const blobs: Blob[] = [];
       for (const segment of analysis.segments) {
-        const voice = openaiMapping[segment.speaker] || 'alloy';
+        const speakerKey = segment.speaker.toLowerCase();
+        const voice = voiceLookup[speakerKey] || 'alloy';
         // Look up Gemini voice style for instructions
-        const geminiVoiceName = geminiMapping?.[segment.speaker];
+        const geminiVoiceName = geminiLookup[speakerKey];
         const geminiDef = geminiVoiceName ? GEMINI_VOICES.find(v => v.name === geminiVoiceName) : null;
         const instructions = geminiDef ? `Speak in a ${geminiDef.style.toLowerCase()} tone.` : undefined;
 
