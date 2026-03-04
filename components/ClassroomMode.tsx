@@ -1225,7 +1225,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                       {/* Secondary actions - subtle icon buttons */}
                       {(onEditTest || onDeleteTest) && (
                         <div className="flex items-center gap-1">
-                          {onEditTest && (
+                          {onEditTest && (user?.role === 'admin' || user?.username === test.createdBy?.username) && (
                             <button
                               onClick={() => onEditTest(test)}
                               className={`p-1.5 rounded-lg transition-colors ${isDark ? 'text-slate-500 hover:text-slate-300 hover:bg-slate-700' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'}`}
