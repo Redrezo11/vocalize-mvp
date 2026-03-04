@@ -1145,8 +1145,9 @@ const App: React.FC = () => {
   const handleEnterClassroom = () => {
     // Show classroom immediately
     setCurrentView('classroom');
-    // Load tests in background (uses cache if available)
+    // Load tests + audio entries in background (uses cache if available)
     loadAllTests();
+    audioStorage.loadAll();
   };
 
   // Settings handlers
@@ -1613,7 +1614,8 @@ const App: React.FC = () => {
   useEffect(() => {
     if (currentView === 'library') {
       preloadClassroom();
-      loadAllTests(); // Prefetch tests for faster classroom entry
+      loadAllTests();
+      audioStorage.loadAll();
     }
   }, [currentView]);
 
