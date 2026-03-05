@@ -157,6 +157,7 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
   const [bonusScores, setBonusScores] = useState<{ score: number; correct: number; total: number }[]>([]);
   const [isGeneratingBonus, setIsGeneratingBonus] = useState(false);
   const [bonusError, setBonusError] = useState<string | null>(null);
+  const isBonusInFlightRef = useRef(false);
   // SessionStorage key for tracking seen bonus question IDs per student per test
   const getSeenBonusKey = (id: string) => `bonus_seen_${id}`;
 
@@ -293,125 +294,123 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
 
   // Bonus practice: fetch latest pool from DB, track seen per-student in sessionStorage, append live-generated to DB
   const handleGenerateBonus = useCallback(async (count: 5 | 10) => {
+    // Concurrency guard: ref is synchronous and closure-proof
+    if (isBonusInFlightRef.current) return;
+    isBonusInFlightRef.current = true;
+    setIsGeneratingBonus(true);
     setBonusError(null);
 
-    // Stable ID for a question: DB returns _id (MongoDB ObjectId), our code sets id
-    const qid = (q: any): string => q._id || q.id || q.questionText;
-
-    // Read seen question IDs from sessionStorage
-    const seenKey = getSeenBonusKey(test.id);
-    let seenIds: string[] = JSON.parse(sessionStorage.getItem(seenKey) || '[]');
-
-    // Helper to mark question IDs as seen and persist
-    const markSeen = (ids: string[]) => {
-      seenIds = [...seenIds, ...ids];
-      sessionStorage.setItem(seenKey, JSON.stringify(seenIds));
-    };
-
-    // Fetch latest pool from DB
-    let pool: TestQuestion[] = [];
     try {
-      const poolRes = await fetch(`/api/tests/${test.id}/bonus-pool`);
-      if (poolRes.ok) {
-        const poolData = await poolRes.json();
-        pool = poolData.bonusQuestions || [];
-      }
-    } catch {
-      // If fetch fails, continue with empty pool
-    }
+      // Stable ID for a question: DB returns _id (MongoDB ObjectId), our code sets id
+      const qid = (q: any): string => q._id || q.id || q.questionText;
 
-    // Filter pool to unseen questions
-    const seenSet = new Set(seenIds);
-    const unseen = pool.filter(q => !seenSet.has(qid(q)));
-    const available = unseen.slice(0, count);
-    const remaining = count - available.length;
+      // Read seen question IDs from sessionStorage
+      const seenKey = getSeenBonusKey(test.id);
+      let seenIds: string[] = JSON.parse(sessionStorage.getItem(seenKey) || '[]');
 
-    // Helper to generate questions live via API
-    const generateLive = async (liveCount: number): Promise<TestQuestion[]> => {
-      const allExistingQuestions = [
-        ...test.questions.map(q => q.questionText),
-        ...bonusRounds.flat().map(q => q.questionText),
-        ...available.map(q => q.questionText),
-      ];
+      // Helper to mark question IDs as seen and persist
+      const markSeen = (ids: string[]) => {
+        seenIds = [...seenIds, ...ids];
+        sessionStorage.setItem(seenKey, JSON.stringify(seenIds));
+      };
 
-      const input = JSON.stringify({
-        transcript: (transcript || test.sourceText || '').slice(0, 4000),
-        existingQuestions: allExistingQuestions,
-      });
-
-      const text = await callOpenAI(
-        contentModel,
-        buildBonusPrompt(liveCount, test.difficulty || 'B1', isReading),
-        input,
-      );
-      reportStudentTokenUsage(test.id, 'student_bonus_generation', contentModel, presenterId);
-
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error('No JSON in response');
-
-      const parsed = JSON.parse(jsonMatch[0]);
-      return (parsed.questions || []).map((q: any, i: number) => ({
-        ...q,
-        id: `live-bonus-${Date.now()}-${i}`,
-      }));
-    };
-
-    // Helper to append live-generated questions to DB pool (fire-and-forget)
-    const appendToPool = (questions: TestQuestion[]) => {
-      fetch(`/api/tests/${test.id}/bonus-questions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ questions }),
-      }).catch(err => console.error('[Bonus] Failed to append to pool:', err));
-    };
-
-    // Case 1: Enough in pool — serve instantly
-    if (available.length >= count) {
-      const served = available.slice(0, count);
-      const servedQs = served.map((q, i) => ({
-        ...q,
-        id: qid(q) || `bonus-${bonusRounds.length}-${i}`,
-      }));
-      markSeen(served.map(q => qid(q)));
-      setBonusRounds(prev => [...prev, servedQs]);
-      return;
-    }
-
-    // Case 2: Partial pool + live API for remainder
-    if (available.length > 0 && remaining > 0) {
-      const pregenQs = available.map((q, i) => ({
-        ...q,
-        id: qid(q) || `bonus-${bonusRounds.length}-${i}`,
-      }));
-      markSeen(available.map(q => qid(q)));
-
-      setIsGeneratingBonus(true);
+      // Fetch latest pool from DB
+      let pool: TestQuestion[] = [];
       try {
-        const liveQs = await generateLive(remaining);
-        if (liveQs.length === 0 && pregenQs.length === 0) throw new Error('No questions generated');
-        // Append live questions to DB pool so other students benefit
-        if (liveQs.length > 0) {
-          appendToPool(liveQs);
-          markSeen(liveQs.map(q => qid(q)));
+        const poolRes = await fetch(`/api/tests/${test.id}/bonus-pool`);
+        if (poolRes.ok) {
+          const poolData = await poolRes.json();
+          pool = poolData.bonusQuestions || [];
         }
-        setBonusRounds(prev => [...prev, [...pregenQs, ...liveQs]]);
-      } catch (err) {
-        // Still serve pool questions even if API fails
-        setBonusRounds(prev => [...prev, pregenQs]);
-        setBonusError('Some questions could not be generated');
-        console.error('[Bonus] Partial generate error:', err);
-      } finally {
-        setIsGeneratingBonus(false);
+      } catch {
+        // If fetch fails, continue with empty pool
       }
-      return;
-    }
 
-    // Case 3: Pool exhausted for this student — full live API call
-    setIsGeneratingBonus(true);
-    try {
+      // Filter pool to unseen questions
+      const seenSet = new Set(seenIds);
+      const unseen = pool.filter(q => !seenSet.has(qid(q)));
+      const available = unseen.slice(0, count);
+      const remaining = count - available.length;
+
+      // Helper to generate questions live via API
+      const generateLive = async (liveCount: number): Promise<TestQuestion[]> => {
+        const allExistingQuestions = [
+          ...test.questions.map(q => q.questionText),
+          ...bonusRounds.flat().map(q => q.questionText),
+          ...available.map(q => q.questionText),
+        ];
+
+        const input = JSON.stringify({
+          transcript: (transcript || test.sourceText || '').slice(0, 4000),
+          existingQuestions: allExistingQuestions,
+        });
+
+        const text = await callOpenAI(
+          contentModel,
+          buildBonusPrompt(liveCount, test.difficulty || 'B1', isReading),
+          input,
+        );
+        reportStudentTokenUsage(test.id, 'student_bonus_generation', contentModel, presenterId);
+
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) throw new Error('No JSON in response');
+
+        const parsed = JSON.parse(jsonMatch[0]);
+        return (parsed.questions || []).map((q: any, i: number) => ({
+          ...q,
+          id: `live-bonus-${Date.now()}-${i}`,
+        }));
+      };
+
+      // Helper to append live-generated questions to DB pool (fire-and-forget)
+      const appendToPool = (questions: TestQuestion[]) => {
+        fetch(`/api/tests/${test.id}/bonus-questions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ questions }),
+        }).catch(err => console.error('[Bonus] Failed to append to pool:', err));
+      };
+
+      // Case 1: Enough in pool — serve instantly
+      if (available.length >= count) {
+        const served = available.slice(0, count);
+        const servedQs = served.map((q, i) => ({
+          ...q,
+          id: qid(q) || `bonus-${bonusRounds.length}-${i}`,
+        }));
+        markSeen(served.map(q => qid(q)));
+        setBonusRounds(prev => [...prev, servedQs]);
+        return;
+      }
+
+      // Case 2: Partial pool + live API for remainder
+      if (available.length > 0 && remaining > 0) {
+        const pregenQs = available.map((q, i) => ({
+          ...q,
+          id: qid(q) || `bonus-${bonusRounds.length}-${i}`,
+        }));
+        markSeen(available.map(q => qid(q)));
+
+        try {
+          const liveQs = await generateLive(remaining);
+          if (liveQs.length === 0 && pregenQs.length === 0) throw new Error('No questions generated');
+          if (liveQs.length > 0) {
+            appendToPool(liveQs);
+            markSeen(liveQs.map(q => qid(q)));
+          }
+          setBonusRounds(prev => [...prev, [...pregenQs, ...liveQs]]);
+        } catch (err) {
+          // Still serve pool questions even if API fails
+          setBonusRounds(prev => [...prev, pregenQs]);
+          setBonusError('Some questions could not be generated');
+          console.error('[Bonus] Partial generate error:', err);
+        }
+        return;
+      }
+
+      // Case 3: Pool exhausted for this student — full live API call
       const liveQs = await generateLive(count);
       if (liveQs.length === 0) throw new Error('No questions generated');
-      // Append to DB pool so other students benefit
       appendToPool(liveQs);
       markSeen(liveQs.map(q => qid(q)));
       setBonusRounds(prev => [...prev, liveQs]);
@@ -419,6 +418,7 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
       console.error('[Bonus] Generate error:', err);
       setBonusError(err instanceof Error ? err.message : 'Failed to generate questions');
     } finally {
+      isBonusInFlightRef.current = false;
       setIsGeneratingBonus(false);
     }
   }, [test, transcript, contentModel, isReading, bonusRounds]);
@@ -642,13 +642,15 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
                   <div className="flex gap-3 justify-center">
                     <button
                       onClick={() => handleGenerateBonus(5)}
-                      className="px-4 py-2 rounded-lg text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-500 transition-colors"
+                      disabled={isGeneratingBonus}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${isGeneratingBonus ? 'bg-indigo-400 cursor-not-allowed opacity-50 text-white' : 'bg-indigo-600 text-white hover:bg-indigo-500'}`}
                     >
                       +5 Questions
                     </button>
                     <button
                       onClick={() => handleGenerateBonus(10)}
-                      className="px-4 py-2 rounded-lg text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-500 transition-colors"
+                      disabled={isGeneratingBonus}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${isGeneratingBonus ? 'bg-indigo-400 cursor-not-allowed opacity-50 text-white' : 'bg-indigo-600 text-white hover:bg-indigo-500'}`}
                     >
                       +10 Questions
                     </button>
@@ -971,13 +973,15 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
                     <div className="flex gap-3 justify-center">
                       <button
                         onClick={() => handleGenerateBonus(5)}
-                        className="px-4 py-2 rounded-lg text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-500 transition-colors"
+                        disabled={isGeneratingBonus}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${isGeneratingBonus ? 'bg-indigo-400 cursor-not-allowed opacity-50 text-white' : 'bg-indigo-600 text-white hover:bg-indigo-500'}`}
                       >
                         +5 Questions
                       </button>
                       <button
                         onClick={() => handleGenerateBonus(10)}
-                        className="px-4 py-2 rounded-lg text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-500 transition-colors"
+                        disabled={isGeneratingBonus}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${isGeneratingBonus ? 'bg-indigo-400 cursor-not-allowed opacity-50 text-white' : 'bg-indigo-600 text-white hover:bg-indigo-500'}`}
                       >
                         +10 Questions
                       </button>
