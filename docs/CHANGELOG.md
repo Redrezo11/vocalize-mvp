@@ -212,7 +212,176 @@ For any LLM reading this codebase: start here. This document covers the full app
 
 ---
 
-## Recent Changes (2026-03-04)
+## Recent Changes (2026-03-05)
+
+### Gateway Page Labels & Color Consistency (`f1df117`)
+
+**Feature**: Gateway landing page now reflects the current app mode.
+
+- Left card label: "Create" → **"Create Listening"** / **"Create Reading"** based on `appMode`
+- Left card color: **green/emerald** in reading mode (icon, shadow, hover) instead of always blue/indigo
+- Right card label: "Present Test" → **"Present Lesson"**
+
+**Files**: `App.tsx`
+
+---
+
+### Bonus Questions Race Condition Fix (`371e92b`)
+
+**Bug**: Student clicks +5 bonus questions, request fails ("Failed to fetch"), clicks again 2 more times → 3 question sets dumped at once. Caused duplicate or unwanted extra rounds.
+
+**Root cause**: `setIsGeneratingBonus(true)` was called *after* the pool fetch `await` (not at the top), leaving buttons clickable for seconds during Heroku cold start. No ref-based guard against concurrent invocations. Case 1 (instant pool serve) never set loading state at all.
+
+**Fix**:
+- Added `isBonusInFlightRef` (synchronous, closure-proof concurrency guard)
+- Moved `setIsGeneratingBonus(true)` to the very first line, before any `await`
+- Restructured into single outer `try/finally` — guarantees cleanup regardless of case
+- Added `disabled={isGeneratingBonus}` + disabled styling to all 4 bonus buttons as secondary protection
+
+**Files**: `components/StudentTest.tsx`
+
+---
+
+### Classroom Mode Edit Restriction (`da91838`)
+
+**Feature**: Teachers can only see edit/delete icons on their own tests in classroom mode. Admins can edit any test.
+
+**Fix**: Added `(user?.role === 'admin' || user?.username === test.createdBy?.username)` guard to the edit button, matching the existing delete button pattern.
+
+**Files**: `components/ClassroomMode.tsx`
+
+---
+
+### Bonus Pool Tracking Fix — `_id` vs `id` (`82d19f8`)
+
+**Bug**: Clicking +5 bonus questions works, but clicking +5 again shows the same questions. SessionStorage dedup didn't work.
+
+**Root cause**: `testQuestionSchema` has no custom `id` field — MongoDB subdocuments only get `_id`. When tracking seen questions via `q.id`, it was always `undefined`, so `seenSet.has(undefined)` returned false and every question looked unseen.
+
+**Fix**: Added `qid()` helper: `(q) => q._id || q.id || q.questionText`. Used consistently in all filtering and `markSeen` calls. Changed `seenIds` from `const` to `let` for proper accumulation.
+
+**Files**: `components/StudentTest.tsx`
+
+---
+
+### Bonus Questions — LLM Prompts + Shared Append-Only Pool (`b3bfcc5`)
+
+**Feature**: Complete bonus questions system — pre-generated at test creation + shared pool for students.
+
+**Part A — LLM Prompt Templates**: Added `bonusQuestions` (10 questions) to JSON output format in all prompt builders:
+- `TestBuilder.tsx` — `getLLMTemplate` (listening & reading comprehension)
+- `OneShotCreator.tsx` — single-call prompt, `buildTestContentPrompt`, `buildPassagePrompt`
+- Updated response parsing and test save payloads in OneShotCreator, JamButton, and TestBuilder
+- Fire-and-forget `generateBonusForTest` now conditional — only runs when LLM didn't include bonus questions
+
+**Part B — Shared Pool**:
+- `GET /api/tests/:id/bonus-pool` — lightweight fetch of just bonus questions (no auth, for students)
+- `POST /api/tests/:id/bonus-questions` — append-only (`$push` + `$each`), never replaces
+- Rewrote `handleGenerateBonus` in `StudentTest.tsx`: fetch latest pool from DB → filter by sessionStorage seen IDs → serve from pool or generate live → append live questions back to DB
+- Per-student tracking via sessionStorage (`bonus_seen_${testId}`)
+
+**Files**: `components/TestBuilder.tsx`, `components/OneShotCreator.tsx`, `components/JamButton.tsx`, `server/index.js`, `components/StudentTest.tsx`, `helpers/bonusGeneration.ts` (new)
+
+---
+
+### Reading Mode QR Code Bug Fix (`0c749ba`)
+
+**Bug**: When a student scans a QR code for a reading test, the passage was missing.
+
+**Fix**: Ensured `sourceText` (the reading passage) is properly passed to `StudentTest` for reading-mode tests.
+
+**Files**: `App.tsx`, `components/StudentTest.tsx`
+
+---
+
+### Lexis Pause Button Color Fix (`7495bf4`)
+
+**Bug**: Fullscreen lexis pause button was amber instead of green.
+
+**Fix**: Changed pause button color to match green play button styling for consistency.
+
+**Files**: `components/ClassroomMode.tsx`
+
+---
+
+### Gateway Landing Page + Simplified Navbar (`a73b083`, `4b0ff00`)
+
+**Feature**: New two-card gateway as the default landing page.
+
+- **Create** card (left) → goes to creation method selector
+- **Present** card (right) → enters classroom mode
+- Simplified navbar: replaced multiple creation mode buttons with single "Create" button
+- ReadForge branding + green accent in reading mode; DialogueForge + indigo in listening mode
+
+**Files**: `App.tsx`
+
+---
+
+### Fullscreen Lexis Audio Button (`f50a8a6`)
+
+**Feature**: Added "Generate Lexis Audio" button in fullscreen classroom view + clarified S key hint labels.
+
+**Files**: `components/ClassroomMode.tsx`
+
+---
+
+### Classroom Test Filter Toggle (`efbc6fb`)
+
+**Feature**: "All Tests" / "My Tests" toggle in classroom mode. Preference persisted in user settings.
+
+**Files**: `components/ClassroomMode.tsx`, `hooks/useSettings.ts`, `server/index.js`
+
+---
+
+### Classroom Navigation Fixes (`6797442`, `1d46a13`, `b55f4a9`, `3a1cc6e`)
+
+- Preview exit returns to classroom presentation view (not test list)
+- Fixed TDZ crash: moved `userFiltered` memos after `audioStorage` declaration
+- Fixed classroom redirect bug: excluded classroom from audio restore effect
+- Fixed stale audio entries: refresh on ClassroomMode entry
+
+**Files**: `App.tsx`, `components/ClassroomMode.tsx`
+
+---
+
+### Teacher Content Isolation + Reading Defaults (`eba22f5`)
+
+**Feature**: Teachers see only their own content by default. Reading mode defaults to vocabulary view.
+
+**Files**: `App.tsx`, `components/ClassroomMode.tsx`
+
+---
+
+### Classroom Keyboard & UI Polish (`5db85de`, `b90ffa4`, `941cc01`, `33263e8`)
+
+- Restricted delete to admins + removed play/delete from audio cards in library
+- Fixed Space key playing lexis audio instead of main listening audio
+- Removed Esc button from non-fullscreen classroom footer
+- Fixed S key lexis audio + clickable footer hints + Vocab button play/pause
+
+**Files**: `components/ClassroomMode.tsx`, `components/AudioLibrary.tsx`
+
+---
+
+### Lexis Audio Simplification (`6e5ff78`)
+
+**Feature**: Removed per-word lexis audio generation. Simplified to full-batch OpenAI TTS only (faster, cheaper).
+
+**Files**: `utils/lexisTTS.ts`, `components/ClassroomMode.tsx`, `components/TestBuilder.tsx`
+
+---
+
+### Audio Persistence Fix (`7e8fbfc`)
+
+**Bug**: Audio not persisting on test creation.
+
+**Fix**: Server now processes base64 audio uploads on POST (create), not just PUT (update).
+
+**Files**: `server/index.js`
+
+---
+
+## Earlier Changes (2026-03-04)
 
 ### Student Dark Mode Fix (`18d57f3`)
 
