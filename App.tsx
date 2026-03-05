@@ -1946,12 +1946,24 @@ const App: React.FC = () => {
             {/* Create Card */}
             <button
               onClick={() => setCurrentView('home')}
-              className="group flex flex-col items-center gap-6 p-10 sm:p-14 rounded-3xl border-2 border-slate-200 bg-white/80 backdrop-blur-sm hover:border-indigo-400 hover:shadow-2xl hover:shadow-indigo-500/10 hover:scale-[1.03] active:scale-[0.98] transition-all duration-300 cursor-pointer w-64 sm:w-72"
+              className={`group flex flex-col items-center gap-6 p-10 sm:p-14 rounded-3xl border-2 border-slate-200 bg-white/80 backdrop-blur-sm hover:shadow-2xl hover:scale-[1.03] active:scale-[0.98] transition-all duration-300 cursor-pointer w-64 sm:w-72 ${
+                settingsHook.settings.appMode === 'reading'
+                  ? 'hover:border-emerald-400 hover:shadow-emerald-500/10'
+                  : 'hover:border-indigo-400 hover:shadow-indigo-500/10'
+              }`}
             >
-              <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/30 group-hover:shadow-indigo-500/50 transition-all duration-300">
+              <div className={`w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-gradient-to-br flex items-center justify-center shadow-lg transition-all duration-300 ${
+                settingsHook.settings.appMode === 'reading'
+                  ? 'from-emerald-500 to-teal-600 shadow-emerald-500/30 group-hover:shadow-emerald-500/50'
+                  : 'from-indigo-500 to-violet-600 shadow-indigo-500/30 group-hover:shadow-indigo-500/50'
+              }`}>
                 <HammerIcon className="w-10 h-10 sm:w-12 sm:h-12 text-white" />
               </div>
-              <span className="text-xl sm:text-2xl font-bold text-slate-800 group-hover:text-indigo-700 transition-colors">Create</span>
+              <span className={`text-xl sm:text-2xl font-bold text-slate-800 transition-colors ${
+                settingsHook.settings.appMode === 'reading'
+                  ? 'group-hover:text-emerald-700'
+                  : 'group-hover:text-indigo-700'
+              }`}>Create {settingsHook.settings.appMode === 'reading' ? 'Reading' : 'Listening'}</span>
             </button>
 
             {/* Present Card */}
@@ -1964,7 +1976,7 @@ const App: React.FC = () => {
               <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-gradient-to-br from-slate-800 to-slate-900 flex items-center justify-center shadow-lg shadow-slate-500/30 group-hover:shadow-slate-500/50 transition-all duration-300">
                 <PresentationIcon className="w-10 h-10 sm:w-12 sm:h-12 text-white" />
               </div>
-              <span className="text-xl sm:text-2xl font-bold text-slate-800 group-hover:text-slate-900 transition-colors">Present Test</span>
+              <span className="text-xl sm:text-2xl font-bold text-slate-800 group-hover:text-slate-900 transition-colors">Present Lesson</span>
             </button>
           </div>
         </main>
