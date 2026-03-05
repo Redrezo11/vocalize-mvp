@@ -133,7 +133,7 @@ export interface AudioEntryRow {
   updated_at: string;
 }
 
-export type AppView = 'gateway' | 'home' | 'editor' | 'library' | 'detail' | 'test-builder' | 'test-take' | 'classroom' | 'student-test' | 'transcript' | 'login';
+export type AppView = 'gateway' | 'home' | 'editor' | 'library' | 'detail' | 'test-builder' | 'test-take' | 'classroom' | 'student-test' | 'transcript' | 'login' | 'admin';
 
 // Test/Exercise Types
 export type TestType =

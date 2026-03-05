@@ -21,6 +21,7 @@ interface UsageSummary {
   name: string;
   username: string;
   total_tokens: number;
+  total_cost_usd: number;
   operation_count: number;
   token_balance: number;
   token_limit: number;
@@ -38,6 +39,14 @@ interface UsageByProvider {
   count: number;
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const value = bytes / Math.pow(1024, i);
+  return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[i]}`;
+}
+
 const TOKEN_PRESETS = [
   { label: '$1', tokens: 300 },
   { label: '$2', tokens: 600 },
@@ -45,13 +54,24 @@ const TOKEN_PRESETS = [
 ];
 
 interface AdminPanelProps {
-  isOpen: boolean;
-  onClose: () => void;
+  onBack: () => void;
 }
 
-export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
+interface BandwidthDay {
+  _id: string;
+  requestBytes: number;
+  responseBytes: number;
+  requests: number;
+}
+
+interface BandwidthData {
+  daily: BandwidthDay[];
+  totals: { requestBytes: number; responseBytes: number; requests: number };
+}
+
+export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
   const { user: currentUser } = useAuth();
-  const [activeTab, setActiveTab] = useState<'users' | 'usage'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'usage' | 'network'>('users');
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -63,6 +83,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
   // Usage analytics state
   const [usageData, setUsageData] = useState<{ userSummary: UsageSummary[]; byOperation: UsageByOp[]; byProvider: UsageByProvider[] } | null>(null);
   const [usageLoading, setUsageLoading] = useState(false);
+
+  // Bandwidth state
+  const [bandwidthData, setBandwidthData] = useState<BandwidthData | null>(null);
+  const [bandwidthLoading, setBandwidthLoading] = useState(false);
 
   // Add form state
   const [showAddForm, setShowAddForm] = useState(false);
@@ -98,20 +122,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
   }, []);
 
   useEffect(() => {
-    if (isOpen) {
-      loadUsers();
-      setShowAddForm(false);
-      setEditingId(null);
-      setGrantingUserId(null);
-      setActiveTab('users');
-    }
-  }, [isOpen, loadUsers]);
+    loadUsers();
+  }, [loadUsers]);
+
+  const loadBandwidthData = useCallback(async () => {
+    setBandwidthLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/admin/bandwidth?days=30`);
+      if (res.ok) setBandwidthData(await res.json());
+    } catch { /* ignore */ }
+    setBandwidthLoading(false);
+  }, []);
 
   useEffect(() => {
-    if (isOpen && activeTab === 'usage') loadUsageData();
-  }, [isOpen, activeTab]);
-
-  if (!isOpen) return null;
+    if (activeTab === 'usage') loadUsageData();
+    if (activeTab === 'network') loadBandwidthData();
+  }, [activeTab, loadBandwidthData]);
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -226,37 +252,47 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
-        {/* Header */}
-        <div className="px-6 pt-4 pb-0 border-b border-slate-200">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-xl font-bold text-slate-900">Admin Panel</h2>
-            <button onClick={onClose} className="p-1 text-slate-400 hover:text-slate-600 transition-colors">
+    <div>
+      {/* Header */}
+      <div className="border-b border-slate-200 mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onBack}
+              className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+              title="Back"
+            >
               <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                <path d="M19 12H5" /><path d="m12 19-7-7 7-7" />
               </svg>
             </button>
-          </div>
-          <div className="flex gap-4">
-            <button
-              onClick={() => setActiveTab('users')}
-              className={`pb-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'users' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-            >
-              Users
-            </button>
-            <button
-              onClick={() => setActiveTab('usage')}
-              className={`pb-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'usage' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-            >
-              Usage
-            </button>
+            <h2 className="text-2xl font-bold text-slate-900">Admin Dashboard</h2>
           </div>
         </div>
+        <div className="flex gap-4">
+          <button
+            onClick={() => setActiveTab('users')}
+            className={`pb-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'users' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+          >
+            Users
+          </button>
+          <button
+            onClick={() => setActiveTab('usage')}
+            className={`pb-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'usage' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+          >
+            Usage
+          </button>
+          <button
+            onClick={() => setActiveTab('network')}
+            className={`pb-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'network' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+          >
+            Network
+          </button>
+        </div>
+      </div>
 
-        {/* Content */}
-        <div className="px-6 py-5 overflow-y-auto flex-1">
+      {/* Content */}
+      <div>
           {error && (
             <div className="mb-4 px-3 py-2.5 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">{error}</div>
           )}
@@ -573,6 +609,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                             <tr className="bg-slate-50 text-slate-600 font-medium">
                               <th className="text-left px-3 py-2">User</th>
                               <th className="text-right px-3 py-2">Used</th>
+                              <th className="text-right px-3 py-2">Est. Cost</th>
                               <th className="text-right px-3 py-2">Balance</th>
                               <th className="text-right px-3 py-2">Ops</th>
                             </tr>
@@ -582,6 +619,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                               <tr key={u._id} className="border-t border-slate-100">
                                 <td className="px-3 py-2 font-medium text-slate-900">{u.name} <span className="text-slate-400 font-normal">@{u.username}</span></td>
                                 <td className="px-3 py-2 text-right text-slate-700">{u.total_tokens}</td>
+                                <td className="px-3 py-2 text-right text-emerald-700">{u.total_cost_usd > 0 ? `$${u.total_cost_usd.toFixed(4)}` : '—'}</td>
                                 <td className="px-3 py-2 text-right text-emerald-700">{u.token_balance}/{u.token_limit}</td>
                                 <td className="px-3 py-2 text-right text-slate-500">{u.operation_count}</td>
                               </tr>
@@ -592,11 +630,127 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                     )}
                   </div>
 
+                  {/* By Operation */}
+                  {usageData.byOperation.length > 0 && (
+                    <div>
+                      <h3 className="text-sm font-semibold text-slate-900 mb-2">By Operation</h3>
+                      <div className="border border-slate-200 rounded-xl overflow-hidden">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="bg-slate-50 text-slate-600 font-medium">
+                              <th className="text-left px-3 py-2">Operation</th>
+                              <th className="text-right px-3 py-2">Tokens</th>
+                              <th className="text-right px-3 py-2">Count</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {usageData.byOperation.map(op => (
+                              <tr key={op._id} className="border-t border-slate-100">
+                                <td className="px-3 py-2 font-medium text-slate-900">{op._id}</td>
+                                <td className="px-3 py-2 text-right text-slate-700">{op.total_tokens.toLocaleString()}</td>
+                                <td className="px-3 py-2 text-right text-slate-500">{op.count.toLocaleString()}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* By Provider / Model */}
+                  {usageData.byProvider.length > 0 && (
+                    <div>
+                      <h3 className="text-sm font-semibold text-slate-900 mb-2">By Provider / Model</h3>
+                      <div className="border border-slate-200 rounded-xl overflow-hidden">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="bg-slate-50 text-slate-600 font-medium">
+                              <th className="text-left px-3 py-2">Provider</th>
+                              <th className="text-left px-3 py-2">Model</th>
+                              <th className="text-right px-3 py-2">Tokens</th>
+                              <th className="text-right px-3 py-2">Count</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {usageData.byProvider.map(p => (
+                              <tr key={`${p._id.provider}-${p._id.model}`} className="border-t border-slate-100">
+                                <td className="px-3 py-2 font-medium text-slate-900">{p._id.provider || '—'}</td>
+                                <td className="px-3 py-2 text-slate-700">{p._id.model || '—'}</td>
+                                <td className="px-3 py-2 text-right text-slate-700">{p.total_tokens.toLocaleString()}</td>
+                                <td className="px-3 py-2 text-right text-slate-500">{p.count.toLocaleString()}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
                 </>
               ) : null}
             </div>
           )}
-        </div>
+
+          {/* Network Tab */}
+          {activeTab === 'network' && (
+            <div className="space-y-4">
+              {bandwidthLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : bandwidthData ? (
+                <>
+                  {/* Totals summary */}
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="bg-white border border-slate-200 rounded-xl p-4">
+                      <p className="text-xs font-medium text-slate-500 mb-1">Requests (30d)</p>
+                      <p className="text-xl font-bold text-slate-900">{bandwidthData.totals.requests.toLocaleString()}</p>
+                    </div>
+                    <div className="bg-white border border-slate-200 rounded-xl p-4">
+                      <p className="text-xs font-medium text-slate-500 mb-1">Data In (30d)</p>
+                      <p className="text-xl font-bold text-slate-900">{formatBytes(bandwidthData.totals.requestBytes)}</p>
+                    </div>
+                    <div className="bg-white border border-slate-200 rounded-xl p-4">
+                      <p className="text-xs font-medium text-slate-500 mb-1">Data Out (30d)</p>
+                      <p className="text-xl font-bold text-slate-900">{formatBytes(bandwidthData.totals.responseBytes)}</p>
+                    </div>
+                  </div>
+
+                  {/* Daily bandwidth table */}
+                  {bandwidthData.daily.length > 0 ? (
+                    <div>
+                      <h3 className="text-sm font-semibold text-slate-900 mb-2">Daily Breakdown</h3>
+                      <div className="border border-slate-200 rounded-xl overflow-hidden">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="bg-slate-50 text-slate-600 font-medium">
+                              <th className="text-left px-3 py-2">Date</th>
+                              <th className="text-right px-3 py-2">Requests</th>
+                              <th className="text-right px-3 py-2">In</th>
+                              <th className="text-right px-3 py-2">Out</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {bandwidthData.daily.map(d => (
+                              <tr key={d._id} className="border-t border-slate-100">
+                                <td className="px-3 py-2 font-medium text-slate-900">{d._id}</td>
+                                <td className="px-3 py-2 text-right text-slate-700">{d.requests.toLocaleString()}</td>
+                                <td className="px-3 py-2 text-right text-slate-700">{formatBytes(d.requestBytes)}</td>
+                                <td className="px-3 py-2 text-right text-slate-700">{formatBytes(d.responseBytes)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-slate-500 text-center py-8">No bandwidth data recorded yet</p>
+                  )}
+                </>
+              ) : (
+                <p className="text-sm text-slate-500 text-center py-8">No bandwidth data available</p>
+              )}
+            </div>
+          )}
       </div>
     </div>
   );

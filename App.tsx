@@ -133,7 +133,6 @@ const App: React.FC = () => {
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [showPromptBuilder, setShowPromptBuilder] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [showImportWizard, setShowImportWizard] = useState(false);
   const [showOneShotCreator, setShowOneShotCreator] = useState(false);
   const [showJamButton, setShowJamButton] = useState(false);
@@ -1327,7 +1326,7 @@ const App: React.FC = () => {
               <span className="text-sm">Create</span>
             </button>
           )}
-          {(currentView === 'home' || currentView === 'editor' || currentView === 'library' || currentView === 'detail') && (
+          {(currentView === 'home' || currentView === 'editor' || currentView === 'library' || currentView === 'detail' || currentView === 'admin') && (
             <button
               onClick={() => {
                 // Reading mode: always show tests tab (no audio entries)
@@ -1365,12 +1364,12 @@ const App: React.FC = () => {
           >
             <SettingsIcon className="w-5 h-5" />
           </button>
-          {/* Admin Panel Button (admin only) */}
+          {/* Admin Dashboard Button (admin only) */}
           {user?.role === 'admin' && (
             <button
-              onClick={() => setShowAdminPanel(true)}
-              className="p-2 text-slate-500 hover:text-violet-700 hover:bg-violet-50 rounded-lg transition-colors"
-              title="User Management"
+              onClick={() => setCurrentView('admin')}
+              className={`p-2 rounded-lg transition-colors ${currentView === 'admin' ? 'text-violet-700 bg-violet-50' : 'text-slate-500 hover:text-violet-700 hover:bg-violet-50'}`}
+              title="Admin Dashboard"
             >
               <UsersIcon className="w-5 h-5" />
             </button>
@@ -1847,7 +1846,7 @@ const App: React.FC = () => {
           <ClassroomMode
           tests={modeFilteredTests}
           isLoadingTests={isLoadingTests}
-          audioEntries={userFilteredAudios}
+          audioEntries={audioStorage.savedAudios}
           theme={settingsHook.settings.classroomTheme}
           classroomTestFilter={settingsHook.settings.classroomTestFilter}
           currentUsername={user?.username}
@@ -1987,6 +1986,11 @@ const App: React.FC = () => {
       {currentView === 'detail' && renderDetail()}
       {currentView === 'test-builder' && renderTestBuilder()}
       {currentView === 'test-take' && renderTestTaker()}
+      {currentView === 'admin' && (
+        <main className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+          <AdminPanel onBack={() => setCurrentView('gateway')} />
+        </main>
+      )}
       {currentView === 'transcript' && (
         <Suspense fallback={<InlineSpinner />}>
           <TranscriptMode
@@ -2027,12 +2031,6 @@ const App: React.FC = () => {
         settings={settingsHook.settings}
         onClose={() => setShowSettings(false)}
         onSave={handleSaveSettings}
-      />
-
-      {/* Admin Panel Modal */}
-      <AdminPanel
-        isOpen={showAdminPanel}
-        onClose={() => setShowAdminPanel(false)}
       />
 
       {/* Import Wizard Modal */}

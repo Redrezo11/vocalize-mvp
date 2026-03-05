@@ -11,6 +11,7 @@ type Granularity = 'daily' | 'weekly' | 'monthly';
 interface TimeseriesEntry {
   _id: string;
   tokens: number;
+  costUSD: number;
   operations: number;
 }
 
@@ -69,7 +70,7 @@ function zeroFillTimeseries(
   data: TimeseriesEntry[],
   granularity: Granularity,
   lookbackDays: number
-): Array<{ date: string; tokens: number; operations: number }> {
+): Array<{ date: string; tokens: number; costUSD: number; operations: number }> {
   if (data.length === 0) return [];
 
   const dataMap = new Map(data.map(d => [d._id, d]));
@@ -98,7 +99,7 @@ function zeroFillTimeseries(
   const keys = generateDateKeys(startKey, endKey, granularity);
   return keys.map(k => {
     const entry = dataMap.get(k);
-    return { date: k, tokens: entry?.tokens || 0, operations: entry?.operations || 0 };
+    return { date: k, tokens: entry?.tokens || 0, costUSD: entry?.costUSD || 0, operations: entry?.operations || 0 };
   });
 }
 
@@ -120,7 +121,7 @@ export const UsageCharts: React.FC<UsageChartsProps> = ({ users }) => {
   const [selectedUserId, setSelectedUserId] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [timeseriesData, setTimeseriesData] = useState<Array<{ date: string; tokens: number; operations: number }>>([]);
+  const [timeseriesData, setTimeseriesData] = useState<Array<{ date: string; tokens: number; costUSD: number; operations: number }>>([]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -152,6 +153,7 @@ export const UsageCharts: React.FC<UsageChartsProps> = ({ users }) => {
   };
 
   const totalTokens = timeseriesData.reduce((sum, d) => sum + d.tokens, 0);
+  const totalCostUSD = timeseriesData.reduce((sum, d) => sum + d.costUSD, 0);
   const totalOps = timeseriesData.reduce((sum, d) => sum + d.operations, 0);
 
   return (
@@ -192,6 +194,7 @@ export const UsageCharts: React.FC<UsageChartsProps> = ({ users }) => {
 
         <div className="ml-auto flex gap-3 text-xs text-slate-500">
           <span><strong className="text-slate-900">{totalTokens.toLocaleString()}</strong> tokens</span>
+          {totalCostUSD > 0 && <span><strong className="text-emerald-700">${totalCostUSD.toFixed(4)}</strong> est.</span>}
           <span><strong className="text-slate-900">{totalOps.toLocaleString()}</strong> ops</span>
         </div>
       </div>

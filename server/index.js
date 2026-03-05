@@ -202,12 +202,55 @@ const usageLogSchema = new mongoose.Schema({
   tokens_used: { type: Number, required: true },
   provider: { type: String },
   model: { type: String },
+  cost_usd: { type: Number },              // Estimated real USD cost of this operation
+  input_characters: { type: Number },       // Character count (for TTS operations)
   metadata: { type: mongoose.Schema.Types.Mixed },
   created_at: { type: Date, default: Date.now }
 });
 usageLogSchema.index({ user_id: 1, created_at: -1 });
 usageLogSchema.index({ created_at: -1 });
 const UsageLog = mongoose.model('UsageLog', usageLogSchema);
+
+// Bandwidth Log Schema — hourly aggregates of API request/response bytes
+const bandwidthLogSchema = new mongoose.Schema({
+  hour: { type: Date, required: true, unique: true },    // Truncated to hour
+  total_request_bytes: { type: Number, default: 0 },
+  total_response_bytes: { type: Number, default: 0 },
+  request_count: { type: Number, default: 0 },
+});
+bandwidthLogSchema.index({ hour: -1 });
+const BandwidthLog = mongoose.model('BandwidthLog', bandwidthLogSchema);
+
+// In-memory bandwidth buffer — flushed to DB every 5 minutes or 500 requests
+const bandwidthBuffer = { requestBytes: 0, responseBytes: 0, count: 0, lastFlush: Date.now() };
+const BANDWIDTH_FLUSH_INTERVAL = 5 * 60 * 1000; // 5 minutes
+const BANDWIDTH_FLUSH_THRESHOLD = 500;           // requests
+
+async function flushBandwidthBuffer() {
+  if (bandwidthBuffer.count === 0) return;
+  const { requestBytes, responseBytes, count } = bandwidthBuffer;
+  bandwidthBuffer.requestBytes = 0;
+  bandwidthBuffer.responseBytes = 0;
+  bandwidthBuffer.count = 0;
+  bandwidthBuffer.lastFlush = Date.now();
+
+  // Truncate current time to hour
+  const now = new Date();
+  const hour = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours());
+
+  try {
+    await BandwidthLog.findOneAndUpdate(
+      { hour },
+      { $inc: { total_request_bytes: requestBytes, total_response_bytes: responseBytes, request_count: count } },
+      { upsert: true }
+    );
+  } catch (err) {
+    console.error('[Bandwidth] Flush error:', err.message);
+  }
+}
+
+// Periodic flush timer
+setInterval(flushBandwidthBuffer, BANDWIDTH_FLUSH_INTERVAL);
 
 // Helper: Upload audio to Cloudinary
 const uploadToCloudinary = async (base64Audio, publicId) => {
@@ -312,21 +355,45 @@ const processTestAudioUploads = async (testId, data) => {
   return data;
 };
 
-// ==================== REQUEST LOGGING MIDDLEWARE ====================
+// ==================== REQUEST LOGGING + BANDWIDTH TRACKING MIDDLEWARE ====================
 app.use('/api', (req, res, next) => {
   const start = Date.now();
   const ua = req.headers['user-agent'] || 'unknown';
-  // Compact user-agent: just browser + OS
   const uaShort = ua.includes('Android') ? 'Android' :
                    ua.includes('iPhone') ? 'iPhone' :
                    ua.includes('iPad') ? 'iPad' :
                    ua.includes('Windows') ? 'Windows' :
                    ua.includes('Mac') ? 'Mac' : ua.slice(0, 40);
 
+  // Track response bytes via monkey-patching
+  const requestBytes = parseInt(req.headers['content-length'], 10) || 0;
+  let responseBytes = 0;
+  const origWrite = res.write;
+  const origEnd = res.end;
+
+  res.write = function (chunk, ...args) {
+    if (chunk) responseBytes += Buffer.isBuffer(chunk) ? chunk.length : Buffer.byteLength(chunk, typeof args[0] === 'string' ? args[0] : 'utf8');
+    return origWrite.apply(this, [chunk, ...args]);
+  };
+  res.end = function (chunk, ...args) {
+    if (chunk) responseBytes += Buffer.isBuffer(chunk) ? chunk.length : Buffer.byteLength(chunk, typeof args[0] === 'string' ? args[0] : 'utf8');
+    return origEnd.apply(this, [chunk, ...args]);
+  };
+
   res.on('finish', () => {
     const duration = Date.now() - start;
     const logLevel = res.statusCode >= 500 ? 'ERROR' : res.statusCode >= 400 ? 'WARN' : 'INFO';
-    console.log(`[${logLevel}] ${req.method} ${req.originalUrl} → ${res.statusCode} (${duration}ms) [${uaShort}]`);
+    console.log(`[${logLevel}] ${req.method} ${req.originalUrl} → ${res.statusCode} (${duration}ms) [${uaShort}] ${requestBytes}→${responseBytes}B`);
+
+    // Accumulate in buffer
+    bandwidthBuffer.requestBytes += requestBytes;
+    bandwidthBuffer.responseBytes += responseBytes;
+    bandwidthBuffer.count += 1;
+
+    // Flush if threshold reached
+    if (bandwidthBuffer.count >= BANDWIDTH_FLUSH_THRESHOLD) {
+      flushBandwidthBuffer().catch(() => {});
+    }
   });
   next();
 });
@@ -402,13 +469,21 @@ function canModify(createdBy, user) {
 
 // Deduct tokens atomically. Admins are unlimited (log only). Returns null if insufficient.
 async function deductTokens(userId, role, amount, operation, details = {}) {
+  const costUSD = estimateCostUSD(operation, details.provider, details.model, details.input_characters);
+  const logEntry = {
+    user_id: userId, tokens_used: amount, operation,
+    ...details,
+    ...(costUSD != null && { cost_usd: costUSD }),
+    ...(details.input_characters && { input_characters: details.input_characters }),
+  };
+
   if (role === 'admin') {
     // Admin: unlimited, but track cumulative usage on User doc for navbar display
     const updatedUser = await User.findByIdAndUpdate(
       userId, { $inc: { tokens_used: amount } }, { new: true }
     );
-    await UsageLog.create({ user_id: userId, tokens_used: amount, operation, ...details });
-    console.log(`[Tokens] Admin deduct: userId=${userId}, amount=${amount}, op=${operation}, new_tokens_used=${updatedUser?.tokens_used}`);
+    await UsageLog.create(logEntry);
+    console.log(`[Tokens] Admin deduct: userId=${userId}, amount=${amount}, op=${operation}, cost=$${costUSD?.toFixed(6) || '?'}, new_tokens_used=${updatedUser?.tokens_used}`);
     return { admin: true, tokens_used: updatedUser.tokens_used };
   }
   const user = await User.findOneAndUpdate(
@@ -417,7 +492,7 @@ async function deductTokens(userId, role, amount, operation, details = {}) {
     { new: true }
   );
   if (user) {
-    await UsageLog.create({ user_id: userId, tokens_used: amount, operation, ...details });
+    await UsageLog.create(logEntry);
   }
   return user;
 }
@@ -608,10 +683,10 @@ app.get('/api/tokens/balance', authenticate, async (req, res) => {
 // Report usage & deduct tokens
 app.post('/api/tokens/use', authenticate, async (req, res) => {
   try {
-    const { operation, tokens, provider, model, metadata } = req.body;
+    const { operation, tokens, provider, model, metadata, input_characters } = req.body;
     if (!operation || !tokens || tokens <= 0) return res.status(400).json({ error: 'operation and tokens (>0) required' });
 
-    const result = await deductTokens(req.user.userId, req.user.role, tokens, operation, { provider, model, metadata });
+    const result = await deductTokens(req.user.userId, req.user.role, tokens, operation, { provider, model, metadata, input_characters });
     if (!result) return res.status(402).json({ error: 'Insufficient tokens' });
 
     if (result.admin) {
@@ -631,6 +706,42 @@ const STUDENT_OP_COSTS = {
   student_discussion_evaluation: { 'gpt-5-mini': 1, 'gpt-5.2': 3 },
   student_bonus_generation:      { 'gpt-5-mini': 1, 'gpt-5.2': 2 },
 };
+
+// Real USD pricing table — used to estimate costUSD on each UsageLog entry
+// Rates per character (TTS) or per token (LLM). Update here when provider pricing changes.
+const USD_PRICING = {
+  // TTS — cost per character
+  'tts:openai:gpt-4o-mini-tts': { perChar: 15.00 / 1_000_000 },   // $0.015/1K chars
+  'tts:openai:tts-1':           { perChar: 15.00 / 1_000_000 },
+  'tts:gemini':                 { perChar: 0 },                     // Free tier
+  'tts:elevenlabs':             { perChar: 0.00011 },               // ~$0.11/1K chars
+  'tts:browser':                { perChar: 0 },                     // Free
+  // LLM — cost per 1M tokens (input only, simplified)
+  'llm:openai:gpt-5-mini':     { perMillionTokens: 0.40 },         // $0.40/1M input
+  'llm:openai:gpt-5.2':        { perMillionTokens: 2.00 },         // $2.00/1M input
+};
+
+// Estimate USD cost for an operation
+function estimateCostUSD(operation, provider, model, inputCharacters) {
+  // TTS operations
+  if (operation.includes('narration') || operation.includes('lexis_audio') || operation.includes('tts')) {
+    const key = `tts:${provider || 'openai'}:${model || 'gpt-4o-mini-tts'}`;
+    const fallbackKey = `tts:${provider || 'openai'}`;
+    const pricing = USD_PRICING[key] || USD_PRICING[fallbackKey];
+    if (pricing?.perChar && inputCharacters) {
+      return inputCharacters * pricing.perChar;
+    }
+    return null;
+  }
+  // LLM operations (estimate ~750 chars ≈ 1K tokens if no inputCharacters provided)
+  const llmKey = `llm:${provider || 'openai'}:${model || 'gpt-5-mini'}`;
+  const pricing = USD_PRICING[llmKey];
+  if (pricing?.perMillionTokens) {
+    const estimatedTokens = inputCharacters ? inputCharacters / 4 : 500; // rough char-to-token ratio
+    return (estimatedTokens / 1_000_000) * pricing.perMillionTokens;
+  }
+  return null;
+}
 
 app.post('/api/tokens/student-use', async (req, res) => {
   try {
@@ -708,6 +819,7 @@ app.get('/api/admin/usage', authenticate, requireAdmin, async (req, res) => {
       { $group: {
         _id: '$user_id',
         total_tokens: { $sum: '$tokens_used' },
+        total_cost_usd: { $sum: { $ifNull: ['$cost_usd', 0] } },
         operation_count: { $sum: 1 }
       }},
       { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'user' }},
@@ -717,6 +829,7 @@ app.get('/api/admin/usage', authenticate, requireAdmin, async (req, res) => {
         name: '$user.name',
         username: '$user.username',
         total_tokens: 1,
+        total_cost_usd: 1,
         operation_count: 1,
         token_balance: '$user.token_balance',
         token_limit: '$user.token_limit'
@@ -783,7 +896,7 @@ app.get('/api/admin/usage/timeseries', authenticate, requireAdmin, async (req, r
 
     const timeseries = await UsageLog.aggregate([
       { $match: match },
-      { $group: { _id: groupId, tokens: { $sum: '$tokens_used' }, operations: { $sum: 1 } } },
+      { $group: { _id: groupId, tokens: { $sum: '$tokens_used' }, costUSD: { $sum: { $ifNull: ['$cost_usd', 0] } }, operations: { $sum: 1 } } },
       { $sort: { _id: 1 } },
     ]);
 
@@ -801,6 +914,40 @@ app.get('/api/admin/usage/timeseries', authenticate, requireAdmin, async (req, r
   } catch (err) {
     console.error('[Admin] Timeseries usage error:', err);
     res.status(500).json({ error: 'Failed to get timeseries data' });
+  }
+});
+
+// Admin: bandwidth timeseries (hourly aggregates)
+app.get('/api/admin/bandwidth', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { days = 30 } = req.query;
+    const lookback = parseInt(days) || 30;
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - lookback);
+
+    // Aggregate hourly records into daily summaries
+    const daily = await BandwidthLog.aggregate([
+      { $match: { hour: { $gte: startDate } } },
+      { $group: {
+        _id: { $dateToString: { format: '%Y-%m-%d', date: '$hour' } },
+        requestBytes: { $sum: '$total_request_bytes' },
+        responseBytes: { $sum: '$total_response_bytes' },
+        requests: { $sum: '$request_count' },
+      }},
+      { $sort: { _id: 1 } },
+    ]);
+
+    // Account totals
+    const totals = daily.reduce((acc, d) => ({
+      requestBytes: acc.requestBytes + d.requestBytes,
+      responseBytes: acc.responseBytes + d.responseBytes,
+      requests: acc.requests + d.requests,
+    }), { requestBytes: 0, responseBytes: 0, requests: 0 });
+
+    res.json({ daily, totals, days: lookback });
+  } catch (err) {
+    console.error('[Admin] Bandwidth error:', err);
+    res.status(500).json({ error: 'Failed to get bandwidth data' });
   }
 });
 
