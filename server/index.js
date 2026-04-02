@@ -512,7 +512,7 @@ app.post('/api/auth/login', async (req, res) => {
     res.json({ user: { id: user._id, username: user.username, name: user.name, role: user.role, token_balance: user.token_balance, tokens_used: user.tokens_used } });
   } catch (err) {
     console.error('[Auth] Login error:', err);
-    res.status(500).json({ error: 'Login failed' });
+    res.status(500).json({ error: 'Login failed', detail: err?.message || String(err) });
   }
 });
 
