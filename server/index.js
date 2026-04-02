@@ -365,23 +365,12 @@ app.use('/api', (req, res, next) => {
                    ua.includes('Windows') ? 'Windows' :
                    ua.includes('Mac') ? 'Mac' : ua.slice(0, 40);
 
-  // Track response bytes via monkey-patching
+  // Track bytes without monkey-patching res.write/res.end (which breaks Express 5)
   const requestBytes = parseInt(req.headers['content-length'], 10) || 0;
-  let responseBytes = 0;
-  const origWrite = res.write;
-  const origEnd = res.end;
-
-  res.write = function (chunk, ...args) {
-    if (chunk) responseBytes += Buffer.isBuffer(chunk) ? chunk.length : Buffer.byteLength(chunk, typeof args[0] === 'string' ? args[0] : 'utf8');
-    return origWrite.apply(this, [chunk, ...args]);
-  };
-  res.end = function (chunk, ...args) {
-    if (chunk) responseBytes += Buffer.isBuffer(chunk) ? chunk.length : Buffer.byteLength(chunk, typeof args[0] === 'string' ? args[0] : 'utf8');
-    return origEnd.apply(this, [chunk, ...args]);
-  };
 
   res.on('finish', () => {
     const duration = Date.now() - start;
+    const responseBytes = parseInt(res.getHeader('content-length'), 10) || 0;
     const logLevel = res.statusCode >= 500 ? 'ERROR' : res.statusCode >= 400 ? 'WARN' : 'INFO';
     console.log(`[${logLevel}] ${req.method} ${req.originalUrl} → ${res.statusCode} (${duration}ms) [${uaShort}] ${requestBytes}→${responseBytes}B`);
 

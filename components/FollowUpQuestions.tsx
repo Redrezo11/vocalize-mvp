@@ -409,6 +409,7 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
   );
   const [questions, setQuestions] = useState<FollowUpQuestion[]>(savedDisc?.questions || []);
   const [answers, setAnswers] = useState<{ [id: string]: string }>(savedDisc?.answers || {});
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [feedback, setFeedback] = useState<FollowUpFeedbackItem[]>(savedDisc?.feedback || []);
   const [error, setError] = useState<string | null>(null);
   const [currentIndex, setCurrentIndex] = useState(savedDisc?.currentIndex || 0);
@@ -541,6 +542,14 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
       // Append at cursor position (simple: prepend if not empty)
       setAnswers(prev => ({ ...prev, [currentQ.id]: starter + ' ' + current }));
     }
+    // Focus textarea and place cursor at end after React flushes the state update
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (el) {
+        el.focus();
+        el.selectionStart = el.selectionEnd = el.value.length;
+      }
+    });
   };
 
   const currentAnswer = questions[currentIndex] ? (answers[questions[currentIndex].id] || '') : '';
@@ -638,6 +647,7 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
           {/* Auto-growing textarea */}
           <div className="mb-2 grid">
             <textarea
+              ref={textareaRef}
               value={currentAnswer}
               onChange={(e) => setAnswers(prev => ({ ...prev, [currentQ.id]: e.target.value.slice(0, 300) }))}
               placeholder="Write your thoughts..."

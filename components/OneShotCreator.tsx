@@ -942,6 +942,7 @@ Return a SINGLE JSON object. No markdown fences, no explanation — ONLY valid J
 - Each question must have exactly 4 options
 - correctAnswer must match one option exactly (character-for-character)
 - Test comprehension: main ideas, specific details, writer's purpose, and inferences
+- IMPORTANT: This is a READING comprehension test. Never reference listening, hearing, speakers, or audio. Use reading-appropriate language: "According to the passage...", "The author states...", "Based on the text...", "The writer suggests..."
 - Include explanations in English and Arabic
 - Quantity calibrated for ${targetDuration}-minute test at ${difficulty} level
 - Also generate exactly 10 bonus questions in "bonusQuestions" for extra student practice. Same format with explanations. Do NOT repeat any main questions. Test varied skills.

@@ -854,6 +854,13 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
         return;
       }
 
+      // Escape exits lexis focus mode → overview (before falling through to exit presentation)
+      if (e.key === 'Escape' && lexisViewMode === 'focus') {
+        setLexisViewMode('overview');
+        setFocusedLexisIndex(0);
+        return;
+      }
+
       // T navigates to plenary fullscreen slide
       if (e.key === 't' || e.key === 'T') {
         if (view === 'present' && selectedTest?.transferQuestion) {
