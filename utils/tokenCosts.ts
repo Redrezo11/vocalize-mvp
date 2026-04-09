@@ -1,7 +1,7 @@
 // Token cost calculator — variable rates based on generation config
 // See docs/CREDIT_BILLING_SYSTEM.md for full pricing research
 
-export type ContentModel = 'gpt-5-mini' | 'gpt-5.2';
+export type ContentModel = 'gpt-5-mini' | 'gpt-5.2' | 'claude-sonnet';
 export type SpeakerCount = 1 | 2 | 3;
 
 // Full JAM/OneShot generation — variable token matrix (all permutations)
@@ -23,6 +23,13 @@ const GENERATION_COSTS: Record<string, number> = {
   'gpt-5.2:true:1': 18,
   'gpt-5.2:true:2': 20,
   'gpt-5.2:true:3': 21,
+  // claude-sonnet (single call, no reasoning toggle — same cost either way)
+  'claude-sonnet:false:1': 12,
+  'claude-sonnet:false:2': 14,
+  'claude-sonnet:false:3': 15,
+  'claude-sonnet:true:1': 12,
+  'claude-sonnet:true:2': 14,
+  'claude-sonnet:true:3': 15,
 };
 
 /**
@@ -54,4 +61,5 @@ export const OPERATION_COSTS = {
   classroom_narration: 1,  // per narration segment (pre-listening or plenary)
   json_repair: 1,          // LLM-based JSON repair fallback
   gender_resolution: 1,    // LLM-based gender classification for unknown names
+  textbook_extraction: 3,  // GPT-5.4-mini vision extraction
 } as const;

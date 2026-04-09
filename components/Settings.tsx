@@ -5,7 +5,7 @@ import type { AppMode } from '../contexts/AppModeContext';
 export type CEFRLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1';
 export type ContentMode = 'standard' | 'halal' | 'elsd';
 export type ClassroomTheme = 'light' | 'dark';
-export type ContentModel = 'gpt-5-mini' | 'gpt-5.2';
+export type ContentModel = 'gpt-5-mini' | 'gpt-5.2' | 'claude-sonnet';
 export type SpeakerCountDefault = 'random' | 1 | 2 | 3;
 export type ClassroomTestFilter = 'all' | 'mine';
 
@@ -354,7 +354,7 @@ export const Settings: React.FC<SettingsProps> = ({
                   {/* AI Model */}
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-2">AI Model</label>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-3 gap-2">
                       <button
                         onClick={() => setLocalSettings({ ...localSettings, contentModel: 'gpt-5-mini' })}
                         className={`p-2 rounded-lg text-left border-2 transition-all ${
@@ -379,6 +379,19 @@ export const Settings: React.FC<SettingsProps> = ({
                         <div className="flex justify-between items-center">
                           <span className="font-medium text-slate-800 text-xs">GPT-5.2</span>
                           <span className="text-xs font-bold text-indigo-600">&lt;$0.01</span>
+                        </div>
+                      </button>
+                      <button
+                        onClick={() => setLocalSettings({ ...localSettings, contentModel: 'claude-sonnet' })}
+                        className={`p-2 rounded-lg text-left border-2 transition-all ${
+                          localSettings.contentModel === 'claude-sonnet'
+                            ? 'border-violet-500 bg-violet-50'
+                            : 'border-slate-200 hover:border-slate-300 bg-white'
+                        }`}
+                      >
+                        <div className="flex justify-between items-center">
+                          <span className="font-medium text-slate-800 text-xs">Claude</span>
+                          <span className="text-xs font-bold text-violet-600">~$0.01</span>
                         </div>
                       </button>
                     </div>

@@ -708,6 +708,8 @@ const USD_PRICING = {
   // LLM — cost per 1M tokens (input only, simplified)
   'llm:openai:gpt-5-mini':     { perMillionTokens: 0.40 },         // $0.40/1M input
   'llm:openai:gpt-5.2':        { perMillionTokens: 2.00 },         // $2.00/1M input
+  'llm:anthropic:claude-sonnet-4-6': { perMillionTokens: 3.00 },   // $3/M input, $15/M output — blended
+  'llm:openai:gpt-5.4-mini':       { perMillionTokens: 0.75 },   // Vision extraction
 };
 
 // Estimate USD cost for an operation
@@ -1038,6 +1040,143 @@ app.post('/api/admin/cleanup-word-audios', authenticate, requireAdmin, async (re
 });
 
 // API Routes
+
+// ==================== TEXTBOOK EXTRACTION ====================
+
+const TEXTBOOK_EXTRACTION_PROMPT = `You are an EFL textbook content extractor. Analyze the uploaded textbook page image(s) and extract structured educational content.
+
+Return a JSON object with these fields:
+
+{
+  "status": "success" | "partial" | "failure",
+  "statusMessage": "Human-readable explanation of what was found or why extraction failed",
+  "topic": "The main topic or theme of the page" or null,
+  "unit": "Unit number and/or title if visible" or null,
+  "difficulty": "Estimated CEFR level (A1/A2/B1/B2/C1/C2)" or null,
+  "vocabulary": [
+    { "term": "word or phrase", "definition": "definition as printed on page, or null if not shown" }
+  ],
+  "passage": "Full reading passage text if one exists on the page" or null,
+  "warnings": ["any issues like blurry text, cut-off content, etc."]
+}
+
+STATUS RULES:
+- "success": You found BOTH a clear topic AND at least 1 vocabulary item
+- "partial": You found a topic OR vocabulary, but not both. Explain what's missing in statusMessage.
+- "failure": You could NOT find a topic OR vocabulary. The image may not be educational content, may be unreadable, or may be a non-content page (cover, table of contents, etc.)
+
+EXTRACTION RULES:
+- Extract vocabulary EXACTLY as printed — do not invent or guess definitions not visible on the page
+- If a word appears but has no printed definition, set definition to null
+- For "passage": only extract if there is an actual reading passage (article, story, email, etc.). Do NOT extract exercise instructions or vocabulary lists as a passage.
+- For "topic": infer from headings, unit titles, or the overall theme of the content
+- For "difficulty": estimate based on vocabulary complexity, grammar structures, and any CEFR labels visible
+- vocabulary array should be empty [] if no vocabulary items are found (not null)
+- warnings array should be empty [] if no issues (not null)`;
+
+app.post('/api/extract-textbook', authenticate, async (req, res) => {
+  try {
+    const { images, mode } = req.body; // mode: 'listening' | 'reading'
+    if (!images?.length || images.length > 3) {
+      return res.status(400).json({ error: 'Provide 1-3 images' });
+    }
+
+    const apiKey = process.env.VITE_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ error: 'OpenAI API key not configured on server' });
+    }
+
+    // Build input content for GPT-5.4-mini vision
+    const inputContent = images.map(img => ({
+      type: 'input_image',
+      image_url: img,
+      detail: 'high',
+    }));
+
+    const modeInstruction = mode === 'listening'
+      ? 'This is for a LISTENING test — do NOT extract any reading passage. Set "passage" to null. Focus on extracting topic and vocabulary only.'
+      : 'This is for a READING test — if a reading passage is visible on the page, extract it fully.';
+
+    inputContent.push({
+      type: 'input_text',
+      text: `Extract educational content from this EFL textbook page. ${modeInstruction}`,
+    });
+
+    const response = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-5.4-mini',
+        instructions: TEXTBOOK_EXTRACTION_PROMPT,
+        input: [{ role: 'user', content: inputContent }],
+        text: { format: { type: 'json_object' } },
+      }),
+    });
+
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      console.error('[Extraction] OpenAI error:', response.status, errData);
+      return res.status(502).json({ error: errData.error?.message || `OpenAI API error: ${response.status}` });
+    }
+
+    const data = await response.json();
+    const text = data.output_text || '';
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      console.error('[Extraction] JSON parse failed:', text.slice(0, 200));
+      return res.json({
+        status: 'failure',
+        statusMessage: 'Failed to parse extraction response',
+        topic: null, unit: null, difficulty: null,
+        vocabulary: [], passage: null, warnings: ['Response was not valid JSON'],
+      });
+    }
+
+    // Server-side status validation — override LLM if it's wrong
+    const hasTopic = !!parsed.topic;
+    const hasVocab = Array.isArray(parsed.vocabulary) && parsed.vocabulary.length > 0;
+    if (hasTopic && hasVocab) {
+      parsed.status = 'success';
+    } else if (hasTopic || hasVocab) {
+      parsed.status = 'partial';
+      if (!parsed.statusMessage) {
+        parsed.statusMessage = hasTopic
+          ? 'Topic found but no vocabulary items detected on the page.'
+          : 'Vocabulary found but no clear topic could be identified.';
+      }
+    } else {
+      parsed.status = 'failure';
+      if (!parsed.statusMessage) {
+        parsed.statusMessage = 'Could not extract educational content from this image.';
+      }
+    }
+
+    // Ensure arrays exist
+    parsed.vocabulary = parsed.vocabulary || [];
+    parsed.warnings = parsed.warnings || [];
+
+    // Listening mode: force passage to null
+    if (mode === 'listening') {
+      parsed.passage = null;
+    }
+
+    // Deduct tokens
+    await deductTokens(req.user.userId, req.user.role, 3, 'textbook_extraction', {
+      provider: 'openai', model: 'gpt-5.4-mini', input_characters: images[0]?.length || 0,
+    });
+
+    console.log(`[Extraction] status=${parsed.status} topic=${parsed.topic?.slice(0, 40)} vocab=${parsed.vocabulary.length} passage=${!!parsed.passage}`);
+    res.json(parsed);
+  } catch (err) {
+    console.error('[Extraction] Error:', err);
+    res.status(500).json({ error: 'Extraction failed' });
+  }
+});
 
 // Get all audio entries
 app.get('/api/audio-entries', authenticate, async (req, res) => {

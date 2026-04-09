@@ -3,7 +3,7 @@ import { CEFRLevel, ContentMode } from './Settings';
 import { EngineType, SavedAudio, ListeningTest, SpeakerVoiceMapping, GEMINI_VOICES } from '../types';
 import { parseDialogue, assignOpenAIVoices, mapGeminiToOpenAIVoices } from '../utils/parser';
 import { concatenateAudioBlobs } from '../hooks/useElevenLabsTTS';
-import { buildDialoguePrompt, buildPassagePrompt, buildTestContentPrompt, validatePayload, OneShotPayload } from './OneShotCreator';
+import { buildDialoguePrompt, buildPassagePrompt, buildTestContentPrompt, buildTemplate, buildReadingTemplate, validatePayload, OneShotPayload } from './OneShotCreator';
 import { EFL_TOPICS, SpeakerCount, AudioFormat, getRandomTopic, getRandomFormat, getCompatibleTopic, shuffleFormat, randomSpeakerCount } from '../utils/eflTopics';
 import { getRandomReadingTopic, getRandomReadingGenre, getCompatibleReadingTopic, shuffleReadingGenre } from '../utils/readingTopics';
 import { useAppMode } from '../contexts/AppModeContext';
@@ -12,11 +12,12 @@ import { generateBonusForTest } from '../helpers/bonusGeneration';
 import { getGenerationCost, SpeakerCount as TokenSpeakerCount } from '../utils/tokenCosts';
 import { reportTokenUsage, hasEnoughTokens } from '../utils/tokenApi';
 import TokenConfirmDialog from './TokenConfirmDialog';
+import { processImage, type ProcessedImage } from '../utils/imageProcessing';
 
 const API_BASE = '/api';
 
 // --- Content Model Configuration ---
-export type ContentModel = 'gpt-5-mini' | 'gpt-5.2';
+export type ContentModel = 'gpt-5-mini' | 'gpt-5.2' | 'claude-sonnet';
 
 const MODEL_CONFIG: Record<ContentModel, {
   name: string;
@@ -32,6 +33,11 @@ const MODEL_CONFIG: Record<ContentModel, {
     name: 'GPT-5.2',
     cost: '<$0.01',
     description: 'Higher quality output'
+  },
+  'claude-sonnet': {
+    name: 'Claude Sonnet',
+    cost: '~$0.01',
+    description: 'Best quality, single call'
   },
 };
 
@@ -325,6 +331,24 @@ export const JamButton: React.FC<JamButtonProps> = ({
   const [isCustomTopic, setIsCustomTopic] = useState(false);
   const [customTopic, setCustomTopic] = useState('');
 
+  // Textbook extraction state
+  const [showTextbookUpload, setShowTextbookUpload] = useState(false);
+  const [textbookImage, setTextbookImage] = useState<ProcessedImage | null>(null);
+  const [extractionResult, setExtractionResult] = useState<{
+    status: 'success' | 'partial' | 'failure';
+    statusMessage: string;
+    topic: string | null;
+    unit: string | null;
+    difficulty: string | null;
+    vocabulary: { term: string; definition: string | null }[];
+    passage: string | null;
+    warnings: string[];
+  } | null>(null);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [extractionError, setExtractionError] = useState('');
+  const [showExtractionJson, setShowExtractionJson] = useState(false);
+  const textbookFileRef = useRef<HTMLInputElement>(null);
+
   const shuffleTopic = () => {
     if (isReading) {
       setCurrentTopic(getCompatibleReadingTopic(readingGenre, currentTopic));
@@ -332,6 +356,42 @@ export const JamButton: React.FC<JamButtonProps> = ({
       setCurrentTopic(audioFormat ? getCompatibleTopic(audioFormat, currentTopic) : getRandomTopic(speakerCount, currentTopic));
     }
     setIsCustomTopic(false);
+  };
+
+  // Textbook extraction handlers
+  const handleTextbookFile = async (file: File) => {
+    setExtractionError('');
+    setExtractionResult(null);
+    setShowExtractionJson(false);
+    try {
+      const processed = await processImage(file);
+      setTextbookImage(processed);
+      setIsExtracting(true);
+
+      const res = await fetch('/api/extract-textbook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ images: [processed.dataUri], mode: isReading ? 'reading' : 'listening' }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Extraction failed (${res.status})`);
+      }
+      const result = await res.json();
+      setExtractionResult(result);
+    } catch (err) {
+      setExtractionError(err instanceof Error ? err.message : 'Extraction failed');
+    } finally {
+      setIsExtracting(false);
+    }
+  };
+
+  const clearTextbook = () => {
+    setTextbookImage(null);
+    setExtractionResult(null);
+    setExtractionError('');
+    setShowExtractionJson(false);
+    if (textbookFileRef.current) textbookFileRef.current.value = '';
   };
 
   const shuffleGenre = () => {
@@ -706,130 +766,181 @@ export const JamButton: React.FC<JamButtonProps> = ({
     }
 
     try {
-      const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
-      if (!apiKey || apiKey === 'PLACEHOLDER_API_KEY') {
-        throw new Error('OpenAI API key not configured');
-      }
-
-      // --- Call 1: Generate content (dialogue for listening, passage for reading) ---
       const effectiveTopic = topic || (isCustomTopic ? customTopic : currentTopic);
-      const dialoguePrompt = isReading
-        ? buildPassagePrompt(profile.difficulty, profile.contentMode, profile.targetDuration, effectiveTopic, readingGenre)
-        : buildDialoguePrompt(profile.difficulty, profile.contentMode, profile.targetDuration, effectiveTopic, speakerCount, audioFormat || undefined);
+      let mergedPayload: OneShotPayload;
 
-      const dialogueResponse = await fetch('https://api.openai.com/v1/responses', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: profile.contentModel,
-          instructions: dialoguePrompt.instructions,
-          input: dialoguePrompt.input,
-          ...(profile.useReasoning && { reasoning: { effort: 'low' } }),
-        }),
-      });
-
-      if (!dialogueResponse.ok) {
-        const error = await dialogueResponse.json().catch(() => ({}));
-        throw new Error(error.error?.message || `Dialogue API error: ${dialogueResponse.status}`);
-      }
-
-      const dialogueData = await dialogueResponse.json();
-      const dialogueOutput = dialogueData.output?.find((o: { type: string }) => o.type === 'message');
-      const dialogueText = dialogueOutput?.content?.[0]?.text || '';
-
-      const dialogueJsonMatch = dialogueText.match(/\{[\s\S]*\}/);
-      if (!dialogueJsonMatch) {
-        throw new Error('No valid JSON found in dialogue response');
-      }
-
-      let dialogueResult: { title: string; difficulty: string; transcript: string; passage?: string; voiceAssignments: Record<string, string> };
-      try {
-        dialogueResult = JSON.parse(dialogueJsonMatch[0]);
-      } catch {
-        throw new Error('Failed to parse dialogue JSON');
-      }
-
-      // Reading mode: accept "passage" as alias for "transcript"
-      if (dialogueResult.passage && !dialogueResult.transcript) {
-        dialogueResult.transcript = dialogueResult.passage;
-      }
-
-      if (isReading) {
-        if (!dialogueResult.title || !dialogueResult.transcript) {
-          throw new Error('Passage response missing required fields (title, passage)');
+      if (profile.contentModel === 'claude-sonnet') {
+        // --- Claude Sonnet: single API call with one-shot template ---
+        const anthropicKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
+        if (!anthropicKey) {
+          throw new Error('Anthropic API key not configured');
         }
-        dialogueResult.voiceAssignments = dialogueResult.voiceAssignments || {};
+
+        const template = isReading
+          ? buildReadingTemplate(profile.difficulty, profile.contentMode, profile.targetDuration, effectiveTopic, readingGenre)
+          : buildTemplate(profile.difficulty, profile.contentMode, profile.targetDuration, effectiveTopic, speakerCount, audioFormat || undefined);
+
+        const sonnetResponse = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': anthropicKey,
+            'anthropic-version': '2023-06-01',
+            'anthropic-dangerous-direct-browser-access': 'true',
+          },
+          body: JSON.stringify({
+            model: 'claude-sonnet-4-6',
+            max_tokens: 8192,
+            messages: [{ role: 'user', content: template }],
+          }),
+        });
+
+        if (!sonnetResponse.ok) {
+          const error = await sonnetResponse.json().catch(() => ({}));
+          throw new Error(error.error?.message || `Claude API error: ${sonnetResponse.status}`);
+        }
+
+        setProgress(35);
+        setGeneratingLabel('Processing response...');
+
+        const sonnetData = await sonnetResponse.json();
+        const sonnetText = sonnetData.content?.[0]?.text || '';
+
+        // Strip markdown fences and extract JSON
+        const cleanText = sonnetText.replace(/^```json?\s*\n?/, '').replace(/\n?\s*```$/, '').trim();
+        const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) {
+          throw new Error('No valid JSON found in Claude response');
+        }
+
+        mergedPayload = validatePayload(jsonMatch[0]);
+
       } else {
-        if (!dialogueResult.title || !dialogueResult.transcript || !dialogueResult.voiceAssignments) {
-          throw new Error('Dialogue response missing required fields (title, transcript, voiceAssignments)');
+        // --- GPT models: two-call flow ---
+        const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
+        if (!apiKey || apiKey === 'PLACEHOLDER_API_KEY') {
+          throw new Error('OpenAI API key not configured');
         }
+
+        // --- Call 1: Generate content (dialogue for listening, passage for reading) ---
+        const dialoguePrompt = isReading
+          ? buildPassagePrompt(profile.difficulty, profile.contentMode, profile.targetDuration, effectiveTopic, readingGenre)
+          : buildDialoguePrompt(profile.difficulty, profile.contentMode, profile.targetDuration, effectiveTopic, speakerCount, audioFormat || undefined);
+
+        const dialogueResponse = await fetch('https://api.openai.com/v1/responses', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model: profile.contentModel,
+            instructions: dialoguePrompt.instructions,
+            input: dialoguePrompt.input,
+            ...(profile.useReasoning && { reasoning: { effort: 'low' } }),
+          }),
+        });
+
+        if (!dialogueResponse.ok) {
+          const error = await dialogueResponse.json().catch(() => ({}));
+          throw new Error(error.error?.message || `Dialogue API error: ${dialogueResponse.status}`);
+        }
+
+        const dialogueData = await dialogueResponse.json();
+        const dialogueOutput = dialogueData.output?.find((o: { type: string }) => o.type === 'message');
+        const dialogueText = dialogueOutput?.content?.[0]?.text || '';
+
+        const dialogueJsonMatch = dialogueText.match(/\{[\s\S]*\}/);
+        if (!dialogueJsonMatch) {
+          throw new Error('No valid JSON found in dialogue response');
+        }
+
+        let dialogueResult: { title: string; difficulty: string; transcript: string; passage?: string; voiceAssignments: Record<string, string> };
+        try {
+          dialogueResult = JSON.parse(dialogueJsonMatch[0]);
+        } catch {
+          throw new Error('Failed to parse dialogue JSON');
+        }
+
+        // Reading mode: accept "passage" as alias for "transcript"
+        if (dialogueResult.passage && !dialogueResult.transcript) {
+          dialogueResult.transcript = dialogueResult.passage;
+        }
+
+        if (isReading) {
+          if (!dialogueResult.title || !dialogueResult.transcript) {
+            throw new Error('Passage response missing required fields (title, passage)');
+          }
+          dialogueResult.voiceAssignments = dialogueResult.voiceAssignments || {};
+        } else {
+          if (!dialogueResult.title || !dialogueResult.transcript || !dialogueResult.voiceAssignments) {
+            throw new Error('Dialogue response missing required fields (title, transcript, voiceAssignments)');
+          }
+        }
+
+        // --- Call 2: Generate test content (analytical, medium reasoning) ---
+        setProgress(35);
+        setGeneratingLabel('Creating test questions...');
+
+        const testPrompt = buildTestContentPrompt(
+          { title: dialogueResult.title, transcript: dialogueResult.transcript, difficulty: profile.difficulty },
+          profile.contentMode,
+          profile.targetDuration
+        );
+
+        const testResponse = await fetch('https://api.openai.com/v1/responses', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model: profile.contentModel,
+            instructions: testPrompt.instructions,
+            input: testPrompt.input,
+            ...(profile.useReasoning && { reasoning: { effort: 'medium' } }),
+          }),
+        });
+
+        if (!testResponse.ok) {
+          const error = await testResponse.json().catch(() => ({}));
+          throw new Error(error.error?.message || `Test content API error: ${testResponse.status}`);
+        }
+
+        const testData = await testResponse.json();
+        const testOutput = testData.output?.find((o: { type: string }) => o.type === 'message');
+        const testText = testOutput?.content?.[0]?.text || '';
+
+        const testJsonMatch = testText.match(/\{[\s\S]*\}/);
+        if (!testJsonMatch) {
+          throw new Error('No valid JSON found in test content response');
+        }
+
+        let testResult: { questions: any[]; lexis: any[]; preview: any[]; classroomActivity?: any; transferQuestion?: any };
+        try {
+          testResult = JSON.parse(testJsonMatch[0]);
+        } catch {
+          throw new Error('Failed to parse test content JSON');
+        }
+
+        if (!testResult.questions || !Array.isArray(testResult.questions)) {
+          throw new Error('Test content response missing questions array');
+        }
+
+        // --- Merge into single payload and validate ---
+        mergedPayload = validatePayload(JSON.stringify({
+          title: dialogueResult.title,
+          difficulty: dialogueResult.difficulty || profile.difficulty,
+          transcript: dialogueResult.transcript,
+          voiceAssignments: dialogueResult.voiceAssignments,
+          questions: testResult.questions,
+          lexis: testResult.lexis || [],
+          preview: testResult.preview || [],
+          classroomActivity: testResult.classroomActivity || undefined,
+          transferQuestion: testResult.transferQuestion || undefined,
+          bonusQuestions: testResult.bonusQuestions || [],
+        }));
       }
-
-      // --- Call 2: Generate test content (analytical, medium reasoning) ---
-      setProgress(35);
-      setGeneratingLabel('Creating test questions...');
-
-      const testPrompt = buildTestContentPrompt(
-        { title: dialogueResult.title, transcript: dialogueResult.transcript, difficulty: profile.difficulty },
-        profile.contentMode,
-        profile.targetDuration
-      );
-
-      const testResponse = await fetch('https://api.openai.com/v1/responses', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: profile.contentModel,
-          instructions: testPrompt.instructions,
-          input: testPrompt.input,
-          ...(profile.useReasoning && { reasoning: { effort: 'medium' } }),
-        }),
-      });
-
-      if (!testResponse.ok) {
-        const error = await testResponse.json().catch(() => ({}));
-        throw new Error(error.error?.message || `Test content API error: ${testResponse.status}`);
-      }
-
-      const testData = await testResponse.json();
-      const testOutput = testData.output?.find((o: { type: string }) => o.type === 'message');
-      const testText = testOutput?.content?.[0]?.text || '';
-
-      const testJsonMatch = testText.match(/\{[\s\S]*\}/);
-      if (!testJsonMatch) {
-        throw new Error('No valid JSON found in test content response');
-      }
-
-      let testResult: { questions: any[]; lexis: any[]; preview: any[]; classroomActivity?: any; transferQuestion?: any };
-      try {
-        testResult = JSON.parse(testJsonMatch[0]);
-      } catch {
-        throw new Error('Failed to parse test content JSON');
-      }
-
-      if (!testResult.questions || !Array.isArray(testResult.questions)) {
-        throw new Error('Test content response missing questions array');
-      }
-
-      // --- Merge into single payload and validate ---
-      const mergedPayload: OneShotPayload = validatePayload(JSON.stringify({
-        title: dialogueResult.title,
-        difficulty: dialogueResult.difficulty || profile.difficulty,
-        transcript: dialogueResult.transcript,
-        voiceAssignments: dialogueResult.voiceAssignments,
-        questions: testResult.questions,
-        lexis: testResult.lexis || [],
-        preview: testResult.preview || [],
-        classroomActivity: testResult.classroomActivity || undefined,
-        transferQuestion: testResult.transferQuestion || undefined,
-        bonusQuestions: testResult.bonusQuestions || [],
-      }));
 
       setGeneratingLabel('');
 
@@ -1239,6 +1350,142 @@ export const JamButton: React.FC<JamButtonProps> = ({
             >
               ✏️
             </button>
+          </div>
+
+          {/* From Textbook */}
+          <div className="w-full max-w-sm">
+            <button
+              onClick={() => setShowTextbookUpload(!showTextbookUpload)}
+              disabled={stage !== 'idle'}
+              className={`w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all disabled:opacity-50 ${
+                showTextbookUpload || extractionResult
+                  ? 'bg-indigo-100 text-indigo-700 border border-indigo-200'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200'
+              }`}
+            >
+              <span>From Textbook</span>
+              <span className="text-[10px]">{showTextbookUpload ? '▲' : '▼'}</span>
+            </button>
+
+            {showTextbookUpload && (
+              <div className="mt-2 space-y-2">
+                {!textbookImage ? (
+                  /* Drop zone */
+                  <div
+                    onClick={() => textbookFileRef.current?.click()}
+                    onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-indigo-400', 'bg-indigo-50'); }}
+                    onDragLeave={(e) => { e.currentTarget.classList.remove('border-indigo-400', 'bg-indigo-50'); }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.currentTarget.classList.remove('border-indigo-400', 'bg-indigo-50');
+                      const file = e.dataTransfer.files?.[0];
+                      if (file) handleTextbookFile(file);
+                    }}
+                    className="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/50 transition-colors"
+                  >
+                    <p className="text-xs text-slate-500">
+                      {isReading
+                        ? 'Upload a textbook page to extract topic, vocabulary, and passage'
+                        : 'Upload a textbook page to extract topic and vocabulary'}
+                    </p>
+                    <p className="text-[10px] text-slate-400 mt-1">Tap to browse or drag & drop</p>
+                  </div>
+                ) : (
+                  /* Image uploaded — show thumbnail and results */
+                  <div className="border border-slate-200 rounded-xl p-3 bg-white space-y-2">
+                    <div className="flex items-start gap-3">
+                      <img src={textbookImage.dataUri} alt="Textbook page" className="w-16 h-20 object-cover rounded-lg border border-slate-200" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-slate-700 truncate">{textbookImage.fileName}</p>
+                        <p className="text-[10px] text-slate-400">{textbookImage.width}x{textbookImage.height}</p>
+
+                        {isExtracting && (
+                          <div className="flex items-center gap-2 mt-1">
+                            <div className="w-3 h-3 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                            <span className="text-xs text-indigo-600">Analyzing...</span>
+                          </div>
+                        )}
+                      </div>
+                      <button onClick={clearTextbook} className="text-slate-400 hover:text-red-500 text-xs p-1">✕</button>
+                    </div>
+
+                    {extractionError && (
+                      <div className="px-2 py-1.5 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">{extractionError}</div>
+                    )}
+
+                    {extractionResult && (
+                      <>
+                        {/* Status banner */}
+                        <div className={`px-2 py-1.5 rounded-lg text-xs border ${
+                          extractionResult.status === 'success'
+                            ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                            : extractionResult.status === 'partial'
+                            ? 'bg-amber-50 border-amber-200 text-amber-700'
+                            : 'bg-red-50 border-red-200 text-red-700'
+                        }`}>
+                          <p className="font-medium">
+                            {extractionResult.status === 'success' ? 'Extraction successful' :
+                             extractionResult.status === 'partial' ? 'Partial extraction' :
+                             'Extraction failed'}
+                          </p>
+                          <p className="mt-0.5">{extractionResult.statusMessage}</p>
+                        </div>
+
+                        {/* Content summary */}
+                        {extractionResult.status !== 'failure' && (
+                          <div className="flex flex-wrap gap-1.5">
+                            {extractionResult.topic && (
+                              <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 text-[10px] font-medium rounded-full">
+                                Topic: {extractionResult.topic}
+                              </span>
+                            )}
+                            {extractionResult.vocabulary.length > 0 && (
+                              <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 text-[10px] font-medium rounded-full">
+                                {extractionResult.vocabulary.length} vocab
+                              </span>
+                            )}
+                            {extractionResult.passage && (
+                              <span className="px-2 py-0.5 bg-violet-50 text-violet-700 text-[10px] font-medium rounded-full">
+                                Passage found
+                              </span>
+                            )}
+                            {extractionResult.difficulty && (
+                              <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-[10px] font-medium rounded-full">
+                                {extractionResult.difficulty}
+                              </span>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Collapsible JSON */}
+                        <button
+                          onClick={() => setShowExtractionJson(!showExtractionJson)}
+                          className="text-[10px] text-indigo-500 hover:text-indigo-700 font-medium"
+                        >
+                          {showExtractionJson ? 'Hide JSON ▲' : 'Show JSON ▼'}
+                        </button>
+                        {showExtractionJson && (
+                          <pre className="text-[10px] bg-slate-50 border border-slate-200 rounded-lg p-2 overflow-auto max-h-48 text-slate-700">
+                            {JSON.stringify(extractionResult, null, 2)}
+                          </pre>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+
+                <input
+                  ref={textbookFileRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleTextbookFile(file);
+                  }}
+                />
+              </div>
+            )}
           </div>
 
           {/* The JAM button */}
