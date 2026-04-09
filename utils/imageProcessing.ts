@@ -76,3 +76,14 @@ export function getFilesFromDragEvent(e: React.DragEvent): File[] {
   }
   return files;
 }
+
+export function getImageFromClipboard(e: ClipboardEvent): File | null {
+  if (!e.clipboardData?.items) return null;
+  for (let i = 0; i < e.clipboardData.items.length; i++) {
+    const item = e.clipboardData.items[i];
+    if (item.type.startsWith('image/')) {
+      return item.getAsFile();
+    }
+  }
+  return null;
+}

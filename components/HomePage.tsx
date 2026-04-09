@@ -4,7 +4,7 @@ import { EFL_TOPICS, SpeakerCount, getRandomTopic, randomSpeakerCount, resolveSp
 import type { SpeakerCountDefault } from './Settings';
 import { useAppMode } from '../contexts/AppModeContext';
 import { modeLabel } from '../utils/modeLabels';
-import { processImage, type ProcessedImage } from '../utils/imageProcessing';
+import { processImage, getImageFromClipboard, type ProcessedImage } from '../utils/imageProcessing';
 
 export type CreationMethod = 'audio' | 'transcript' | 'import' | 'oneshot' | 'jam';
 export type { ContentModel } from './Settings';
@@ -126,7 +126,7 @@ export const HomePage: React.FC<HomePageProps> = ({
 
   // Textbook extraction state
   const [showTextbookUpload, setShowTextbookUpload] = useState(false);
-  const [textbookImage, setTextbookImage] = useState<ProcessedImage | null>(null);
+  const [textbookImages, setTextbookImages] = useState<ProcessedImage[]>([]);
   const [extractionResult, setExtractionResult] = useState<{
     status: 'success' | 'partial' | 'failure';
     statusMessage: string;
@@ -147,19 +147,34 @@ export const HomePage: React.FC<HomePageProps> = ({
     setIsCustomTopic(false);
   };
 
-  const handleTextbookFile = async (file: File) => {
+  const handleTextbookFiles = async (files: File[]) => {
+    const remaining = 3 - textbookImages.length;
+    if (remaining <= 0) return;
+    const toProcess = files.slice(0, remaining);
+    for (const file of toProcess) {
+      try {
+        const processed = await processImage(file);
+        setTextbookImages(prev => [...prev, processed].slice(0, 3));
+      } catch (err) {
+        setExtractionError(err instanceof Error ? err.message : 'Failed to process image');
+      }
+    }
+  };
+
+  const handleExtract = async () => {
+    if (textbookImages.length === 0) return;
+    setIsExtracting(true);
     setExtractionError('');
     setExtractionResult(null);
     setShowExtractionJson(false);
     try {
-      const processed = await processImage(file);
-      setTextbookImage(processed);
-      setIsExtracting(true);
-
       const res = await fetch('/api/extract-textbook', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ images: [processed.dataUri], mode: appMode }),
+        body: JSON.stringify({
+          images: textbookImages.map(img => img.dataUri),
+          mode: appMode,
+        }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -167,7 +182,6 @@ export const HomePage: React.FC<HomePageProps> = ({
       }
       const result = await res.json();
       setExtractionResult(result);
-      // Auto-set topic from extraction
       if (result.topic) {
         setCurrentTopic(result.topic);
         setIsCustomTopic(false);
@@ -179,14 +193,34 @@ export const HomePage: React.FC<HomePageProps> = ({
     }
   };
 
+  const removeImage = (index: number) => {
+    setTextbookImages(prev => prev.filter((_, i) => i !== index));
+    setExtractionResult(null);
+    setExtractionError('');
+  };
+
   const clearTextbook = () => {
-    setTextbookImage(null);
+    setTextbookImages([]);
     setExtractionResult(null);
     setExtractionError('');
     setShowExtractionJson(false);
     setShowTextbookUpload(false);
     if (textbookFileRef.current) textbookFileRef.current.value = '';
   };
+
+  // Clipboard paste listener for textbook images
+  useEffect(() => {
+    if (!showTextbookUpload) return;
+    const handler = (e: ClipboardEvent) => {
+      const file = getImageFromClipboard(e);
+      if (file) {
+        e.preventDefault();
+        handleTextbookFiles([file]);
+      }
+    };
+    document.addEventListener('paste', handler);
+    return () => document.removeEventListener('paste', handler);
+  }, [showTextbookUpload, textbookImages.length]);
 
   const handleSpeakerCountChange = (count: SpeakerCount) => {
     setSpeakerCount(count);
@@ -440,7 +474,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                     <button
                       onClick={() => setShowTextbookUpload(!showTextbookUpload)}
                       className={`px-3 py-2 rounded-lg transition-colors ${
-                        showTextbookUpload || extractionResult
+                        showTextbookUpload || textbookImages.length > 0
                           ? 'bg-indigo-100 text-indigo-600'
                           : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
                       }`}
@@ -452,8 +486,9 @@ export const HomePage: React.FC<HomePageProps> = ({
 
                   {/* Textbook extraction expandable */}
                   {showTextbookUpload && (
-                    <div className="mt-2">
-                      {!textbookImage ? (
+                    <div className="mt-2 border border-slate-200 rounded-xl p-3 bg-white space-y-2">
+                      {/* Drop zone — shown when < 3 images and no extraction result */}
+                      {textbookImages.length < 3 && !extractionResult && (
                         <div
                           onClick={() => textbookFileRef.current?.click()}
                           onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-indigo-400', 'bg-indigo-50'); }}
@@ -461,105 +496,152 @@ export const HomePage: React.FC<HomePageProps> = ({
                           onDrop={(e) => {
                             e.preventDefault();
                             e.currentTarget.classList.remove('border-indigo-400', 'bg-indigo-50');
-                            const file = e.dataTransfer.files?.[0];
-                            if (file) handleTextbookFile(file);
+                            const files = Array.from(e.dataTransfer.files);
+                            if (files.length) handleTextbookFiles(files);
                           }}
                           className="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/50 transition-colors"
                         >
                           <p className="text-xs text-slate-500">
                             {appMode === 'reading'
-                              ? 'Upload a textbook page to extract topic, vocabulary, and passage'
-                              : 'Upload a textbook page to extract topic and vocabulary'}
+                              ? 'Upload textbook pages to extract topic, vocabulary, and passage'
+                              : 'Upload textbook pages to extract topic and vocabulary'}
                           </p>
-                          <p className="text-[10px] text-slate-400 mt-1">Tap to browse or drag & drop</p>
+                          <p className="text-[10px] text-slate-400 mt-1">Drag, browse, or paste (Ctrl+V) — up to 3 pages</p>
                         </div>
-                      ) : (
-                        <div className="border border-slate-200 rounded-xl p-3 bg-white space-y-2">
-                          <div className="flex items-start gap-3">
-                            <img src={textbookImage.dataUri} alt="Textbook page" className="w-16 h-20 object-cover rounded-lg border border-slate-200" />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs font-medium text-slate-700 truncate">{textbookImage.fileName}</p>
-                              <p className="text-[10px] text-slate-400">{textbookImage.width}x{textbookImage.height}</p>
-                              {isExtracting && (
-                                <div className="flex items-center gap-2 mt-1">
-                                  <div className="w-3 h-3 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-                                  <span className="text-xs text-indigo-600">Analyzing...</span>
-                                </div>
-                              )}
-                            </div>
-                            <button onClick={clearTextbook} className="text-slate-400 hover:text-red-500 text-xs p-1">✕</button>
+                      )}
+
+                      {/* Thumbnail grid */}
+                      {textbookImages.length > 0 && (
+                        <div>
+                          <div className="flex items-center gap-2 mb-1.5">
+                            <span className="text-[10px] text-slate-500 font-medium">{textbookImages.length} of 3 images</span>
+                          </div>
+                          <div className="flex gap-2 flex-wrap">
+                            {textbookImages.map((img, i) => (
+                              <div key={i} className="relative group">
+                                <img src={img.dataUri} alt={img.fileName} className="w-16 h-20 object-cover rounded-lg border border-slate-200" />
+                                {!extractionResult && (
+                                  <button
+                                    onClick={() => removeImage(i)}
+                                    className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                  >
+                                    ✕
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Extract Content button */}
+                      {textbookImages.length > 0 && !extractionResult && !isExtracting && (
+                        <button
+                          onClick={handleExtract}
+                          className="w-full py-2 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-500 transition-colors"
+                        >
+                          Extract Content
+                        </button>
+                      )}
+
+                      {/* Extracting spinner */}
+                      {isExtracting && (
+                        <div className="flex items-center justify-center gap-2 py-3">
+                          <div className="w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                          <span className="text-xs text-indigo-600">Analyzing {textbookImages.length} page{textbookImages.length > 1 ? 's' : ''}...</span>
+                        </div>
+                      )}
+
+                      {/* Error */}
+                      {extractionError && (
+                        <div className="px-2 py-1.5 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">{extractionError}</div>
+                      )}
+
+                      {/* Extraction results */}
+                      {extractionResult && (
+                        <>
+                          <div className={`px-2 py-1.5 rounded-lg text-xs border ${
+                            extractionResult.status === 'success'
+                              ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                              : extractionResult.status === 'partial'
+                              ? 'bg-amber-50 border-amber-200 text-amber-700'
+                              : 'bg-red-50 border-red-200 text-red-700'
+                          }`}>
+                            <p className="font-medium">
+                              {extractionResult.status === 'success' ? 'Extraction successful' :
+                               extractionResult.status === 'partial' ? 'Partial extraction' :
+                               'Extraction failed'}
+                            </p>
+                            <p className="mt-0.5">{extractionResult.statusMessage}</p>
                           </div>
 
-                          {extractionError && (
-                            <div className="px-2 py-1.5 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">{extractionError}</div>
+                          {extractionResult.status !== 'failure' && (
+                            <div className="flex flex-wrap gap-1.5">
+                              {extractionResult.topic && (
+                                <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 text-[10px] font-medium rounded-full">
+                                  Topic: {extractionResult.topic}
+                                </span>
+                              )}
+                              {extractionResult.vocabulary.length > 0 && (
+                                <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 text-[10px] font-medium rounded-full">
+                                  {extractionResult.vocabulary.length} vocab
+                                </span>
+                              )}
+                              {extractionResult.passage && (
+                                <span className="px-2 py-0.5 bg-violet-50 text-violet-700 text-[10px] font-medium rounded-full">
+                                  Passage found
+                                </span>
+                              )}
+                              {extractionResult.difficulty && (
+                                <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-[10px] font-medium rounded-full">
+                                  {extractionResult.difficulty}
+                                </span>
+                              )}
+                            </div>
                           )}
 
-                          {extractionResult && (
-                            <>
-                              <div className={`px-2 py-1.5 rounded-lg text-xs border ${
-                                extractionResult.status === 'success'
-                                  ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                                  : extractionResult.status === 'partial'
-                                  ? 'bg-amber-50 border-amber-200 text-amber-700'
-                                  : 'bg-red-50 border-red-200 text-red-700'
-                              }`}>
-                                <p className="font-medium">
-                                  {extractionResult.status === 'success' ? 'Extraction successful' :
-                                   extractionResult.status === 'partial' ? 'Partial extraction' :
-                                   'Extraction failed'}
-                                </p>
-                                <p className="mt-0.5">{extractionResult.statusMessage}</p>
-                              </div>
+                          <button
+                            onClick={() => setShowExtractionJson(!showExtractionJson)}
+                            className="text-[10px] text-indigo-500 hover:text-indigo-700 font-medium"
+                          >
+                            {showExtractionJson ? 'Hide JSON ▲' : 'Show JSON ▼'}
+                          </button>
+                          {showExtractionJson && (
+                            <pre className="text-[10px] bg-slate-50 border border-slate-200 rounded-lg p-2 overflow-auto max-h-48 text-slate-700">
+                              {JSON.stringify(extractionResult, null, 2)}
+                            </pre>
+                          )}
 
-                              {extractionResult.status !== 'failure' && (
-                                <div className="flex flex-wrap gap-1.5">
-                                  {extractionResult.topic && (
-                                    <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 text-[10px] font-medium rounded-full">
-                                      Topic: {extractionResult.topic}
-                                    </span>
-                                  )}
-                                  {extractionResult.vocabulary.length > 0 && (
-                                    <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 text-[10px] font-medium rounded-full">
-                                      {extractionResult.vocabulary.length} vocab
-                                    </span>
-                                  )}
-                                  {extractionResult.passage && (
-                                    <span className="px-2 py-0.5 bg-violet-50 text-violet-700 text-[10px] font-medium rounded-full">
-                                      Passage found
-                                    </span>
-                                  )}
-                                  {extractionResult.difficulty && (
-                                    <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-[10px] font-medium rounded-full">
-                                      {extractionResult.difficulty}
-                                    </span>
-                                  )}
-                                </div>
-                              )}
-
+                          {/* Action buttons */}
+                          <div className="flex gap-2">
+                            {textbookImages.length < 3 && (
                               <button
-                                onClick={() => setShowExtractionJson(!showExtractionJson)}
-                                className="text-[10px] text-indigo-500 hover:text-indigo-700 font-medium"
+                                onClick={() => { setExtractionResult(null); setExtractionError(''); }}
+                                className="flex-1 py-1.5 bg-indigo-50 text-indigo-700 text-xs font-medium rounded-lg hover:bg-indigo-100 transition-colors"
                               >
-                                {showExtractionJson ? 'Hide JSON ▲' : 'Show JSON ▼'}
+                                + Add Pages
                               </button>
-                              {showExtractionJson && (
-                                <pre className="text-[10px] bg-slate-50 border border-slate-200 rounded-lg p-2 overflow-auto max-h-48 text-slate-700">
-                                  {JSON.stringify(extractionResult, null, 2)}
-                                </pre>
-                              )}
-                            </>
-                          )}
-                        </div>
+                            )}
+                            <button
+                              onClick={clearTextbook}
+                              className="flex-1 py-1.5 bg-slate-100 text-slate-600 text-xs font-medium rounded-lg hover:bg-slate-200 transition-colors"
+                            >
+                              Clear All
+                            </button>
+                          </div>
+                        </>
                       )}
 
                       <input
                         ref={textbookFileRef}
                         type="file"
                         accept="image/jpeg,image/png,image/webp"
+                        multiple
                         className="hidden"
                         onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) handleTextbookFile(file);
+                          const files = Array.from(e.target.files || []);
+                          if (files.length) handleTextbookFiles(files);
+                          if (textbookFileRef.current) textbookFileRef.current.value = '';
                         }}
                       />
                     </div>
