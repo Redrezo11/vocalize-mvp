@@ -1099,7 +1099,7 @@ app.post('/api/extract-textbook', authenticate, async (req, res) => {
 
     inputContent.push({
       type: 'input_text',
-      text: `Extract educational content from this EFL textbook page. ${modeInstruction}`,
+      text: `Extract educational content from this EFL textbook page. ${modeInstruction} Return your response as JSON.`,
     });
 
     const response = await fetch('https://api.openai.com/v1/responses', {
