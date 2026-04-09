@@ -23,6 +23,11 @@ const MODEL_CONFIG: Record<ContentModel, {
     cost: '<$0.01',
     description: 'Higher quality output'
   },
+  'claude-sonnet': {
+    name: 'Claude Sonnet',
+    cost: '~$0.01',
+    description: 'Best quality, single call'
+  },
 };
 
 // Jam settings interface
@@ -405,7 +410,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                     {/* AI Model */}
                     <div>
                       <label className="block text-xs font-medium text-slate-600 mb-2">AI Model</label>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-3 gap-2">
                         {(Object.keys(MODEL_CONFIG) as ContentModel[]).map((model) => {
                           const config = MODEL_CONFIG[model];
                           return (
