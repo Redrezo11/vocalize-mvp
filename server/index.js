@@ -1123,7 +1123,8 @@ app.post('/api/extract-textbook', authenticate, async (req, res) => {
     }
 
     const data = await response.json();
-    const text = data.output_text || '';
+    const outputMsg = data.output?.find(o => o.type === 'message');
+    const text = outputMsg?.content?.[0]?.text || data.output_text || '';
     let parsed;
     try {
       parsed = JSON.parse(text);
