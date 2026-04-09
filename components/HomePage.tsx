@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { CEFRLevel, ContentMode, ContentModel } from './Settings';
 import { EFL_TOPICS, SpeakerCount, getRandomTopic, randomSpeakerCount, resolveSpeakerDefault } from '../utils/eflTopics';
 import type { SpeakerCountDefault } from './Settings';
 import { useAppMode } from '../contexts/AppModeContext';
 import { modeLabel } from '../utils/modeLabels';
+import { processImage, type ProcessedImage } from '../utils/imageProcessing';
 
 export type CreationMethod = 'audio' | 'transcript' | 'import' | 'oneshot' | 'jam';
 export type { ContentModel } from './Settings';
@@ -123,9 +124,68 @@ export const HomePage: React.FC<HomePageProps> = ({
   const [isCustomTopic, setIsCustomTopic] = useState(false);
   const [customTopic, setCustomTopic] = useState('');
 
+  // Textbook extraction state
+  const [showTextbookUpload, setShowTextbookUpload] = useState(false);
+  const [textbookImage, setTextbookImage] = useState<ProcessedImage | null>(null);
+  const [extractionResult, setExtractionResult] = useState<{
+    status: 'success' | 'partial' | 'failure';
+    statusMessage: string;
+    topic: string | null;
+    unit: string | null;
+    difficulty: string | null;
+    vocabulary: { term: string; definition: string | null }[];
+    passage: string | null;
+    warnings: string[];
+  } | null>(null);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [extractionError, setExtractionError] = useState('');
+  const [showExtractionJson, setShowExtractionJson] = useState(false);
+  const textbookFileRef = useRef<HTMLInputElement>(null);
+
   const shuffleTopic = () => {
     setCurrentTopic(getRandomTopic(speakerCount, currentTopic));
     setIsCustomTopic(false);
+  };
+
+  const handleTextbookFile = async (file: File) => {
+    setExtractionError('');
+    setExtractionResult(null);
+    setShowExtractionJson(false);
+    try {
+      const processed = await processImage(file);
+      setTextbookImage(processed);
+      setIsExtracting(true);
+
+      const res = await fetch('/api/extract-textbook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ images: [processed.dataUri], mode: appMode }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Extraction failed (${res.status})`);
+      }
+      const result = await res.json();
+      setExtractionResult(result);
+      // Auto-set topic from extraction
+      if (result.topic) {
+        setCurrentTopic(result.topic);
+        setIsCustomTopic(false);
+      }
+    } catch (err) {
+      setExtractionError(err instanceof Error ? err.message : 'Extraction failed');
+    } finally {
+      setIsExtracting(false);
+    }
+  };
+
+  const clearTextbook = () => {
+    setTextbookImage(null);
+    setExtractionResult(null);
+    setExtractionError('');
+    setShowExtractionJson(false);
+    setShowTextbookUpload(false);
+    if (textbookFileRef.current) textbookFileRef.current.value = '';
   };
 
   const handleSpeakerCountChange = (count: SpeakerCount) => {
@@ -377,7 +437,133 @@ export const HomePage: React.FC<HomePageProps> = ({
                     >
                       ✏️
                     </button>
+                    <button
+                      onClick={() => setShowTextbookUpload(!showTextbookUpload)}
+                      className={`px-3 py-2 rounded-lg transition-colors ${
+                        showTextbookUpload || extractionResult
+                          ? 'bg-indigo-100 text-indigo-600'
+                          : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                      }`}
+                      title="Extract from textbook"
+                    >
+                      📖
+                    </button>
                   </div>
+
+                  {/* Textbook extraction expandable */}
+                  {showTextbookUpload && (
+                    <div className="mt-2">
+                      {!textbookImage ? (
+                        <div
+                          onClick={() => textbookFileRef.current?.click()}
+                          onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-indigo-400', 'bg-indigo-50'); }}
+                          onDragLeave={(e) => { e.currentTarget.classList.remove('border-indigo-400', 'bg-indigo-50'); }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            e.currentTarget.classList.remove('border-indigo-400', 'bg-indigo-50');
+                            const file = e.dataTransfer.files?.[0];
+                            if (file) handleTextbookFile(file);
+                          }}
+                          className="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/50 transition-colors"
+                        >
+                          <p className="text-xs text-slate-500">
+                            {appMode === 'reading'
+                              ? 'Upload a textbook page to extract topic, vocabulary, and passage'
+                              : 'Upload a textbook page to extract topic and vocabulary'}
+                          </p>
+                          <p className="text-[10px] text-slate-400 mt-1">Tap to browse or drag & drop</p>
+                        </div>
+                      ) : (
+                        <div className="border border-slate-200 rounded-xl p-3 bg-white space-y-2">
+                          <div className="flex items-start gap-3">
+                            <img src={textbookImage.dataUri} alt="Textbook page" className="w-16 h-20 object-cover rounded-lg border border-slate-200" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium text-slate-700 truncate">{textbookImage.fileName}</p>
+                              <p className="text-[10px] text-slate-400">{textbookImage.width}x{textbookImage.height}</p>
+                              {isExtracting && (
+                                <div className="flex items-center gap-2 mt-1">
+                                  <div className="w-3 h-3 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                                  <span className="text-xs text-indigo-600">Analyzing...</span>
+                                </div>
+                              )}
+                            </div>
+                            <button onClick={clearTextbook} className="text-slate-400 hover:text-red-500 text-xs p-1">✕</button>
+                          </div>
+
+                          {extractionError && (
+                            <div className="px-2 py-1.5 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">{extractionError}</div>
+                          )}
+
+                          {extractionResult && (
+                            <>
+                              <div className={`px-2 py-1.5 rounded-lg text-xs border ${
+                                extractionResult.status === 'success'
+                                  ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                                  : extractionResult.status === 'partial'
+                                  ? 'bg-amber-50 border-amber-200 text-amber-700'
+                                  : 'bg-red-50 border-red-200 text-red-700'
+                              }`}>
+                                <p className="font-medium">
+                                  {extractionResult.status === 'success' ? 'Extraction successful' :
+                                   extractionResult.status === 'partial' ? 'Partial extraction' :
+                                   'Extraction failed'}
+                                </p>
+                                <p className="mt-0.5">{extractionResult.statusMessage}</p>
+                              </div>
+
+                              {extractionResult.status !== 'failure' && (
+                                <div className="flex flex-wrap gap-1.5">
+                                  {extractionResult.topic && (
+                                    <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 text-[10px] font-medium rounded-full">
+                                      Topic: {extractionResult.topic}
+                                    </span>
+                                  )}
+                                  {extractionResult.vocabulary.length > 0 && (
+                                    <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 text-[10px] font-medium rounded-full">
+                                      {extractionResult.vocabulary.length} vocab
+                                    </span>
+                                  )}
+                                  {extractionResult.passage && (
+                                    <span className="px-2 py-0.5 bg-violet-50 text-violet-700 text-[10px] font-medium rounded-full">
+                                      Passage found
+                                    </span>
+                                  )}
+                                  {extractionResult.difficulty && (
+                                    <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-[10px] font-medium rounded-full">
+                                      {extractionResult.difficulty}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+
+                              <button
+                                onClick={() => setShowExtractionJson(!showExtractionJson)}
+                                className="text-[10px] text-indigo-500 hover:text-indigo-700 font-medium"
+                              >
+                                {showExtractionJson ? 'Hide JSON ▲' : 'Show JSON ▼'}
+                              </button>
+                              {showExtractionJson && (
+                                <pre className="text-[10px] bg-slate-50 border border-slate-200 rounded-lg p-2 overflow-auto max-h-48 text-slate-700">
+                                  {JSON.stringify(extractionResult, null, 2)}
+                                </pre>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      )}
+
+                      <input
+                        ref={textbookFileRef}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleTextbookFile(file);
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* Settings Toggle */}
@@ -410,8 +596,8 @@ export const HomePage: React.FC<HomePageProps> = ({
                     {/* AI Model */}
                     <div>
                       <label className="block text-xs font-medium text-slate-600 mb-2">AI Model</label>
-                      <div className="grid grid-cols-3 gap-2">
-                        {(Object.keys(MODEL_CONFIG) as ContentModel[]).map((model) => {
+                      <div className="grid grid-cols-2 gap-2">
+                        {(['gpt-5-mini', 'gpt-5.2'] as ContentModel[]).map((model) => {
                           const config = MODEL_CONFIG[model];
                           return (
                             <button
@@ -431,6 +617,20 @@ export const HomePage: React.FC<HomePageProps> = ({
                           );
                         })}
                       </div>
+                      <button
+                        onClick={() => setJamSettings(s => ({ ...s, contentModel: 'claude-sonnet' }))}
+                        className={`w-full mt-2 p-2 rounded-lg text-left border-2 transition-all ${
+                          jamSettings.contentModel === 'claude-sonnet'
+                            ? 'border-violet-500 bg-violet-50'
+                            : 'border-slate-200 hover:border-slate-300 bg-white'
+                        }`}
+                      >
+                        <div className="flex justify-between items-center">
+                          <span className="font-medium text-slate-800 text-xs">Claude Sonnet 4.6</span>
+                          <span className={`text-xs font-bold ${jamSettings.contentModel === 'claude-sonnet' ? 'text-violet-600' : 'text-red-600'}`}>~$0.01</span>
+                        </div>
+                        <p className="text-[10px] text-slate-500 mt-0.5">Best quality, single call</p>
+                      </button>
                     </div>
 
                     {/* Test Duration */}
