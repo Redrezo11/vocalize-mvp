@@ -490,6 +490,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                       {/* Drop zone — shown when < 3 images and no extraction result */}
                       {textbookImages.length < 3 && !extractionResult && (
                         <div
+                          onClick={() => textbookFileRef.current?.click()}
                           onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-indigo-400', 'bg-indigo-50'); }}
                           onDragLeave={(e) => { e.currentTarget.classList.remove('border-indigo-400', 'bg-indigo-50'); }}
                           onDrop={(e) => {
@@ -498,20 +499,14 @@ export const HomePage: React.FC<HomePageProps> = ({
                             const files = Array.from(e.dataTransfer.files);
                             if (files.length) handleTextbookFiles(files);
                           }}
-                          className="border-2 border-dashed border-slate-300 rounded-xl p-5 text-center transition-colors"
+                          className="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/50 transition-colors"
                         >
                           <p className="text-sm font-medium text-slate-700 mb-1">
                             {appMode === 'reading'
                               ? 'Upload textbook pages to extract topic, vocabulary, and passage'
                               : 'Upload textbook pages to extract topic and vocabulary'}
                           </p>
-                          <p className="text-xs text-slate-400 mb-3">Drag files here, paste a screenshot (Ctrl+V), or browse — up to 3 pages</p>
-                          <button
-                            onClick={() => textbookFileRef.current?.click()}
-                            className="px-4 py-2 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-500 transition-colors"
-                          >
-                            Browse Files
-                          </button>
+                          <p className="text-xs text-slate-400">Drag files here, paste a screenshot (Ctrl+V), or tap to browse — up to 3 pages</p>
                         </div>
                       )}
 
