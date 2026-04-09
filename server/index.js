@@ -1050,7 +1050,7 @@ Return a JSON object with these fields:
 {
   "status": "success" | "partial" | "failure",
   "statusMessage": "Human-readable explanation of what was found or why extraction failed",
-  "topic": "The main topic or theme of the page" or null,
+  "topic": "A specific, scenario-ready description for test generation (see TOPIC RULES below)" or null,
   "unit": "Unit number and/or title if visible" or null,
   "difficulty": "Estimated CEFR level (A1/A2/B1/B2/C1/C2)" or null,
   "vocabulary": [
@@ -1072,7 +1072,19 @@ EXTRACTION RULES:
 - For "topic": infer from headings, unit titles, or the overall theme of the content
 - For "difficulty": estimate based on vocabulary complexity, grammar structures, and any CEFR labels visible
 - vocabulary array should be empty [] if no vocabulary items are found (not null)
-- warnings array should be empty [] if no issues (not null)`;
+- warnings array should be empty [] if no issues (not null)
+
+TOPIC RULES:
+- The topic must be a SPECIFIC scenario description, NOT a vague label or keyword list
+- Include the medium/format if detectable (podcast, interview, lecture, email, article, etc.)
+- Include enough detail that an AI could generate a complete listening/reading test from this topic alone
+- BAD: "Vitamin Supplements; health habits and staying healthy"
+- BAD: "Health and Wellness"
+- GOOD: "A podcast discussing healthy daily habits and debating whether vitamin supplements are worth taking"
+- GOOD: "Two friends comparing their morning routines and discussing which health tips actually work"
+- If the page shows a specific scenario (e.g., a dialogue at a doctor's office), describe that scenario
+- If the page is purely vocabulary/grammar with no clear scenario, synthesize a plausible scenario from the vocabulary theme
+- Keep to one sentence, 10-25 words`;
 
 app.post('/api/extract-textbook', authenticate, async (req, res) => {
   try {
@@ -1094,7 +1106,7 @@ app.post('/api/extract-textbook', authenticate, async (req, res) => {
     }));
 
     const modeInstruction = mode === 'listening'
-      ? 'This is for a LISTENING test — do NOT extract any reading passage. Set "passage" to null. Focus on extracting topic and vocabulary only.'
+      ? 'This is for a LISTENING test — do NOT extract any reading passage. Set "passage" to null. The topic must describe a specific audio scenario (e.g., "A podcast about...", "A conversation between...", "A lecture on...").'
       : 'This is for a READING test — if a reading passage is visible on the page, extract it fully.';
 
     inputContent.push({
