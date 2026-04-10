@@ -42,7 +42,7 @@ interface JamSettings {
 
 interface HomePageProps {
   onSelect: (method: CreationMethod) => void;
-  onJamGenerate?: (difficulty: CEFRLevel, settings?: JamSettings & { topic?: string }) => void;
+  onJamGenerate?: (difficulty: CEFRLevel, settings?: JamSettings & { topic?: string; extractedVocabulary?: { term: string; definition: string | null }[]; extractedPassage?: string | null }) => void;
   defaultDifficulty?: CEFRLevel;
   defaultContentMode?: ContentMode;
   defaultTargetDuration?: number;
@@ -186,6 +186,9 @@ export const HomePage: React.FC<HomePageProps> = ({
         setCurrentTopic(result.topic);
         setIsCustomTopic(false);
       }
+      if (result.difficulty && ['A1','A2','B1','B2','C1'].includes(result.difficulty)) {
+        setSelectedDifficulty(result.difficulty as CEFRLevel);
+      }
     } catch (err) {
       setExtractionError(err instanceof Error ? err.message : 'Extraction failed');
     } finally {
@@ -295,8 +298,21 @@ export const HomePage: React.FC<HomePageProps> = ({
   };
 
   const handleGenerateClick = () => {
+    console.log('[HomePage] Generate clicked:', {
+      hasExtraction: !!extractionResult,
+      extractionStatus: extractionResult?.status,
+      vocabCount: extractionResult?.vocabulary?.length || 0,
+      hasPassage: !!extractionResult?.passage,
+      topic: isCustomTopic ? customTopic : currentTopic,
+    });
     if (onJamGenerate) {
-      onJamGenerate(selectedDifficulty, { ...jamSettings, speakerCount, topic: isCustomTopic ? customTopic : currentTopic });
+      onJamGenerate(selectedDifficulty, {
+        ...jamSettings,
+        speakerCount,
+        topic: isCustomTopic ? customTopic : currentTopic,
+        extractedVocabulary: extractionResult?.vocabulary,
+        extractedPassage: extractionResult?.passage,
+      });
     } else {
       onSelect('jam');
     }

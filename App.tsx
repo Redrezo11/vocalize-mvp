@@ -139,6 +139,8 @@ const App: React.FC = () => {
   const [jamDifficulty, setJamDifficulty] = useState<import('./components/Settings').CEFRLevel>('B1');
   const [jamSettings, setJamSettings] = useState<{ targetDuration: number; contentMode: import('./components/Settings').ContentMode; contentModel?: import('./components/HomePage').ContentModel; useReasoning?: boolean; speakerCount?: import('./utils/eflTopics').SpeakerCount } | null>(null);
   const [jamTopic, setJamTopic] = useState<string | undefined>();
+  const [jamExtractedVocabulary, setJamExtractedVocabulary] = useState<{ term: string; definition: string | null }[] | undefined>();
+  const [jamExtractedPassage, setJamExtractedPassage] = useState<string | null | undefined>();
   const [autoSelectTestId, setAutoSelectTestId] = useState<string | null>(null);
   const settingsHook = useSettings(user?.id);
 
@@ -1398,10 +1400,12 @@ const App: React.FC = () => {
   // Handle JAM generation from homepage
   const handleJamGenerate = (
     difficulty: import('./components/Settings').CEFRLevel,
-    settings?: { targetDuration: number; contentMode: import('./components/Settings').ContentMode; contentModel?: import('./components/HomePage').ContentModel; useReasoning?: boolean; topic?: string; speakerCount?: import('./utils/eflTopics').SpeakerCount }
+    settings?: { targetDuration: number; contentMode: import('./components/Settings').ContentMode; contentModel?: import('./components/HomePage').ContentModel; useReasoning?: boolean; topic?: string; speakerCount?: import('./utils/eflTopics').SpeakerCount; extractedVocabulary?: { term: string; definition: string | null }[]; extractedPassage?: string | null }
   ) => {
     setJamDifficulty(difficulty);
     setJamTopic(settings?.topic);
+    setJamExtractedVocabulary(settings?.extractedVocabulary);
+    setJamExtractedPassage(settings?.extractedPassage);
     setJamSettings(settings ? { targetDuration: settings.targetDuration, contentMode: settings.contentMode, contentModel: settings.contentModel, useReasoning: settings.useReasoning, speakerCount: settings.speakerCount } : null);
     setShowJamButton(true);
   };
@@ -2076,6 +2080,8 @@ const App: React.FC = () => {
                   speakerCount: jamSettings.speakerCount,
                 } : undefined}
                 topic={jamTopic}
+                extractedVocabulary={jamExtractedVocabulary}
+                extractedPassage={jamExtractedPassage}
                 autoStart={true}
                 onComplete={handleJamComplete}
                 onCancel={() => setShowJamButton(false)}

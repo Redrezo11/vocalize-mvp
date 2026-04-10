@@ -108,6 +108,8 @@ interface JamButtonProps {
   defaultDifficulty?: CEFRLevel;
   contentMode?: ContentMode;
   topic?: string;
+  extractedVocabulary?: { term: string; definition: string | null }[];
+  extractedPassage?: string | null;
   autoStart?: boolean;
   onComplete: (result: { audioEntry: SavedAudio | null; test: ListeningTest }) => void;
   onError?: (error: string) => void;
@@ -276,6 +278,8 @@ export const JamButton: React.FC<JamButtonProps> = ({
   defaultDifficulty,
   contentMode,
   topic,
+  extractedVocabulary,
+  extractedPassage,
   autoStart = false,
   onComplete,
   onError,
@@ -712,6 +716,27 @@ export const JamButton: React.FC<JamButtonProps> = ({
 
     try {
       const effectiveTopic = topic || (isCustomTopic ? customTopic : currentTopic);
+
+      // Build textbook context supplement if extraction data exists
+      let textbookContext = '';
+      if (extractedVocabulary?.length) {
+        textbookContext += `\n## Required Vocabulary (from textbook — MUST include ALL of these in the lexis section, you may add more):\n`;
+        extractedVocabulary.forEach(v => {
+          textbookContext += `- ${v.term}${v.definition ? `: ${v.definition}` : ''}\n`;
+        });
+      }
+      if (extractedPassage && isReading) {
+        textbookContext += `\n## Source Passage (use this EXACT text as the reading passage — do NOT generate a new one. Generate questions, vocabulary, and activities based on this passage):\n${extractedPassage}\n`;
+      }
+
+      if (textbookContext) {
+        console.log('[Jam] Textbook context injected:', {
+          vocabCount: extractedVocabulary?.length || 0,
+          hasPassage: !!(extractedPassage && isReading),
+          contextLength: textbookContext.length,
+        });
+      }
+
       let mergedPayload: OneShotPayload;
 
       if (profile.contentModel === 'claude-sonnet') {
@@ -721,9 +746,10 @@ export const JamButton: React.FC<JamButtonProps> = ({
           throw new Error('Anthropic API key not configured');
         }
 
-        const template = isReading
+        const baseTemplate = isReading
           ? buildReadingTemplate(profile.difficulty, profile.contentMode, profile.targetDuration, effectiveTopic, readingGenre)
           : buildTemplate(profile.difficulty, profile.contentMode, profile.targetDuration, effectiveTopic, speakerCount, audioFormat || undefined);
+        const template = textbookContext ? baseTemplate + textbookContext : baseTemplate;
 
         const sonnetResponse = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
@@ -759,6 +785,12 @@ export const JamButton: React.FC<JamButtonProps> = ({
         }
 
         mergedPayload = validatePayload(jsonMatch[0]);
+        console.log('[Jam] Claude payload:', {
+          title: mergedPayload.title,
+          lexisCount: mergedPayload.lexis?.length || 0,
+          transcriptLength: mergedPayload.transcript?.length || 0,
+          vocabTerms: mergedPayload.lexis?.map(l => l.term).slice(0, 5),
+        });
 
       } else {
         // --- GPT models: two-call flow ---
@@ -781,7 +813,7 @@ export const JamButton: React.FC<JamButtonProps> = ({
           body: JSON.stringify({
             model: profile.contentModel,
             instructions: dialoguePrompt.instructions,
-            input: dialoguePrompt.input,
+            input: textbookContext ? dialoguePrompt.input + textbookContext : dialoguePrompt.input,
             ...(profile.useReasoning && { reasoning: { effort: 'low' } }),
           }),
         });
@@ -823,6 +855,12 @@ export const JamButton: React.FC<JamButtonProps> = ({
           }
         }
 
+        console.log('[Jam] Call 1 result:', {
+          title: dialogueResult.title,
+          transcriptLength: dialogueResult.transcript?.length || 0,
+          hasVoiceAssignments: !!dialogueResult.voiceAssignments,
+        });
+
         // --- Call 2: Generate test content (analytical, medium reasoning) ---
         setProgress(35);
         setGeneratingLabel('Creating test questions...');
@@ -842,7 +880,7 @@ export const JamButton: React.FC<JamButtonProps> = ({
           body: JSON.stringify({
             model: profile.contentModel,
             instructions: testPrompt.instructions,
-            input: testPrompt.input,
+            input: textbookContext ? testPrompt.input + textbookContext : testPrompt.input,
             ...(profile.useReasoning && { reasoning: { effort: 'medium' } }),
           }),
         });
@@ -871,6 +909,12 @@ export const JamButton: React.FC<JamButtonProps> = ({
         if (!testResult.questions || !Array.isArray(testResult.questions)) {
           throw new Error('Test content response missing questions array');
         }
+
+        console.log('[Jam] Call 2 result:', {
+          questionCount: testResult.questions?.length || 0,
+          lexisCount: testResult.lexis?.length || 0,
+          lexisTerms: testResult.lexis?.map((l: any) => l.term).slice(0, 5),
+        });
 
         // --- Merge into single payload and validate ---
         mergedPayload = validatePayload(JSON.stringify({
