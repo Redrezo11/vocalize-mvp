@@ -1,18 +1,20 @@
 import { TestQuestion } from '../types';
 import { repairAndParse } from '../utils/jsonRepair';
+import { toApiModel, reasoningFor, ReasoningEffort } from '../utils/openaiModels';
 
 const API_BASE = '/api';
 
-// OpenAI Responses API helper
-export async function callOpenAI(model: string, instructions: string, input: string): Promise<string> {
+// OpenAI Responses API helper. `model` may be an internal key ('gpt-5-mini') or a real model id.
+export async function callOpenAI(model: string, instructions: string, input: string, effort: ReasoningEffort = 'none'): Promise<string> {
   const apiKey = (import.meta as any).env?.VITE_OPENAI_API_KEY;
   if (!apiKey || apiKey === 'PLACEHOLDER_API_KEY') {
     throw new Error('OpenAI API key not configured');
   }
+  const apiModel = toApiModel(model);
   const response = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-    body: JSON.stringify({ model, instructions, input }),
+    body: JSON.stringify({ model: apiModel, instructions, input, ...reasoningFor(apiModel, effort) }),
   });
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));

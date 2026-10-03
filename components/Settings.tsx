@@ -364,7 +364,7 @@ export const Settings: React.FC<SettingsProps> = ({
                         }`}
                       >
                         <div className="flex justify-between items-center">
-                          <span className="font-medium text-slate-800 text-xs">GPT-5 Mini</span>
+                          <span className="font-medium text-slate-800 text-xs">GPT-5.6 Luna</span>
                           <span className="text-xs font-bold text-indigo-600">&lt;$0.001</span>
                         </div>
                       </button>
@@ -623,7 +623,7 @@ export const Settings: React.FC<SettingsProps> = ({
                       }`}
                     >
                       <div className="flex justify-between items-center">
-                        <span className="font-medium text-slate-800 text-xs">GPT-5 Mini</span>
+                        <span className="font-medium text-slate-800 text-xs">GPT-5.6 Luna</span>
                         <span className="text-xs font-bold text-indigo-600">&lt;$0.001</span>
                       </div>
                     </button>

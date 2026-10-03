@@ -2,6 +2,7 @@
 // Used across OneShotCreator, JamButton, TestBuilder, bonusGeneration
 
 import { callOpenAI } from '../helpers/bonusGeneration';
+import { OPENAI_UTILITY_MODEL } from './openaiModels';
 
 /**
  * Extract JSON boundaries using bracket counting (not greedy regex).
@@ -192,7 +193,7 @@ export function repairAndParse(text: string): any {
 }
 
 /**
- * Use gpt-5-mini to repair severely broken JSON.
+ * Use the fast OpenAI model to repair severely broken JSON.
  * Returns parsed object.
  */
 async function llmRepairJson(brokenJson: string, parseError: string): Promise<any> {
@@ -202,7 +203,7 @@ Common issues: trailing commas, unescaped quotes, missing brackets, truncated ou
 
   const input = `Parse error: ${parseError}\n\nBroken JSON:\n${brokenJson.slice(0, 8000)}`;
 
-  const response = await callOpenAI('gpt-5-mini', instructions, input);
+  const response = await callOpenAI(OPENAI_UTILITY_MODEL, instructions, input);
 
   // Parse the LLM response with hardcoded fixes too
   return repairAndParse(response);
@@ -211,7 +212,7 @@ Common issues: trailing commas, unescaped quotes, missing brackets, truncated ou
 /**
  * Full 3-tier JSON parsing:
  * 1. Hardcoded repair (sync, free)
- * 2. LLM repair via gpt-5-mini (async, costs 1 token)
+ * 2. LLM repair via the fast OpenAI model (async, costs 1 token)
  * 3. Throw with combined error
  */
 export async function robustJsonParse(

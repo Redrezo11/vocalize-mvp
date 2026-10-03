@@ -4,6 +4,7 @@ import { ClassroomTheme, ContentModel } from './Settings';
 import { useContentLabel } from '../contexts/ContentLabelContext';
 import type { ContentLabel } from '../utils/contentLabels';
 import { reportStudentTokenUsage } from '../utils/tokenApi';
+import { callOpenAI } from '../helpers/bonusGeneration';
 interface FollowUpQuestionsProps {
   sessionLog: TestSessionLog;
   transcript: string;
@@ -111,34 +112,6 @@ function buildVocabulary(test: ListeningTest) {
     definition: l.definition,
     definitionArabic: l.definitionArabic || '',
   }));
-}
-
-async function callOpenAI(model: string, instructions: string, input: string, reasoning?: { effort: string }): Promise<string> {
-  const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
-  if (!apiKey || apiKey === 'PLACEHOLDER_API_KEY') {
-    throw new Error('OpenAI API key not configured');
-  }
-
-  const body: Record<string, unknown> = { model, instructions, input };
-  if (reasoning) body.reasoning = reasoning;
-
-  const response = await fetch('https://api.openai.com/v1/responses', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(error.error?.message || `API error: ${response.status}`);
-  }
-
-  const data = await response.json();
-  const messageOutput = data.output?.find((o: { type: string }) => o.type === 'message');
-  return messageOutput?.content?.[0]?.text || '';
 }
 
 const getGenerateInstructions = (label: ContentLabel) => {
@@ -503,7 +476,7 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
       });
 
       // Low reasoning for evaluation — needs some thought for quality feedback
-      const text = await callOpenAI(model, getEvaluateInstructions(contentLabel), input, { effort: 'low' });
+      const text = await callOpenAI(model, getEvaluateInstructions(contentLabel), input, 'low');
       reportStudentTokenUsage(test.id, 'student_discussion_evaluation', model, presenterId);
       console.log('[FollowUp] Evaluate response:', text);
 

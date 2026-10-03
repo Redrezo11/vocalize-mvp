@@ -15,7 +15,7 @@ const MODEL_CONFIG: Record<ContentModel, {
   description: string;
 }> = {
   'gpt-5-mini': {
-    name: 'GPT-5 Mini',
+    name: 'GPT-5.6 Luna',
     cost: '<$0.001',
     description: 'Fast and economical'
   },

@@ -5,6 +5,10 @@ interface ImportMetaEnv {
   readonly VITE_GEMINI_API_KEY: string;
   readonly VITE_ANTHROPIC_API_KEY: string;
   readonly VITE_MONGODB_URI: string;
+  readonly VITE_OPENAI_API_KEY: string;
+  readonly VITE_OPENAI_FAST_MODEL?: string;
+  readonly VITE_OPENAI_PREMIUM_MODEL?: string;
+  readonly VITE_OPENAI_SPEECH_MODEL?: string;
 }
 
 interface ImportMeta {

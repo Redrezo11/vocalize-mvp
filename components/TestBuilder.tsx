@@ -7,6 +7,7 @@ import DocumentImport from './DocumentImport';
 import { useAppMode } from '../contexts/AppModeContext';
 import { modeLabel } from '../utils/modeLabels';
 import { repairAndParse } from '../utils/jsonRepair';
+import { OPENAI_UTILITY_MODEL } from '../utils/openaiModels';
 
 export interface ReadingPassage {
   title: string;
@@ -629,7 +630,7 @@ JSON FORMAT (return exactly this structure):
           'Authorization': `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: 'gpt-5-nano',
+          model: OPENAI_UTILITY_MODEL,
           input: prompt,
           reasoning: { effort: 'low' },
         }),
@@ -844,7 +845,7 @@ JSON FORMAT (return exactly this structure):
           'Authorization': `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: 'gpt-5-nano',
+          model: OPENAI_UTILITY_MODEL,
           input: prompt,
           reasoning: { effort: 'low' },
         }),

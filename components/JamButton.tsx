@@ -11,6 +11,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { generateBonusForTest } from '../helpers/bonusGeneration';
 import { getGenerationCost, SpeakerCount as TokenSpeakerCount } from '../utils/tokenCosts';
 import { reportTokenUsage, hasEnoughTokens } from '../utils/tokenApi';
+import { toApiModel, reasoningFor } from '../utils/openaiModels';
 import TokenConfirmDialog from './TokenConfirmDialog';
 
 const API_BASE = '/api';
@@ -24,7 +25,7 @@ const MODEL_CONFIG: Record<ContentModel, {
   description: string;
 }> = {
   'gpt-5-mini': {
-    name: 'GPT-5 Mini',
+    name: 'GPT-5.6 Luna',
     cost: '<$0.001',
     description: 'Fast and economical'
   },
@@ -811,10 +812,10 @@ export const JamButton: React.FC<JamButtonProps> = ({
             'Authorization': `Bearer ${apiKey}`,
           },
           body: JSON.stringify({
-            model: profile.contentModel,
+            model: toApiModel(profile.contentModel),
             instructions: dialoguePrompt.instructions,
             input: textbookContext ? dialoguePrompt.input + textbookContext : dialoguePrompt.input,
-            ...(profile.useReasoning && { reasoning: { effort: 'low' } }),
+            ...reasoningFor(toApiModel(profile.contentModel), profile.useReasoning ? 'low' : 'none'),
           }),
         });
 
@@ -878,10 +879,10 @@ export const JamButton: React.FC<JamButtonProps> = ({
             'Authorization': `Bearer ${apiKey}`,
           },
           body: JSON.stringify({
-            model: profile.contentModel,
+            model: toApiModel(profile.contentModel),
             instructions: testPrompt.instructions,
             input: textbookContext ? testPrompt.input + textbookContext : testPrompt.input,
-            ...(profile.useReasoning && { reasoning: { effort: 'medium' } }),
+            ...reasoningFor(toApiModel(profile.contentModel), profile.useReasoning ? 'medium' : 'none'),
           }),
         });
 
@@ -1213,7 +1214,7 @@ export const JamButton: React.FC<JamButtonProps> = ({
           currentBalance={user?.tokenBalance ?? 0}
           isAdmin={user?.role === 'admin'}
           operationLabel={isReading ? 'Generate reading test' : 'Generate listening test'}
-          operationDetail={`${profile.difficulty.toUpperCase()}, ${profile.targetDuration} min, ${profile.contentModel === 'gpt-5-mini' ? 'GPT-5 Mini' : 'GPT-5.2'}${profile.useReasoning ? ' + reasoning' : ''}${!isReading ? `, ${speakerCount} speaker${speakerCount > 1 ? 's' : ''}` : ''}`}
+          operationDetail={`${profile.difficulty.toUpperCase()}, ${profile.targetDuration} min, ${MODEL_CONFIG[profile.contentModel].name}${profile.useReasoning ? ' + reasoning' : ''}${!isReading ? `, ${speakerCount} speaker${speakerCount > 1 ? 's' : ''}` : ''}`}
           onConfirm={() => { setShowTokenConfirm(false); handleJam(); }}
           onCancel={() => { setShowTokenConfirm(false); hasAutoStartedRef.current = false; onCancel?.(); }}
         />
@@ -1418,7 +1419,7 @@ export const JamButton: React.FC<JamButtonProps> = ({
         currentBalance={user?.tokenBalance ?? 0}
         isAdmin={user?.role === 'admin'}
         operationLabel={isReading ? 'Generate reading test' : 'Generate listening test'}
-        operationDetail={`${profile.difficulty.toUpperCase()}, ${profile.targetDuration} min, ${profile.contentModel === 'gpt-5-mini' ? 'GPT-5 Mini' : 'GPT-5.2'}${profile.useReasoning ? ' + reasoning' : ''}${!isReading ? `, ${speakerCount} speaker${speakerCount > 1 ? 's' : ''}` : ''}`}
+        operationDetail={`${profile.difficulty.toUpperCase()}, ${profile.targetDuration} min, ${MODEL_CONFIG[profile.contentModel].name}${profile.useReasoning ? ' + reasoning' : ''}${!isReading ? `, ${speakerCount} speaker${speakerCount > 1 ? 's' : ''}` : ''}`}
         onConfirm={() => { setShowTokenConfirm(false); handleJam(); }}
         onCancel={() => { setShowTokenConfirm(false); if (autoStart) hasAutoStartedRef.current = false; }}
       />

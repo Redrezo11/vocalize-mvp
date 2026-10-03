@@ -186,7 +186,8 @@ const userSchema = new mongoose.Schema({
     content_mode: { type: String, enum: ['standard', 'halal', 'elsd'], default: 'standard' },
     classroom_theme: { type: String, enum: ['light', 'dark'], default: 'light' },
     target_duration: { type: Number, default: 10 },
-    content_model: { type: String, enum: ['gpt-5-mini', 'gpt-5.2'], default: 'gpt-5-mini' },
+    // Internal keys — the client maps them to real OpenAI ids (utils/openaiModels.ts)
+    content_model: { type: String, enum: ['gpt-5-mini', 'gpt-5.2', 'claude-sonnet'], default: 'gpt-5-mini' },
     default_speaker_count: { type: mongoose.Schema.Types.Mixed, default: 'random' },
   },
   created_at: { type: Date, default: Date.now },
@@ -706,8 +707,11 @@ const USD_PRICING = {
   'tts:elevenlabs':             { perChar: 0.00011 },               // ~$0.11/1K chars
   'tts:browser':                { perChar: 0 },                     // Free
   // LLM — cost per 1M tokens (input only, simplified)
-  'llm:openai:gpt-5-mini':     { perMillionTokens: 0.40 },         // $0.40/1M input
-  'llm:openai:gpt-5.2':        { perMillionTokens: 2.00 },         // $2.00/1M input
+  // Usage rows log the internal key 'gpt-5-mini', which runs on gpt-5.6-luna since Oct 2026
+  'llm:openai:gpt-5-mini':     { perMillionTokens: 0.20 },         // gpt-5.6-luna, $0.20/1M input
+  'llm:openai:gpt-5.6-luna':   { perMillionTokens: 0.20 },
+  'llm:openai:gpt-5.6-terra':  { perMillionTokens: 2.00 },
+  'llm:openai:gpt-5.2':        { perMillionTokens: 1.75 },         // $1.75/1M input
   'llm:anthropic:claude-sonnet-4-6': { perMillionTokens: 3.00 },   // $3/M input, $15/M output — blended
   'llm:openai:gpt-5.4-mini':       { perMillionTokens: 0.75 },   // Vision extraction
 };

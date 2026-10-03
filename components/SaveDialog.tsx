@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { OPENAI_UTILITY_MODEL } from '../utils/openaiModels';
 
 interface SaveDialogProps {
   isOpen: boolean;
@@ -69,7 +70,7 @@ const generateAITitle = async (transcript: string): Promise<string> => {
       'Authorization': `Bearer ${apiKey}`
     },
     body: JSON.stringify({
-      model: 'gpt-5-nano',
+      model: OPENAI_UTILITY_MODEL,
       input: `Generate a short, descriptive title (max 8 words) for this audio transcript. Return ONLY the title, no quotes or explanation:\n\n${transcript.slice(0, 1000)}`,
       reasoning: {
         effort: 'low'
