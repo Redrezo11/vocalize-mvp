@@ -212,6 +212,21 @@ For any LLM reading this codebase: start here. This document covers the full app
 
 ---
 
+## Recent Changes (2026-10-03)
+
+### OpenAI model retirements (`52d4fc6` + the commit after it)
+
+OpenAI is shutting down `gpt-5-mini` / `gpt-5-nano` (**11 Dec 2026**) and `tts-1` / `gpt-4o-mini-tts` (**6 Jan 2027**), all of which this app used. Full research, measurements and the as-implemented notes are in **[`docs/openai-model-migration-2026.md`](openai-model-migration-2026.md)**.
+
+- **Chat:** new `utils/openaiModels.ts` maps the internal keys to real model ids. `'gpt-5-mini'` and the former nano helper calls now run on `gpt-5.6-luna`; `'gpt-5.2'` is unchanged. Env overrides: `VITE_OPENAI_FAST_MODEL`, `VITE_OPENAI_PREMIUM_MODEL`. `reasoningFor()` sends `effort` explicitly (on 5.6, omitting it means *medium*). There is now one shared `callOpenAI` in `helpers/bonusGeneration.ts`. Labels read "GPT-5.6 Luna".
+- **Speech:** new `utils/openaiSpeech.ts` → `openaiSpeak(text, voice, style?)` uses `gpt-audio-1.5` via Chat Completions with a verbatim-reading prompt and a transcript fidelity check, and returns an mp3 Blob. It is used by the Jam/OneShot fallback, lexis audio, classroom narration and click-to-pronounce. The ClassroomMode "Voice" model picker was removed (both options were retired). Override: `VITE_OPENAI_SPEECH_MODEL`.
+- **Server:** `content_model` enum now includes `'claude-sonnet'` (saving it previously failed validation); USD pricing has been updated.
+- **Not yet verified:** in-browser segment joining and playback, and a listen-through of the voices. See §2.5 of the migration doc.
+
+Note: commits `17e6e77` through `396445a` (admin dashboard expansion, login fix, Claude Sonnet model, textbook extraction) are not yet described below.
+
+---
+
 ## Recent Changes (2026-03-05)
 
 ### Gateway Page Labels & Color Consistency (`f1df117`)

@@ -701,7 +701,9 @@ const STUDENT_OP_COSTS = {
 // Rates per character (TTS) or per token (LLM). Update here when provider pricing changes.
 const USD_PRICING = {
   // TTS — cost per character
-  'tts:openai:gpt-4o-mini-tts': { perChar: 15.00 / 1_000_000 },   // $0.015/1K chars
+  // gpt-audio-1.5 bills ~23 audio tokens/s at $64/1M; measured ≈ $0.09 per 1K chars of English
+  'tts:openai:gpt-audio-1.5':   { perChar: 90.00 / 1_000_000 },
+  'tts:openai:gpt-4o-mini-tts': { perChar: 15.00 / 1_000_000 },   // retired 2027-01-06; kept for old rows
   'tts:openai:tts-1':           { perChar: 15.00 / 1_000_000 },
   'tts:gemini':                 { perChar: 0 },                     // Free tier
   'tts:elevenlabs':             { perChar: 0.00011 },               // ~$0.11/1K chars
@@ -720,7 +722,7 @@ const USD_PRICING = {
 function estimateCostUSD(operation, provider, model, inputCharacters) {
   // TTS operations
   if (operation.includes('narration') || operation.includes('lexis_audio') || operation.includes('tts')) {
-    const key = `tts:${provider || 'openai'}:${model || 'gpt-4o-mini-tts'}`;
+    const key = `tts:${provider || 'openai'}:${model || 'gpt-audio-1.5'}`;
     const fallbackKey = `tts:${provider || 'openai'}`;
     const pricing = USD_PRICING[key] || USD_PRICING[fallbackKey];
     if (pricing?.perChar && inputCharacters) {

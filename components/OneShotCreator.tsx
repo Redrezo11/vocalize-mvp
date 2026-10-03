@@ -13,6 +13,7 @@ import { OPERATION_COSTS } from '../utils/tokenCosts';
 import { reportTokenUsage, hasEnoughTokens } from '../utils/tokenApi';
 import { repairAndParse, robustJsonParse } from '../utils/jsonRepair';
 import TokenConfirmDialog from './TokenConfirmDialog';
+import { openaiSpeak } from '../utils/openaiSpeech';
 
 const API_BASE = '/api';
 
@@ -1475,11 +1476,6 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
     transcript: string,
     geminiMapping?: SpeakerVoiceMapping
   ): Promise<Blob> => {
-    const apiKey = (import.meta as any).env?.VITE_OPENAI_API_KEY;
-    if (!apiKey || apiKey === 'PLACEHOLDER_API_KEY') {
-      throw new Error('OpenAI API key not configured');
-    }
-
     const analysis = parseDialogue(transcript);
 
     // Multi-speaker: generate each segment with a different voice
@@ -1506,51 +1502,14 @@ export const OneShotCreator: React.FC<OneShotCreatorProps> = ({
         const geminiDef = geminiVoiceName ? GEMINI_VOICES.find(v => v.name === geminiVoiceName) : null;
         const instructions = geminiDef ? `Speak in a ${geminiDef.style.toLowerCase()} tone.` : undefined;
 
-        const body: Record<string, unknown> = {
-          model: 'gpt-4o-mini-tts',
-          input: segment.text,
-          voice,
-          response_format: 'mp3',
-        };
-        if (instructions) body.instructions = instructions;
-
-        const response = await fetch('https://api.openai.com/v1/audio/speech', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`,
-          },
-          body: JSON.stringify(body),
-        });
-        if (!response.ok) {
-          const error = await response.json().catch(() => ({}));
-          throw new Error(error.error?.message || `OpenAI TTS error: ${response.status}`);
-        }
-        blobs.push(await response.blob());
+        blobs.push(await openaiSpeak(segment.text, voice, instructions));
       }
 
       return concatenateAudioBlobs(blobs);
     }
 
     // Single speaker — one voice
-    const response = await fetch('https://api.openai.com/v1/audio/speech', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini-tts',
-        input: transcript,
-        voice: 'alloy',
-        response_format: 'mp3',
-      }),
-    });
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new Error(error.error?.message || `OpenAI TTS error: ${response.status}`);
-    }
-    return response.blob();
+    return openaiSpeak(transcript, 'alloy');
   };
 
   // Continue with save after getting audio (shared by Gemini and fallbacks)

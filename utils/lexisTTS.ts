@@ -1,4 +1,5 @@
 import { LexisItem, LexisAudio } from '../types';
+import { openaiSpeak, OPENAI_SPEECH_MODEL } from './openaiSpeech';
 
 // Build the script for TTS
 export function buildLexisScript(lexis: LexisItem[]): string {
@@ -20,49 +21,16 @@ export function buildLexisScript(lexis: LexisItem[]): string {
   return intro + words + ending;
 }
 
-// Generate audio using OpenAI TTS (gpt-4o-mini-tts with instructions)
+// Generate audio using OpenAI TTS (verbatim reading with a teacher-style instruction)
 async function generateWithOpenAI(script: string): Promise<string | null> {
-  const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
-  if (!apiKey || apiKey === 'PLACEHOLDER_API_KEY') {
-    console.log('[LexisTTS] No OpenAI API key configured');
-    return null;
-  }
-
   try {
-    console.log('[LexisTTS] Using OpenAI TTS with gpt-4o-mini-tts model');
+    console.log('[LexisTTS] Using OpenAI TTS with', OPENAI_SPEECH_MODEL);
     console.log('[LexisTTS] Script length:', script.length, 'characters');
 
-    // Simple instructions - just voice style, not content interpretation
-    // Note: Detailed instructions can cause gpt-4o-mini-tts to skip/modify content
-    const instructions = `Speak slowly and clearly like a patient teacher. Read every single word exactly as written. Do not skip any items. Pause at each "..." in the text.`;
+    // Voice style only — openaiSpeak already enforces word-for-word reading
+    const style = `Speak slowly and clearly like a patient teacher. Pause at each "..." in the text.`;
 
-    const response = await fetch('https://api.openai.com/v1/audio/speech', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini-tts',
-        input: script,
-        voice: 'onyx', // Deep male voice, good for teaching
-        instructions: instructions,
-        response_format: 'mp3'
-      })
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      console.error('[LexisTTS] OpenAI TTS error:', error);
-
-      if (response.status === 429) {
-        console.log('[LexisTTS] OpenAI quota exceeded');
-      }
-      return null;
-    }
-
-    // Get audio as blob and convert to base64
-    const audioBlob = await response.blob();
+    const audioBlob = await openaiSpeak(script, 'onyx', style); // Deep male voice, good for teaching
     const arrayBuffer = await audioBlob.arrayBuffer();
     const base64 = btoa(
       new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')

@@ -4,6 +4,7 @@ import { ArrowLeftIcon, PlayIcon, PauseIcon, RefreshIcon, ChevronRightIcon } fro
 import { ClassroomTheme } from './Settings';
 import QRCode from 'qrcode';
 import { generateLexisAudio } from '../utils/lexisTTS';
+import { openaiSpeak, OPENAI_SPEECH_MODEL } from '../utils/openaiSpeech';
 import { fullTestCache } from '../utils/testCache';
 import { useAppMode } from '../contexts/AppModeContext';
 import { modeLabel, isTestTypeForMode } from '../utils/modeLabels';
@@ -48,15 +49,7 @@ const speakWord = async (rawWord: string, onStateChange?: (word: string, state: 
   try {
     let blobUrl = pronunciationCache.get(cacheKey);
     if (!blobUrl) {
-      const apiKey = (import.meta as any).env?.VITE_OPENAI_API_KEY;
-      if (!apiKey) throw new Error('No API key');
-      const response = await fetch('https://api.openai.com/v1/audio/speech', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: 'tts-1', input: clean, voice: 'nova', response_format: 'mp3' }),
-      });
-      if (!response.ok) throw new Error('TTS failed');
-      const blob = await response.blob();
+      const blob = await openaiSpeak(clean, 'nova');
       blobUrl = URL.createObjectURL(blob);
       pronunciationCache.set(cacheKey, blobUrl);
     }
@@ -131,16 +124,12 @@ const speakWordSilent = async (rawWord: string): Promise<void> => {
   const cacheKey = clean.toLowerCase();
   if (pronunciationCache.has(cacheKey)) return;
 
-  const apiKey = (import.meta as any).env?.VITE_OPENAI_API_KEY;
-  if (!apiKey) return;
-  const response = await fetch('https://api.openai.com/v1/audio/speech', {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: 'tts-1', input: clean, voice: 'nova', response_format: 'mp3' }),
-  });
-  if (!response.ok) return;
-  const blob = await response.blob();
-  pronunciationCache.set(cacheKey, URL.createObjectURL(blob));
+  try {
+    const blob = await openaiSpeak(clean, 'nova');
+    pronunciationCache.set(cacheKey, URL.createObjectURL(blob));
+  } catch {
+    // Silent: a word that fails to pre-generate is fetched again on click
+  }
 };
 
 // Batch pre-generate all unique words from given texts
@@ -227,8 +216,6 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
   const [isGeneratingLexisAudio, setIsGeneratingLexisAudio] = useState(false);
   const [lexisAudioError, setLexisAudioError] = useState<string | null>(null);
   const [isPlayingLexisAudio, setIsPlayingLexisAudio] = useState(false);
-  const [narrationModel, setNarrationModel] = useState<'tts-1' | 'gpt-4o-mini-tts'>('gpt-4o-mini-tts');
-  const [showTTSSettings, setShowTTSSettings] = useState(false);
   const lexisAudioRef = useRef<HTMLAudioElement>(null);
 
 
@@ -401,7 +388,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
         // Report token usage
         reportTokenUsage('lexis_audio_batch', tokenCost, {
           provider: 'openai',
-          model: 'gpt-4o-mini-tts',
+          model: OPENAI_SPEECH_MODEL,
           metadata: { wordCount: selectedTest.lexis.length },
         }).then(res => {
           if (res.token_balance !== undefined) updateTokenBalance(res.token_balance);
@@ -523,43 +510,15 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
     setPreListeningAudioLang(language);
 
     try {
-      const apiKey = (import.meta as any).env?.VITE_OPENAI_API_KEY;
-      if (!apiKey || apiKey === 'PLACEHOLDER_API_KEY') {
-        throw new Error('OpenAI API key not configured');
-      }
-
       const text = language === 'en'
         ? `${activity.situationSetup.en} ... ${activity.discussionPrompt.en}`
         : `${activity.situationSetup.ar} ... ${activity.discussionPrompt.ar}`;
 
-      const requestBody: Record<string, string> = {
-        model: narrationModel,
-        input: text,
-        voice: language === 'en' ? 'nova' : 'onyx',
-        response_format: 'mp3'
-      };
-      if (narrationModel === 'gpt-4o-mini-tts') {
-        requestBody.instructions = language === 'en'
-          ? 'Read clearly and slowly for an English language classroom. Pause at the "..." between sentences.'
-          : 'Read clearly and slowly in Arabic for a language classroom. Pause at the "..." between sentences.';
-      }
+      const style = language === 'en'
+        ? 'Read clearly and slowly for an English language classroom. Pause at the "..." between sentences.'
+        : 'Read clearly and slowly in Arabic for a language classroom. Pause at the "..." between sentences.';
 
-      const response = await fetch('https://api.openai.com/v1/audio/speech', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(requestBody)
-      });
-
-      if (!response.ok) {
-        const error = await response.text();
-        console.error('[ClassroomMode] Pre-listening TTS error:', error);
-        throw new Error('Audio generation failed');
-      }
-
-      const audioBlob = await response.blob();
+      const audioBlob = await openaiSpeak(text, language === 'en' ? 'nova' : 'onyx', style);
       const arrayBuffer = await audioBlob.arrayBuffer();
       const base64 = btoa(
         new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
@@ -581,7 +540,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
 
       // Report token usage
       reportTokenUsage('classroom_narration', tokenCost, {
-        provider: 'openai', model: narrationModel,
+        provider: 'openai', model: OPENAI_SPEECH_MODEL,
         metadata: { type: 'pre-listening', language },
       }).then(res => {
         if (res.token_balance !== undefined) updateTokenBalance(res.token_balance);
@@ -626,40 +585,12 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
     setPlenaryAudioLang(language);
 
     try {
-      const apiKey = (import.meta as any).env?.VITE_OPENAI_API_KEY;
-      if (!apiKey || apiKey === 'PLACEHOLDER_API_KEY') {
-        throw new Error('OpenAI API key not configured');
-      }
-
       const text = language === 'en' ? tq.en : tq.ar;
-      const plenaryBody: Record<string, string> = {
-        model: narrationModel,
-        input: text,
-        voice: language === 'en' ? 'nova' : 'onyx',
-        response_format: 'mp3'
-      };
-      if (narrationModel === 'gpt-4o-mini-tts') {
-        plenaryBody.instructions = language === 'en'
-          ? 'Read clearly and slowly for an English language classroom.'
-          : 'Read clearly and slowly in Arabic for a language classroom.';
-      }
+      const style = language === 'en'
+        ? 'Read clearly and slowly for an English language classroom.'
+        : 'Read clearly and slowly in Arabic for a language classroom.';
 
-      const response = await fetch('https://api.openai.com/v1/audio/speech', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(plenaryBody)
-      });
-
-      if (!response.ok) {
-        const error = await response.text();
-        console.error('[ClassroomMode] Plenary TTS error:', error);
-        throw new Error('Audio generation failed');
-      }
-
-      const audioBlob = await response.blob();
+      const audioBlob = await openaiSpeak(text, language === 'en' ? 'nova' : 'onyx', style);
       const arrayBuffer = await audioBlob.arrayBuffer();
       const base64 = btoa(
         new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
@@ -680,7 +611,7 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
 
       // Report token usage
       reportTokenUsage('classroom_narration', tokenCost, {
-        provider: 'openai', model: narrationModel,
+        provider: 'openai', model: OPENAI_SPEECH_MODEL,
         metadata: { type: 'plenary', language },
       }).then(res => {
         if (res.token_balance !== undefined) updateTokenBalance(res.token_balance);
@@ -1417,16 +1348,6 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                   </span>
                 </button>
               )}
-
-              {/* TTS Settings Button */}
-              <button
-                onClick={() => setShowTTSSettings(true)}
-                className="flex items-center gap-2 px-3 py-2 bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 transition-colors"
-                title="Voice settings"
-              >
-                <span className="text-sm">&#9881;&#65039;</span>
-                <span className="text-sm">Voice</span>
-              </button>
 
               {/* Play Counter - only shown with audio in listening mode */}
               {appMode === 'listening' && selectedAudio && (
@@ -2510,49 +2431,6 @@ export const ClassroomMode: React.FC<ClassroomModeProps> = ({ tests, isLoadingTe
                   </div>
                 </>
               )}
-            </div>
-          </div>
-        )}
-
-        {/* TTS Settings Modal */}
-        {showTTSSettings && (
-          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setShowTTSSettings(false)}>
-            <div className={`rounded-2xl max-w-sm w-full p-6 ${isDark ? 'bg-slate-800' : 'bg-white'}`} onClick={e => e.stopPropagation()}>
-              <h2 className={`text-lg font-bold mb-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>Voice Settings</h2>
-              <p className={`text-sm mb-5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Choose the TTS model for slide narration</p>
-
-              <div className="space-y-3">
-                <button
-                  onClick={() => setNarrationModel('tts-1')}
-                  className={`w-full text-left px-4 py-3 rounded-xl border-2 transition-colors ${
-                    narrationModel === 'tts-1'
-                      ? isDark ? 'border-indigo-500 bg-indigo-900/30' : 'border-indigo-500 bg-indigo-50'
-                      : isDark ? 'border-slate-600 bg-slate-700 hover:border-slate-500' : 'border-slate-200 bg-slate-50 hover:border-slate-300'
-                  }`}
-                >
-                  <div className={`font-medium ${isDark ? 'text-white' : 'text-slate-900'}`}>TTS-1</div>
-                  <div className={`text-xs mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Fast and cost-effective</div>
-                </button>
-
-                <button
-                  onClick={() => setNarrationModel('gpt-4o-mini-tts')}
-                  className={`w-full text-left px-4 py-3 rounded-xl border-2 transition-colors ${
-                    narrationModel === 'gpt-4o-mini-tts'
-                      ? isDark ? 'border-indigo-500 bg-indigo-900/30' : 'border-indigo-500 bg-indigo-50'
-                      : isDark ? 'border-slate-600 bg-slate-700 hover:border-slate-500' : 'border-slate-200 bg-slate-50 hover:border-slate-300'
-                  }`}
-                >
-                  <div className={`font-medium ${isDark ? 'text-white' : 'text-slate-900'}`}>GPT-4o mini TTS</div>
-                  <div className={`text-xs mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Natural voice with instruction-following</div>
-                </button>
-              </div>
-
-              <button
-                onClick={() => setShowTTSSettings(false)}
-                className={`w-full mt-5 px-4 py-2.5 rounded-xl font-medium transition-colors ${isDark ? 'bg-slate-700 text-slate-300 hover:bg-slate-600' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}
-              >
-                Done
-              </button>
             </div>
           </div>
         )}

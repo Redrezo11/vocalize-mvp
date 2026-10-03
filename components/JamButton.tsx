@@ -12,6 +12,7 @@ import { generateBonusForTest } from '../helpers/bonusGeneration';
 import { getGenerationCost, SpeakerCount as TokenSpeakerCount } from '../utils/tokenCosts';
 import { reportTokenUsage, hasEnoughTokens } from '../utils/tokenApi';
 import { toApiModel, reasoningFor } from '../utils/openaiModels';
+import { openaiSpeak } from '../utils/openaiSpeech';
 import TokenConfirmDialog from './TokenConfirmDialog';
 
 const API_BASE = '/api';
@@ -448,11 +449,6 @@ export const JamButton: React.FC<JamButtonProps> = ({
     transcript: string,
     geminiMapping?: SpeakerVoiceMapping
   ): Promise<string> => {
-    const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
-    if (!apiKey || apiKey === 'PLACEHOLDER_API_KEY') {
-      throw new Error('OpenAI API key not configured');
-    }
-
     const analysis = parseDialogue(transcript);
 
     // Multi-speaker: generate each segment with a different voice
@@ -479,27 +475,7 @@ export const JamButton: React.FC<JamButtonProps> = ({
         const geminiDef = geminiVoiceName ? GEMINI_VOICES.find(v => v.name === geminiVoiceName) : null;
         const instructions = geminiDef ? `Speak in a ${geminiDef.style.toLowerCase()} tone.` : undefined;
 
-        const body: Record<string, unknown> = {
-          model: 'gpt-4o-mini-tts',
-          input: segment.text,
-          voice,
-          response_format: 'mp3',
-        };
-        if (instructions) body.instructions = instructions;
-
-        const response = await fetch('https://api.openai.com/v1/audio/speech', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`,
-          },
-          body: JSON.stringify(body),
-        });
-        if (!response.ok) {
-          const error = await response.json().catch(() => ({}));
-          throw new Error(error.error?.message || `OpenAI TTS error: ${response.status}`);
-        }
-        blobs.push(await response.blob());
+        blobs.push(await openaiSpeak(segment.text, voice, instructions));
       }
 
       const combined = await concatenateAudioBlobs(blobs);
@@ -507,24 +483,7 @@ export const JamButton: React.FC<JamButtonProps> = ({
     }
 
     // Single speaker — one voice
-    const response = await fetch('https://api.openai.com/v1/audio/speech', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini-tts',
-        input: transcript,
-        voice: 'alloy',
-        response_format: 'mp3',
-      }),
-    });
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new Error(error.error?.message || `OpenAI TTS error: ${response.status}`);
-    }
-    return blobToBase64(await response.blob());
+    return blobToBase64(await openaiSpeak(transcript, 'alloy'));
   };
 
   // Save entry and test (shared by all audio paths)
