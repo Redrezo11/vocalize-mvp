@@ -212,6 +212,31 @@ For any LLM reading this codebase: start here. This document covers the full app
 
 ---
 
+## Recent Changes (2026-10-26)
+
+### Shared accounts no longer log each other out
+
+**Bug**: A class sharing one teacher account on iPhones was repeatedly kicked to the login page, usually after locking the phone or switching apps.
+
+**Root cause**: `User.refresh_token` held a single token. Every login overwrote it and every refresh rotated it, so only the most recent device had a valid session; all others failed their next refresh. The client refreshes on every `visibilitychange` (every iOS app switch/unlock) and logged out on any non-OK response. Any one student tapping Logout nulled the token for everyone.
+
+**Fix**:
+- `server/index.js`: new `refresh_tokens: [String]` (one per device, capped at 50 newest). Login `$push`es; refresh validates membership and issues a new access token **without rotating** the refresh token; logout `$pull`s only that device's token. Legacy `refresh_token` sessions migrate into the array on first refresh. Refresh tokens carry a random `jti` so two logins in the same second don't produce identical tokens (which a `$pull` would otherwise remove together). Cookies are `SameSite=Lax` so sessions survive links opened from the Camera/QR scanner. `refresh_tokens` is excluded from all user API responses.
+- `contexts/AuthContext.tsx`: single-flight `refreshSession()` shared by the mount check, interval and visibility handler; logs out only on a definite 401 (network errors / 5xx from a sleeping dyno are ignored); the visibility handler calls `/me` first and refreshes only if the access token has expired.
+- Verified with an end-to-end script against an in-memory MongoDB: three devices on one account, concurrent refreshes, logout isolation, legacy migration, cookie attributes.
+
+**Files**: `server/index.js`, `contexts/AuthContext.tsx`
+
+**Note**: There is no "log out all devices" yet; `$set: { refresh_tokens: [] }` on the user would do it.
+
+---
+
+### Students can play the listening audio themselves (`5188b0a`)
+
+StudentTest keeps the `audio_url` it already fetched for the transcript and shows a native `<audio controls>` player in the sticky header during the questions phase of listening tests. Hidden for reading and transcript-only tests. No server change.
+
+---
+
 ## Recent Changes (2026-10-03)
 
 ### OpenAI model retirements (`52d4fc6` + the commit after it)

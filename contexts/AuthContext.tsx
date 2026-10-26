@@ -3,6 +3,8 @@ import { fullTestCache } from '../utils/testCache';
 
 const API_BASE = '/api';
 
+type RefreshResult = 'ok' | 'unauthorized' | 'error';
+
 interface AuthUser {
   id: string;
   username: string;
@@ -33,22 +35,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const refreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const refreshInFlightRef = useRef<Promise<RefreshResult> | null>(null);
+
+  // Single-flight refresh: concurrent callers (mount check, visibility, interval, two tabs)
+  // share one request. Only a definite 401 means the session is gone; network errors and
+  // 5xx (sleeping Heroku dyno) are transient and must not log the user out.
+  const refreshSession = useCallback((): Promise<RefreshResult> => {
+    if (refreshInFlightRef.current) return refreshInFlightRef.current;
+    const p: Promise<RefreshResult> = fetch(`${API_BASE}/auth/refresh`, { method: 'POST' })
+      .then(res => (res.ok ? 'ok' : res.status === 401 ? 'unauthorized' : 'error'))
+      .catch(() => 'error' as RefreshResult)
+      .finally(() => { refreshInFlightRef.current = null; });
+    refreshInFlightRef.current = p;
+    return p;
+  }, []);
 
   // Start auto-refresh interval (every 14 minutes, tokens expire at 15)
   const startAutoRefresh = useCallback(() => {
     if (refreshIntervalRef.current) clearInterval(refreshIntervalRef.current);
     refreshIntervalRef.current = setInterval(async () => {
-      try {
-        const res = await fetch(`${API_BASE}/auth/refresh`, { method: 'POST' });
-        if (!res.ok) {
-          setUser(null);
-          if (refreshIntervalRef.current) clearInterval(refreshIntervalRef.current);
-        }
-      } catch {
-        // Network error — don't log out immediately, let next interval retry
+      if ((await refreshSession()) === 'unauthorized') {
+        setUser(null);
+        if (refreshIntervalRef.current) clearInterval(refreshIntervalRef.current);
       }
     }, 14 * 60 * 1000);
-  }, []);
+  }, [refreshSession]);
 
   const stopAutoRefresh = useCallback(() => {
     if (refreshIntervalRef.current) {
@@ -64,8 +75,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         let res = await fetch(`${API_BASE}/auth/me`);
         if (!res.ok) {
           // Access token expired — try refreshing with 7-day refresh token
-          const refreshRes = await fetch(`${API_BASE}/auth/refresh`, { method: 'POST' });
-          if (refreshRes.ok) {
+          if ((await refreshSession()) === 'ok') {
             res = await fetch(`${API_BASE}/auth/me`);
           }
         }
@@ -83,26 +93,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     checkSession();
     return () => stopAutoRefresh();
-  }, [startAutoRefresh, stopAutoRefresh]);
+  }, [refreshSession, startAutoRefresh, stopAutoRefresh]);
 
-  // Proactively refresh tokens when tab becomes visible (browser suspends intervals in background)
+  // When the tab becomes visible again (browser suspends intervals in background), check the
+  // session and refresh only if the access token has actually expired. iOS fires this on every
+  // app switch and screen unlock, so keep it cheap and never log out on a transient failure.
   useEffect(() => {
     const onVisible = async () => {
-      if (document.visibilityState === 'visible' && user) {
-        try {
-          const res = await fetch(`${API_BASE}/auth/refresh`, { method: 'POST' });
-          if (!res.ok) {
-            setUser(null);
-            stopAutoRefresh();
-          }
-        } catch {
-          // Network error — don't log out, will retry
-        }
+      if (document.visibilityState !== 'visible' || !user) return;
+      try {
+        const me = await fetch(`${API_BASE}/auth/me`);
+        if (me.ok || me.status !== 401) return; // still valid, or a transient server error
+      } catch {
+        return; // offline — keep the session, next check will retry
+      }
+      if ((await refreshSession()) === 'unauthorized') {
+        setUser(null);
+        stopAutoRefresh();
       }
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
-  }, [user, stopAutoRefresh]);
+  }, [user, refreshSession, stopAutoRefresh]);
 
   const login = useCallback(async (username: string, password: string): Promise<{ success: boolean; error?: string }> => {
     try {

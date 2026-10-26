@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import { v2 as cloudinary } from 'cloudinary';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { randomUUID } from 'crypto';
 import multer from 'multer';
 import { SignJWT, jwtVerify } from 'jose';
 import bcrypt from 'bcryptjs';
@@ -179,7 +180,8 @@ const userSchema = new mongoose.Schema({
   token_balance: { type: Number, default: 0 },
   token_limit: { type: Number, default: 0 },
   tokens_used: { type: Number, default: 0 },
-  refresh_token: { type: String, default: null },
+  refresh_token: { type: String, default: null },   // legacy single token; migrated into refresh_tokens on first refresh
+  refresh_tokens: { type: [String], default: [] },  // one per logged-in device, so a shared account works on many phones
   settings: {
     app_mode: { type: String, enum: ['listening', 'reading'], default: 'listening' },
     difficulty_level: { type: String, enum: ['A1', 'A2', 'B1', 'B2', 'C1'], default: 'B1' },
@@ -402,6 +404,7 @@ async function generateAccessToken(user) {
 async function generateRefreshToken(user) {
   return new SignJWT({ userId: user._id.toString(), type: 'refresh' })
     .setProtectedHeader({ alg: 'HS256' })
+    .setJti(randomUUID()) // unique per device: two logins in the same second must not share a token
     .setExpirationTime('7d')
     .sign(JWT_SECRET);
 }
@@ -409,16 +412,17 @@ async function generateRefreshToken(user) {
 // Set auth cookies on response
 function setAuthCookies(res, accessToken, refreshToken) {
   const isProduction = process.env.NODE_ENV === 'production';
+  // 'lax' (not 'strict') so the session survives top-level links opened from the Camera/QR scanner
   res.cookie('accessToken', accessToken, {
     httpOnly: true,
     secure: isProduction,
-    sameSite: isProduction ? 'strict' : 'lax',
+    sameSite: 'lax',
     maxAge: 15 * 60 * 1000 // 15 min
   });
   res.cookie('refreshToken', refreshToken, {
     httpOnly: true,
     secure: isProduction,
-    sameSite: isProduction ? 'strict' : 'lax',
+    sameSite: 'lax',
     maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
   });
 }
@@ -505,9 +509,11 @@ app.post('/api/auth/login', async (req, res) => {
     const accessToken = await generateAccessToken(user);
     const refreshToken = await generateRefreshToken(user);
 
-    // Store refresh token in DB
-    user.refresh_token = refreshToken;
-    await user.save();
+    // Add this device's token; other devices' tokens stay valid. Keep the 50 newest.
+    await User.updateOne(
+      { _id: user._id },
+      { $push: { refresh_tokens: { $each: [refreshToken], $slice: -50 } } }
+    );
 
     setAuthCookies(res, accessToken, refreshToken);
     res.json({ user: { id: user._id, username: user.username, name: user.name, role: user.role, token_balance: user.token_balance, tokens_used: user.tokens_used } });
@@ -525,18 +531,22 @@ app.post('/api/auth/refresh', async (req, res) => {
 
     const { payload } = await jwtVerify(token, JWT_SECRET);
     const user = await User.findById(payload.userId);
-    if (!user || !user.is_active || user.refresh_token !== token) {
+    const known = user && (user.refresh_tokens.includes(token) || user.refresh_token === token);
+    if (!user || !user.is_active || !known) {
       clearAuthCookies(res);
       return res.status(401).json({ error: 'Invalid refresh token' });
     }
 
-    // Rotate tokens
-    const accessToken = await generateAccessToken(user);
-    const refreshToken = await generateRefreshToken(user);
-    user.refresh_token = refreshToken;
-    await user.save();
+    // Legacy single token (issued before per-device tokens): move it into the array
+    if (user.refresh_token === token && !user.refresh_tokens.includes(token)) {
+      await User.updateOne({ _id: user._id }, { $push: { refresh_tokens: token }, $set: { refresh_token: null } });
+    }
 
-    setAuthCookies(res, accessToken, refreshToken);
+    // New access token only. The refresh token is not rotated: rotation made every
+    // wake-up on one phone invalidate every other phone sharing the account. Re-sending
+    // the same cookie keeps its browser expiry fresh; the JWT's own 7-day exp still applies.
+    const accessToken = await generateAccessToken(user);
+    setAuthCookies(res, accessToken, token);
     res.json({ user: { id: user._id, username: user.username, name: user.name, role: user.role, token_balance: user.token_balance, tokens_used: user.tokens_used } });
   } catch {
     clearAuthCookies(res);
@@ -544,7 +554,7 @@ app.post('/api/auth/refresh', async (req, res) => {
   }
 });
 
-// Logout
+// Logout — removes only this device's token; other devices on the same account stay logged in
 app.post('/api/auth/logout', async (req, res) => {
   try {
     const token = req.cookies?.refreshToken;
@@ -552,7 +562,9 @@ app.post('/api/auth/logout', async (req, res) => {
       // Attempt to parse and clear DB token, but don't fail if invalid
       try {
         const { payload } = await jwtVerify(token, JWT_SECRET);
-        await User.findByIdAndUpdate(payload.userId, { refresh_token: null });
+        await User.updateOne({ _id: payload.userId }, { $pull: { refresh_tokens: token } });
+        // Legacy field: clear it only if it is this device's token
+        await User.updateOne({ _id: payload.userId, refresh_token: token }, { $set: { refresh_token: null } });
       } catch {}
     }
     clearAuthCookies(res);
@@ -566,7 +578,7 @@ app.post('/api/auth/logout', async (req, res) => {
 // Get current user
 app.get('/api/auth/me', authenticate, async (req, res) => {
   try {
-    const user = await User.findById(req.user.userId).select('-password_hash -refresh_token');
+    const user = await User.findById(req.user.userId).select('-password_hash -refresh_token -refresh_tokens');
     if (!user) return res.status(404).json({ error: 'User not found' });
     console.log(`[Auth] /me response: role=${user.role}, token_balance=${user.token_balance}, tokens_used=${user.tokens_used}`);
     res.json({ id: user._id, username: user.username, name: user.name, role: user.role, is_active: user.is_active, token_balance: user.token_balance, tokens_used: user.tokens_used });
@@ -581,7 +593,7 @@ app.get('/api/auth/me', authenticate, async (req, res) => {
 // List all users
 app.get('/api/admin/users', authenticate, requireAdmin, async (req, res) => {
   try {
-    const users = await User.find().select('-password_hash -refresh_token').sort({ created_at: -1 });
+    const users = await User.find().select('-password_hash -refresh_token -refresh_tokens').sort({ created_at: -1 });
     res.json(users);
   } catch (err) {
     console.error('[Admin] List users error:', err);
@@ -627,7 +639,7 @@ app.put('/api/admin/users/:id', authenticate, requireAdmin, async (req, res) => 
       updates.password_hash = await bcrypt.hash(password, 12);
     }
 
-    const user = await User.findByIdAndUpdate(req.params.id, updates, { new: true }).select('-password_hash -refresh_token');
+    const user = await User.findByIdAndUpdate(req.params.id, updates, { new: true }).select('-password_hash -refresh_token -refresh_tokens');
     if (!user) return res.status(404).json({ error: 'User not found' });
     res.json(user);
   } catch (err) {
@@ -789,7 +801,7 @@ app.put('/api/admin/users/:id/tokens', authenticate, requireAdmin, async (req, r
     if (token_limit !== undefined) updates.token_limit = token_limit;
 
     const user = await User.findByIdAndUpdate(req.params.id, updates, { new: true })
-      .select('-password_hash -refresh_token');
+      .select('-password_hash -refresh_token -refresh_tokens');
     if (!user) return res.status(404).json({ error: 'User not found' });
     res.json(user);
   } catch (err) {
