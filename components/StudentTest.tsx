@@ -168,6 +168,8 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
 
   // Pre-fetch transcript/source text on mount so it's ready when discussion starts
   const [transcript, setTranscript] = useState(test.sourceText || '');
+  // Listening audio the student can play themselves (null for reading and transcript-only tests)
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
   useEffect(() => {
     // Reading tests already have sourceText; listening tests fetch from audio entry
     if (test.sourceText) {
@@ -175,7 +177,10 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
     } else if (test.audioId) {
       fetch(`/api/audio-entries/${test.audioId}`)
         .then(r => r.ok ? r.json() : null)
-        .then(data => { if (data?.transcript) setTranscript(data.transcript); })
+        .then(data => {
+          if (data?.transcript) setTranscript(data.transcript);
+          if (data?.audio_url) setAudioUrl(data.audio_url);
+        })
         .catch(() => {}); // Silent fail — FollowUpQuestions has its own fallback
     }
   }, [test.audioId, test.sourceText]);
@@ -579,6 +584,13 @@ export const StudentTest: React.FC<StudentTestProps> = ({ test, theme = 'light',
             )}
           </div>
         </div>
+
+        {/* Listening audio — inside the sticky header so it stays reachable while scrolling */}
+        {!isReading && audioUrl && (
+          <div className="px-4 pb-2">
+            <audio controls preload="metadata" playsInline src={audioUrl} className="w-full h-10" />
+          </div>
+        )}
       </div>
 
       {/* Score Banner (after submission) */}
